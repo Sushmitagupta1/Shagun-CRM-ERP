@@ -429,7 +429,7 @@ docker compose exec backend alembic upgrade head  # Run migrations in container
 
 ## License
 
-This project is proprietary to Shagun Catering & Events.
+This project is belongs to sushmita gupta.
 
 ---
 
