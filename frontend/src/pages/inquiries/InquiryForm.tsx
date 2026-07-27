@@ -11,7 +11,7 @@ const inquirySchema = z.object({
   inquiry_date: z.string().optional(),
   event_date: z.string().optional(),
   pax: z.number().min(1).optional(),
-  budget: z.number().min(0).optional(),
+  per_plate_rate: z.number().min(0).optional(),
   follow_up_date: z.string().optional(),
   remarks: z.string().optional(),
 })
@@ -28,11 +28,15 @@ export function InquiryForm({ initialData, onSubmit, loading }: InquiryFormProps
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors },
   } = useForm<InquiryFormData>({
     resolver: zodResolver(inquirySchema),
     defaultValues: initialData,
   })
+
+  const [pax, perPlateRate] = watch(['pax', 'per_plate_rate'])
+  const totalAmount = (pax || 0) * (perPlateRate || 0)
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -104,11 +108,21 @@ export function InquiryForm({ initialData, onSubmit, loading }: InquiryFormProps
       </div>
 
       <div>
-        <label className="mb-1 block text-sm font-medium text-gray-700">Budget (₹)</label>
+        <label className="mb-1 block text-sm font-medium text-gray-700">Per Plate Rate (₹)</label>
         <input
-          {...register('budget')}
+          {...register('per_plate_rate')}
           type="number"
           className="h-10 w-full rounded-lg border border-gray-200 px-3 text-sm"
+        />
+      </div>
+
+      <div>
+        <label className="mb-1 block text-sm font-medium text-gray-700">Total Amount (₹)</label>
+        <input
+          type="number"
+          value={totalAmount}
+          readOnly
+          className="h-10 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm text-gray-500"
         />
       </div>
 

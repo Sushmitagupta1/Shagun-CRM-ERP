@@ -13,7 +13,7 @@ async def get_admin_kpis(db: AsyncSession) -> dict:
     today_events = (await db.execute(select(func.count(Inquiry.id)).where(Inquiry.event_date == today, Inquiry.status == InquiryStatus.CONFIRMED))).scalar() or 0
     pending_payment = (await db.execute(select(func.count(Inquiry.id)).where(Inquiry.status == InquiryStatus.CONFIRMED, Inquiry.payment_status != PaymentStatus.PAID))).scalar() or 0
     total_revenue = (await db.execute(select(func.coalesce(func.sum(Inquiry.advance_amount), 0)))).scalar() or 0
-    outstanding = (await db.execute(select(func.coalesce(func.sum(Inquiry.budget - Inquiry.advance_amount), 0)).where(Inquiry.status == InquiryStatus.CONFIRMED, Inquiry.payment_status != PaymentStatus.PAID))).scalar() or 0
+    outstanding = (await db.execute(select(func.coalesce(func.sum(Inquiry.per_plate_rate - Inquiry.advance_amount), 0)).where(Inquiry.status == InquiryStatus.CONFIRMED, Inquiry.payment_status != PaymentStatus.PAID))).scalar() or 0
     return {
         "total_inquiries": total, "confirmed": confirmed,
         "cancelled": cancelled, "upcoming_events": upcoming,
@@ -33,7 +33,7 @@ async def get_sales_kpis(db: AsyncSession) -> dict:
     presentations = (await db.execute(select(func.count(Inquiry.id)).where(Inquiry.status == InquiryStatus.PRESENTATION_SENT))).scalar() or 0
     menus = (await db.execute(select(func.count(Inquiry.id)).where(Inquiry.status == InquiryStatus.MENU_READY))).scalar() or 0
     pending_payment = (await db.execute(select(func.count(Inquiry.id)).where(Inquiry.status == InquiryStatus.CONFIRMED, Inquiry.payment_status != PaymentStatus.PAID))).scalar() or 0
-    total_sales = (await db.execute(select(func.coalesce(func.sum(Inquiry.budget), 0)).where(Inquiry.status == InquiryStatus.CONFIRMED))).scalar() or 0
+    total_sales = (await db.execute(select(func.coalesce(func.sum(Inquiry.per_plate_rate), 0)).where(Inquiry.status == InquiryStatus.CONFIRMED))).scalar() or 0
     total_count = (await db.execute(select(func.count(Inquiry.id)))).scalar() or 0
     conversion_rate = (confirmed_count / total_count * 100) if total_count > 0 else 0
     return {

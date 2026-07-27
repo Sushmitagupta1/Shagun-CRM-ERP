@@ -27,7 +27,7 @@ export default function ReportsPage() {
       toast.error('No data to export')
       return
     }
-    const headers = ['Client Name', 'Phone', 'Event Type', 'Pax', 'Event Date', 'Status', 'Budget', 'Assigned To']
+    const headers = ['Client Name', 'Phone', 'Event Type', 'Pax', 'Event Date', 'Status', 'Per Plate Rate', 'Assigned To']
     const rows = inquiriesData.items.map((inq) => [
       inq.client_name,
       inq.client_phone,
@@ -35,7 +35,7 @@ export default function ReportsPage() {
       inq.pax ?? '',
       inq.event_date ?? '',
       INQUIRY_STATUSES[inq.status as keyof typeof INQUIRY_STATUSES]?.label ?? inq.status,
-      inq.budget ?? '',
+      inq.per_plate_rate ?? '',
       inq.assigned_to ?? '-',
     ])
     const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
@@ -63,7 +63,7 @@ ${rows.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join('')}</tr>`).join('')
       toast.error('No data to export')
       return
     }
-    const headers = ['Client Name', 'Phone', 'Event Type', 'Pax', 'Event Date', 'Status', 'Budget', 'Assigned To']
+    const headers = ['Client Name', 'Phone', 'Event Type', 'Pax', 'Event Date', 'Status', 'Per Plate Rate', 'Assigned To']
     const rows = inquiriesData.items.map((inq) => [
       inq.client_name,
       inq.client_phone,
@@ -71,7 +71,7 @@ ${rows.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join('')}</tr>`).join('')
       inq.pax ?? '-',
       inq.event_date ?? '-',
       INQUIRY_STATUSES[inq.status as keyof typeof INQUIRY_STATUSES]?.label ?? inq.status,
-      inq.budget ? `₹${Number(inq.budget).toLocaleString('en-IN')}` : '-',
+      inq.per_plate_rate ? `₹${Number(inq.per_plate_rate).toLocaleString('en-IN')}` : '-',
       inq.assigned_to ?? '-',
     ])
     const win = window.open('', '_blank')
