@@ -69,18 +69,19 @@ export default function OperationsDashboard() {
         {isLoading
           ? Array.from({ length: 5 }).map((_, i) => <KPICardSkeleton key={i} />)
           : [
-              { label: 'Upcoming Events', value: kpis?.upcoming_events ?? 0, color: 'text-blue-600' },
-              { label: "Today's Events", value: kpis?.todays_events ?? 0, color: 'text-amber-600' },
-              { label: 'Kitchen Pending', value: kpis?.pending_kitchen_plans ?? 0, color: 'text-rose-600' },
-              { label: 'Vendor Requests', value: kpis?.pending_vendor_requests ?? 0, color: 'text-purple-600' },
-              { label: 'Warehouse Req.', value: kpis?.pending_warehouse_requests ?? 0, color: 'text-emerald-600' },
+              { label: 'Confirmed Events', value: kpis?.upcoming_events ?? 0, color: 'text-blue-600', to: '/inquiries' },
+              { label: 'Pending Tasks', value: kpis?.todays_events ?? 0, color: 'text-amber-600', to: '/inquiries' },
+              { label: 'Vendors Active', value: kpis?.pending_kitchen_plans ?? 0, color: 'text-rose-600', to: '/inquiries' },
+              { label: 'Budget Utilization', value: kpis?.pending_vendor_requests ?? 0, color: 'text-purple-600', to: '/finance' },
+              { label: 'Completion Rate', value: kpis?.pending_warehouse_requests ?? 0, color: 'text-emerald-600', to: '/reports' },
             ].map((kpi, i) => (
               <motion.div
                 key={kpi.label}
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.35, delay: i * 0.06 }}
-                className="rounded-xl border border-gray-100 bg-white p-4 shadow-md transition-shadow hover:shadow-lg"
+                onClick={() => navigate(kpi.to)}
+                className="cursor-pointer rounded-xl border border-gray-100 bg-white p-4 shadow-md transition-shadow hover:shadow-lg"
                 style={{ height: 95 }}
               >
                 <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">{kpi.label}</p>

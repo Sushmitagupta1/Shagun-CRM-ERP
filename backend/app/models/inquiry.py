@@ -31,6 +31,7 @@ class Inquiry(UUIDMixin, TimestampMixin, Base):
     client_phone: Mapped[str] = mapped_column(String(20), nullable=False)
     event_type: Mapped[str] = mapped_column(String(100), nullable=False)
     event_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    inquiry_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     pax: Mapped[int | None] = mapped_column(Integer, nullable=True)
     budget: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
     status: Mapped[InquiryStatus] = mapped_column(

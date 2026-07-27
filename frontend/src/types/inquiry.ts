@@ -16,6 +16,7 @@ export interface Inquiry {
   client_phone: string
   event_type: string
   event_date: string | null
+  inquiry_date: string | null
   pax: number | null
   budget: number | null
   status: InquiryStatus
@@ -34,6 +35,7 @@ export interface InquiryCreate {
   client_phone: string
   event_type: string
   event_date?: string
+  inquiry_date?: string
   pax?: number
   budget?: number
   assigned_to?: string

@@ -139,20 +139,21 @@ export default function SalesDashboard() {
       {/* Top Row — 6 KPI Cards */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-6">
         {[
-          { label: 'New Inquiries', value: kpis?.new_inquiries ?? 0, icon: Plus, accent: 'text-blue-600' },
-          { label: 'Follow-ups Today', value: kpis?.followups_today ?? 0, icon: Calendar, accent: 'text-amber-600' },
-          { label: 'Overdue Follow-ups', value: kpis?.overdue_followups ?? 0, icon: Clock, accent: 'text-red-600', urgent: true },
-          { label: 'Confirmed', value: kpis?.confirmed ?? 0, icon: CheckCircle, accent: 'text-emerald-600' },
-          { label: 'Total Sales', value: formatCurrency(totalRevenue), icon: TrendingUp, accent: 'text-maroon' },
-          { label: 'Conversion', value: `${kpis?.conversion_rate ?? 0}%`, icon: TrendingUp, accent: 'text-purple-600' },
+          { label: 'New Inquiries', value: kpis?.new_inquiries ?? 0, icon: Plus, accent: 'text-blue-600', nav: '/inquiries' },
+          { label: 'Follow-ups Today', value: kpis?.followups_today ?? 0, icon: Calendar, accent: 'text-amber-600', nav: '/inquiries' },
+          { label: 'Overdue Follow-ups', value: kpis?.overdue_followups ?? 0, icon: Clock, accent: 'text-red-600', urgent: true, nav: '/inquiries' },
+          { label: 'Confirmed', value: kpis?.confirmed ?? 0, icon: CheckCircle, accent: 'text-emerald-600', nav: '/reports' },
+          { label: 'Total Sales', value: formatCurrency(totalRevenue), icon: TrendingUp, accent: 'text-maroon', nav: '/finance' },
+          { label: 'Conversion', value: `${kpis?.conversion_rate ?? 0}%`, icon: TrendingUp, accent: 'text-purple-600', nav: '/reports' },
         ].map((kpi, i) => (
           <motion.div
             key={kpi.label}
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.35, delay: i * 0.06 }}
-            className="rounded-xl border border-gray-100 bg-white p-4 shadow-md transition-shadow hover:shadow-lg"
+            className="cursor-pointer rounded-xl border border-gray-100 bg-white p-4 shadow-md transition-shadow hover:shadow-lg"
             style={{ height: 95 }}
+            onClick={() => navigate(kpi.nav)}
           >
             <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">{kpi.label}</p>
             <div className="mt-2 flex items-end justify-between">

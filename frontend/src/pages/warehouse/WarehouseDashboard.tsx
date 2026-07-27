@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { useWarehouseKPIs } from '@/hooks/useDashboard'
 import { useAuth } from '@/hooks/useAuth'
+import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import PageHeader from '@/components/common/PageHeader'
 import { KPICardSkeleton } from '@/components/common/Skeleton'
@@ -35,6 +36,7 @@ const recentActivity = [
 
 export default function WarehouseDashboard() {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const firstName = user?.full_name?.split(' ')[0] ?? 'THOL'
   const [activeTab, setActiveTab] = useState<'pending' | 'dispatched'>('pending')
   const { data: kpis, isLoading } = useWarehouseKPIs()
@@ -52,12 +54,13 @@ export default function WarehouseDashboard() {
         {isLoading
           ? Array.from({ length: 3 }).map((_, i) => <KPICardSkeleton key={i} />)
           : [
-              { label: 'Pending Dispatches', value: kpis?.pending_requests ?? 0, desc: 'Events awaiting material', icon: Truck, iconBg: 'bg-blue-50', iconColor: 'text-blue-500' },
-              { label: "Today's Issues", value: kpis?.todays_issues ?? 0, desc: 'Items dispatched today', icon: ArrowUpFromLine, iconBg: 'bg-amber-50', iconColor: 'text-amber-500' },
-              { label: 'Low Stock Items', value: lowStockItems.length, desc: 'Need restocking', icon: AlertTriangle, iconBg: 'bg-red-50', iconColor: 'text-red-500' },
+              { label: 'Pending Dispatches', value: kpis?.pending_requests ?? 0, desc: 'Events awaiting material', icon: Truck, iconBg: 'bg-blue-50', iconColor: 'text-blue-500', to: '/inquiries' },
+              { label: 'Items in Stock', value: kpis?.todays_issues ?? 0, desc: 'Items dispatched today', icon: ArrowUpFromLine, iconBg: 'bg-amber-50', iconColor: 'text-amber-500', to: '/inquiries' },
+              { label: 'Low Stock Alerts', value: lowStockItems.length, desc: 'Need restocking', icon: AlertTriangle, iconBg: 'bg-red-50', iconColor: 'text-red-500', to: '/inquiries' },
             ].map((kpi, i) => (
               <motion.div key={kpi.label} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, delay: i * 0.08 }}
-                className="flex items-center gap-4 rounded-xl border border-gray-100 bg-white p-5 shadow-md transition-shadow hover:shadow-lg">
+                onClick={() => navigate(kpi.to)}
+                className="cursor-pointer flex items-center gap-4 rounded-xl border border-gray-100 bg-white p-5 shadow-md transition-shadow hover:shadow-lg">
                 <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${kpi.iconBg}`}>
                   <kpi.icon size={22} className={kpi.iconColor} />
                 </div>

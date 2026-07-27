@@ -22,11 +22,11 @@ DEFAULT_ADMIN = {
 }
 
 TEST_USERS = [
-    {"email": "vinod@shaguncatering.com", "password": "vinod123", "full_name": "Vinod Kumar", "role": RoleName.SALES_HEAD},
-    {"email": "vishal@shaguncatering.com", "password": "vishal123", "full_name": "Vishal Sharma", "role": RoleName.MENU_PLANNER},
-    {"email": "shayank@shaguncatering.com", "password": "shayank123", "full_name": "Shayank Ali", "role": RoleName.PRESENTATION_EXEC},
-    {"email": "lalit@shaguncatering.com", "password": "lalit123", "full_name": "Lalit Verma", "role": RoleName.OPERATIONS_MANAGER},
-    {"email": "kitchen@shaguncatering.com", "password": "kitchen123", "full_name": "Kitchen Team", "role": RoleName.KITCHEN},
+    {"email": "vinod@shaguncatering.com", "password": "vinod123", "full_name": "Vinod", "role": RoleName.SALES_HEAD},
+    {"email": "vishal@shaguncatering.com", "password": "vishal123", "full_name": "Vishal", "role": RoleName.MENU_PLANNER},
+    {"email": "shayank@shaguncatering.com", "password": "shayank123", "full_name": "Shayank", "role": RoleName.PRESENTATION_EXEC},
+    {"email": "lalit@shaguncatering.com", "password": "lalit123", "full_name": "Lalit", "role": RoleName.OPERATIONS_MANAGER},
+    {"email": "kitchen@shaguncatering.com", "password": "kitchen123", "full_name": "Kitchen", "role": RoleName.KITCHEN},
     {"email": "thol@shaguncatering.com", "password": "thol123", "full_name": "THOL Warehouse", "role": RoleName.WAREHOUSE},
 ]
 

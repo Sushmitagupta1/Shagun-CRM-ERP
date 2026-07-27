@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { usePresentationKPIs } from '@/hooks/useDashboard'
 import { useInquiries } from '@/hooks/useInquiries'
@@ -52,6 +53,7 @@ const presentationPipeline = [
 ]
 
 export default function PresentationDashboard() {
+  const navigate = useNavigate()
   const { user } = useAuth()
   const firstName = user?.full_name?.split(' ')[0] ?? 'Shayank'
   const { data: kpis, isLoading } = usePresentationKPIs()
@@ -100,16 +102,17 @@ export default function PresentationDashboard() {
         {isLoading
           ? Array.from({ length: 3 }).map((_, i) => <KPICardSkeleton key={i} />)
           : [
-              { label: 'Assigned Inquiries', value: kpis?.assigned_inquiries ?? 0, desc: 'Inquiries needing presentations', icon: Presentation, iconBg: 'bg-blue-50', iconColor: 'text-blue-500' },
-              { label: 'Pending Presentations', value: kpis?.pending_presentations ?? 0, desc: 'Awaiting client approval', icon: FileImage, iconBg: 'bg-amber-50', iconColor: 'text-amber-500' },
-              { label: 'Meetings Today', value: kpis?.client_meetings_today ?? 0, desc: 'Scheduled client calls', icon: Calendar, iconBg: 'bg-emerald-50', iconColor: 'text-emerald-500' },
+              { label: 'Assigned Inquiries', value: kpis?.assigned_inquiries ?? 0, desc: 'Inquiries needing presentations', icon: Presentation, iconBg: 'bg-blue-50', iconColor: 'text-blue-500', to: '/inquiries' },
+              { label: 'Pending Presentations', value: kpis?.pending_presentations ?? 0, desc: 'Awaiting client approval', icon: FileImage, iconBg: 'bg-amber-50', iconColor: 'text-amber-500', to: '/inquiries' },
+              { label: 'Meetings Today', value: kpis?.client_meetings_today ?? 0, desc: 'Scheduled client calls', icon: Calendar, iconBg: 'bg-emerald-50', iconColor: 'text-emerald-500', to: '/reports' },
             ].map((kpi, i) => (
               <motion.div
                 key={kpi.label}
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.35, delay: i * 0.08 }}
-                className="flex items-center gap-4 rounded-xl border border-gray-100 bg-white p-5 shadow-md transition-shadow hover:shadow-lg"
+                onClick={() => kpi.to && navigate(kpi.to)}
+                className={`flex items-center gap-4 rounded-xl border border-gray-100 bg-white p-5 shadow-md transition-shadow hover:shadow-lg ${kpi.to ? 'cursor-pointer' : ''}`}
               >
                 <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${kpi.iconBg}`}>
                   <kpi.icon size={22} className={kpi.iconColor} />

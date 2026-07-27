@@ -1,12 +1,16 @@
 import { useState, useRef, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useMenuPlannerKPIs } from '@/hooks/useDashboard'
 import { useInquiries } from '@/hooks/useInquiries'
 import { useAuth } from '@/hooks/useAuth'
+import { createInquiry } from '@/api/inquiries'
 import { toast } from 'sonner'
 import PageHeader from '@/components/common/PageHeader'
 import StatusPill from '@/components/common/StatusPill'
 import { KPICardSkeleton } from '@/components/common/Skeleton'
+import { InquiryForm } from '@/pages/inquiries/InquiryForm'
 import { INQUIRY_STATUSES } from '@/lib/constants'
 import { generateMenu, chatMessage } from '@/lib/gemini'
 import {
@@ -26,6 +30,7 @@ import {
   ArrowRight,
   Eye,
   MessageSquare,
+  Plus,
 } from 'lucide-react'
 
 const menuTemplates = [
@@ -42,6 +47,8 @@ interface ChatMessage {
 }
 
 export default function MenuPlannerDashboard() {
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const { user } = useAuth()
   const firstName = user?.full_name?.split(' ')[0] ?? 'Menu Planner'
   const { data: kpis, isLoading } = useMenuPlannerKPIs()
@@ -49,6 +56,23 @@ export default function MenuPlannerDashboard() {
   const assignedInquiries = inquiriesData?.items?.filter(
     (i) => i.status !== 'confirmed' && i.status !== 'cancelled'
   ) ?? []
+
+  // Create Inquiry
+  const [showCreate, setShowCreate] = useState(false)
+  const createMutation = useMutation({
+    mutationFn: createInquiry,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['inquiries'] })
+      toast.success('Inquiry created')
+      setShowCreate(false)
+    },
+    onError: (err: unknown) => {
+      const message =
+        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
+        'Failed'
+      toast.error(message)
+    },
+  })
 
   // Menu Generator
   const [filters, setFilters] = useState({ season: 'All', budget: '', guests: '', eventType: '' })
@@ -109,10 +133,16 @@ export default function MenuPlannerDashboard() {
     <div className="space-y-5">
       <div className="flex items-center justify-between">
         <PageHeader title={`Hi, ${firstName}`} subtitle="Create menus, estimate costs, and manage AI-powered suggestions" />
-        <button onClick={() => setChatOpen(true)}
-          className="flex items-center gap-2 rounded-xl bg-maroon px-4 py-2.5 text-sm font-bold text-white shadow-md transition-all hover:bg-maroon-dark hover:shadow-lg">
-          <MessageSquare size={16} /> Ask AI
-        </button>
+        <div className="flex gap-2">
+          <button onClick={() => setShowCreate(true)}
+            className="flex items-center gap-2 rounded-xl bg-gold px-4 py-2.5 text-sm font-bold text-white shadow-md transition-all hover:bg-gold-hover hover:shadow-lg">
+            <Plus size={16} /> New Inquiry
+          </button>
+          <button onClick={() => setChatOpen(true)}
+            className="flex items-center gap-2 rounded-xl bg-maroon px-4 py-2.5 text-sm font-bold text-white shadow-md transition-all hover:bg-maroon-dark hover:shadow-lg">
+            <MessageSquare size={16} /> Ask AI
+          </button>
+        </div>
       </div>
 
       {/* Top — 4 KPI Cards */}
@@ -120,13 +150,14 @@ export default function MenuPlannerDashboard() {
         {isLoading
           ? Array.from({ length: 4 }).map((_, i) => <KPICardSkeleton key={i} />)
           : [
-              { label: 'Assigned Inquiries', value: kpis?.assigned_inquiries ?? 0, desc: 'Menus to prepare', icon: FileText, iconBg: 'bg-blue-50', iconColor: 'text-blue-500' },
-              { label: 'Pending Menus', value: kpis?.pending_menus ?? 0, desc: 'Awaiting finalization', icon: Clock, iconBg: 'bg-amber-50', iconColor: 'text-amber-500' },
-              { label: 'AI Generated', value: kpis?.ai_menus_generated ?? 0, desc: 'Menus via AI', icon: Sparkles, iconBg: 'bg-purple-50', iconColor: 'text-purple-500' },
+              { label: 'Assigned Inquiries', value: kpis?.assigned_inquiries ?? 0, desc: 'Menus to prepare', icon: FileText, iconBg: 'bg-blue-50', iconColor: 'text-blue-500', to: '/inquiries' },
+              { label: 'Pending Menus', value: kpis?.pending_menus ?? 0, desc: 'Awaiting finalization', icon: Clock, iconBg: 'bg-amber-50', iconColor: 'text-amber-500', to: '/inquiries' },
+              { label: 'AI Generated', value: kpis?.ai_menus_generated ?? 0, desc: 'Menus via AI', icon: Sparkles, iconBg: 'bg-purple-50', iconColor: 'text-purple-500', to: '/inquiries' },
               { label: 'Templates', value: menuTemplates.length, desc: 'Ready to use', icon: Utensils, iconBg: 'bg-emerald-50', iconColor: 'text-emerald-500' },
             ].map((kpi, i) => (
               <motion.div key={kpi.label} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, delay: i * 0.08 }}
-                className="flex items-center gap-4 rounded-xl border border-gray-100 bg-white p-5 shadow-md transition-shadow hover:shadow-lg">
+                onClick={() => kpi.to && navigate(kpi.to)}
+                className={`flex items-center gap-4 rounded-xl border border-gray-100 bg-white p-5 shadow-md transition-shadow hover:shadow-lg ${kpi.to ? 'cursor-pointer' : ''}`}>
                 <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${kpi.iconBg}`}>
                   <kpi.icon size={22} className={kpi.iconColor} />
                 </div>
@@ -138,6 +169,27 @@ export default function MenuPlannerDashboard() {
               </motion.div>
             ))}
       </div>
+
+      {/* Create Inquiry Modal */}
+      <AnimatePresence>
+        {showCreate && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm" onClick={() => setShowCreate(false)}>
+            <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              className="w-full max-w-2xl rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+              <div className="mb-4 flex items-center justify-between">
+                <h3 className="text-lg font-bold text-gray-900">New Inquiry</h3>
+                <button onClick={() => setShowCreate(false)} className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600"><X size={18} /></button>
+              </div>
+              <InquiryForm
+                onSubmit={(data) => createMutation.mutate(data)}
+                loading={createMutation.isPending}
+              />
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Middle Row — AI Menu (7 cols) + Templates (5 cols) */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">

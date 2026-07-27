@@ -114,7 +114,10 @@ export default function InquiryList() {
                   Pax
                 </th>
                 <th className="px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
-                  Date
+                  Inquiry Date
+                </th>
+                <th className="px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                  Function Date
                 </th>
                 <th className="px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
                   Status
@@ -130,13 +133,13 @@ export default function InquiryList() {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={8} className="px-5 py-8 text-center">
+                  <td colSpan={9} className="px-5 py-8 text-center">
                     <div className="mx-auto h-6 w-6 animate-spin rounded-full border-4 border-gold border-t-transparent" />
                   </td>
                 </tr>
               ) : data?.items?.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-5 py-8 text-center text-gray-400">
+                  <td colSpan={9} className="px-5 py-8 text-center text-gray-400">
                     No inquiries found
                   </td>
                 </tr>
@@ -157,6 +160,9 @@ export default function InquiryList() {
                     </td>
                     <td className="px-5 py-3.5 text-sm text-gray-600">
                       {inquiry.pax ?? '—'}
+                    </td>
+                    <td className="px-5 py-3.5 text-sm text-gray-600">
+                      {inquiry.inquiry_date ?? '—'}
                     </td>
                     <td className="px-5 py-3.5 text-sm text-gray-600">
                       {inquiry.event_date ?? '—'}

@@ -9,6 +9,7 @@ class InquiryCreate(BaseModel):
     client_phone: str
     event_type: str
     event_date: date | None = None
+    inquiry_date: date | None = None
     pax: int | None = None
     budget: Decimal | None = None
     assigned_to: uuid.UUID | None = None
@@ -21,6 +22,7 @@ class InquiryUpdate(BaseModel):
     client_phone: str | None = None
     event_type: str | None = None
     event_date: date | None = None
+    inquiry_date: date | None = None
     pax: int | None = None
     budget: Decimal | None = None
     assigned_to: uuid.UUID | None = None
@@ -34,6 +36,7 @@ class InquiryResponse(BaseModel):
     client_phone: str
     event_type: str
     event_date: date | None
+    inquiry_date: date | None
     pax: int | None
     budget: Decimal | None
     status: str

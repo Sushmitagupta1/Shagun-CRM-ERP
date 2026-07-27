@@ -2,6 +2,7 @@ import { motion } from 'framer-motion'
 import { useKitchenKPIs } from '@/hooks/useDashboard'
 import { useInquiries } from '@/hooks/useInquiries'
 import { useAuth } from '@/hooks/useAuth'
+import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import PageHeader from '@/components/common/PageHeader'
 import StatusPill from '@/components/common/StatusPill'
@@ -35,6 +36,7 @@ const semiFinished = [
 
 export default function KitchenDashboard() {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const firstName = user?.full_name?.split(' ')[0] ?? 'Kitchen'
   const { data: kpis, isLoading } = useKitchenKPIs()
   const { data: inquiriesData } = useInquiries({ status: 'confirmed', per_page: 10 })
@@ -49,12 +51,13 @@ export default function KitchenDashboard() {
         {isLoading
           ? Array.from({ length: 3 }).map((_, i) => <KPICardSkeleton key={i} />)
           : [
-              { label: "Today's Production", value: kpis?.todays_production ?? 0, desc: 'Items to produce today', icon: Flame, iconBg: 'bg-red-50', iconColor: 'text-red-500' },
-              { label: 'Pending Kitchen Plans', value: kpis?.pending_kitchen_plans ?? 0, desc: 'Menus not yet planned', icon: ChefHat, iconBg: 'bg-amber-50', iconColor: 'text-amber-500' },
-              { label: 'Semi-Finished Items', value: semiFinished.filter((s) => s.status === 'ready').length, desc: 'Ready for service', icon: CheckCircle2, iconBg: 'bg-emerald-50', iconColor: 'text-emerald-500' },
+              { label: "Today's Events", value: kpis?.todays_production ?? 0, desc: 'Items to produce today', icon: Flame, iconBg: 'bg-red-50', iconColor: 'text-red-500', to: '/inquiries' },
+              { label: 'Pending Menus', value: kpis?.pending_kitchen_plans ?? 0, desc: 'Menus not yet planned', icon: ChefHat, iconBg: 'bg-amber-50', iconColor: 'text-amber-500', to: '/inquiries' },
+              { label: 'Ingredients Ready', value: semiFinished.filter((s) => s.status === 'ready').length, desc: 'Ready for service', icon: CheckCircle2, iconBg: 'bg-emerald-50', iconColor: 'text-emerald-500', to: '/inquiries' },
             ].map((kpi, i) => (
               <motion.div key={kpi.label} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, delay: i * 0.08 }}
-                className="flex items-center gap-4 rounded-xl border border-gray-100 bg-white p-5 shadow-md transition-shadow hover:shadow-lg">
+                onClick={() => navigate(kpi.to)}
+                className="cursor-pointer flex items-center gap-4 rounded-xl border border-gray-100 bg-white p-5 shadow-md transition-shadow hover:shadow-lg">
                 <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${kpi.iconBg}`}>
                   <kpi.icon size={22} className={kpi.iconColor} />
                 </div>

@@ -8,6 +8,7 @@ const inquirySchema = z.object({
   client_name: z.string().min(1, 'Client name is required'),
   client_phone: z.string().min(10, 'Phone must be at least 10 digits'),
   event_type: z.string().min(1, 'Event type is required'),
+  inquiry_date: z.string().optional(),
   event_date: z.string().optional(),
   pax: z.number().min(1).optional(),
   budget: z.number().min(0).optional(),
@@ -76,7 +77,16 @@ export function InquiryForm({ initialData, onSubmit, loading }: InquiryFormProps
       </div>
 
       <div>
-        <label className="mb-1 block text-sm font-medium text-gray-700">Event Date</label>
+        <label className="mb-1 block text-sm font-medium text-gray-700">Inquiry Date</label>
+        <input
+          {...register('inquiry_date')}
+          type="date"
+          className="h-10 w-full rounded-lg border border-gray-200 px-3 text-sm"
+        />
+      </div>
+
+      <div>
+        <label className="mb-1 block text-sm font-medium text-gray-700">Function Date</label>
         <input
           {...register('event_date')}
           type="date"

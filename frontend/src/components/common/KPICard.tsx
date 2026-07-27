@@ -8,11 +8,12 @@ interface KPICardProps {
     value: number
     isPositive: boolean
   }
+  onClick?: () => void
   className?: string
   index?: number
 }
 
-export default function KPICard({ label, value, trend, className, index = 0 }: KPICardProps) {
+export default function KPICard({ label, value, trend, onClick, className, index = 0 }: KPICardProps) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 20, scale: 0.95 }}
@@ -27,8 +28,10 @@ export default function KPICard({ label, value, trend, className, index = 0 }: K
         boxShadow: '0 8px 25px -5px rgba(0, 0, 0, 0.1)',
         transition: { duration: 0.2 },
       }}
+      onClick={onClick}
       className={cn(
-        'flex h-[105px] cursor-default flex-col justify-between rounded-xl bg-white p-4 shadow-md transition-all duration-200 hover:border-gold/20 hover:shadow-lg',
+        'flex h-[105px] flex-col justify-between rounded-xl bg-white p-4 shadow-md transition-all duration-200 hover:border-gold/20 hover:shadow-lg',
+        onClick ? 'cursor-pointer' : 'cursor-default',
         className
       )}
     >

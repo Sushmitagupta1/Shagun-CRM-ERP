@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAdminKPIs, useMonthlyTrend, useConversionRate } from '@/hooks/useDashboard'
 import { useInquiries } from '@/hooks/useInquiries'
@@ -16,6 +17,7 @@ import { generateReport, generateInsights, chatMessage } from '@/lib/gemini'
 import { Loader2, FileText, Brain, Send, MessageSquare, X, Bot, User, Sparkles } from 'lucide-react'
 
 export default function AdminDashboard() {
+  const navigate = useNavigate()
   const { user } = useAuth()
   const firstName = user?.full_name?.split(' ')[0] ?? 'Admin'
   const { data: kpis, isLoading: kpisLoading } = useAdminKPIs()
@@ -91,11 +93,11 @@ export default function AdminDashboard() {
         {kpisLoading
           ? Array.from({ length: 5 }).map((_, i) => <KPICardSkeleton key={i} />)
           : [
-              { label: 'Total Inquiries', value: kpis?.total_inquiries ?? 0 },
-              { label: 'Confirmed', value: kpis?.confirmed ?? 0 },
-              { label: 'Cancelled', value: kpis?.cancelled ?? 0 },
-              { label: 'Upcoming Events', value: kpis?.upcoming_events ?? 0 },
-              { label: "Today's Events", value: kpis?.today_events ?? 0 },
+              { label: 'Total Inquiries', value: kpis?.total_inquiries ?? 0, onClick: () => navigate('/inquiries') },
+              { label: 'Confirmed', value: kpis?.confirmed ?? 0, onClick: () => navigate('/inquiries') },
+              { label: 'Cancelled', value: kpis?.cancelled ?? 0, onClick: () => navigate('/inquiries') },
+              { label: 'Upcoming Events', value: kpis?.upcoming_events ?? 0, onClick: () => navigate('/inquiries') },
+              { label: "Today's Events", value: kpis?.today_events ?? 0, onClick: () => navigate('/inquiries') },
             ].map((kpi, i) => (
               <KPICard key={kpi.label} label={kpi.label} value={kpi.value} index={i} />
             ))}
@@ -106,11 +108,11 @@ export default function AdminDashboard() {
         {kpisLoading
           ? Array.from({ length: 5 }).map((_, i) => <KPICardSkeleton key={i} />)
           : [
-              { label: 'Pending Payments', value: kpis?.pending_payments ?? 0 },
-              { label: 'Total Revenue', value: formatCurrency(kpis?.total_revenue ?? 0) },
-              { label: 'Outstanding', value: formatCurrency(kpis?.outstanding_amount ?? 0) },
-              { label: 'Kitchen Pending', value: kpis?.pending_kitchen_plans ?? 0 },
-              { label: 'Warehouse Pending', value: kpis?.pending_warehouse_requests ?? 0 },
+              { label: 'Pending Payments', value: kpis?.pending_payments ?? 0, onClick: () => navigate('/finance') },
+              { label: 'Total Revenue', value: formatCurrency(kpis?.total_revenue ?? 0), onClick: () => navigate('/finance') },
+              { label: 'Outstanding', value: formatCurrency(kpis?.outstanding_amount ?? 0), onClick: () => navigate('/finance') },
+              { label: 'Kitchen Pending', value: kpis?.pending_kitchen_plans ?? 0, onClick: () => navigate('/inquiries') },
+              { label: 'Warehouse Pending', value: kpis?.pending_warehouse_requests ?? 0, onClick: () => navigate('/inquiries') },
             ].map((kpi, i) => (
               <KPICard key={kpi.label} label={kpi.label} value={kpi.value} index={i + 5} />
             ))}
