@@ -118,6 +118,9 @@ export default function InquiryList() {
                   Per Plate Rate
                 </th>
                 <th className="px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                  Add On
+                </th>
+                <th className="px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
                   Total Amount
                 </th>
                 <th className="px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
@@ -140,13 +143,13 @@ export default function InquiryList() {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={11} className="px-5 py-8 text-center">
+                  <td colSpan={12} className="px-5 py-8 text-center">
                     <div className="mx-auto h-6 w-6 animate-spin rounded-full border-4 border-gold border-t-transparent" />
                   </td>
                 </tr>
               ) : data?.items?.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="px-5 py-8 text-center text-gray-400">
+                  <td colSpan={12} className="px-5 py-8 text-center text-gray-400">
                     No inquiries found
                   </td>
                 </tr>
@@ -170,6 +173,9 @@ export default function InquiryList() {
                     </td>
                     <td className="px-5 py-3.5 text-sm text-gray-600">
                       {inquiry.per_plate_rate ? formatCurrency(Number(inquiry.per_plate_rate)) : '—'}
+                    </td>
+                    <td className="px-5 py-3.5 text-sm text-gray-600">
+                      {inquiry.add_on ? formatCurrency(inquiry.add_on) : '—'}
                     </td>
                     <td className="px-5 py-3.5 text-sm text-gray-600">
                       {inquiry.total_amount ? formatCurrency(inquiry.total_amount) : '—'}

@@ -55,7 +55,7 @@ async def get_inquiry(inquiry_id: uuid.UUID, db: AsyncSession = Depends(get_db),
 async def create_inquiry(data: InquiryCreate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     inquiry = Inquiry(
         id=uuid.uuid4(), client_name=data.client_name, client_phone=data.client_phone,
-        event_type=data.event_type, event_date=data.event_date, pax=data.pax, per_plate_rate=data.per_plate_rate,
+        event_type=data.event_type, event_date=data.event_date, pax=data.pax, per_plate_rate=data.per_plate_rate, add_on=data.add_on,
         assigned_to=data.assigned_to, follow_up_date=data.follow_up_date, remarks=data.remarks,
         created_by=current_user.id, status=InquiryStatus.NEW, payment_status=PaymentStatus.UNPAID,
     )

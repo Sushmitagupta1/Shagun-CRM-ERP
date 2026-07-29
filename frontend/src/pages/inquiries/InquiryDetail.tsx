@@ -228,6 +228,7 @@ export default function InquiryDetail() {
               { label: 'Event Date', value: formatDate(inquiry.event_date) },
               { label: 'Pax', value: inquiry.pax ?? '—' },
               { label: 'Per Plate Rate', value: inquiry.per_plate_rate ? formatCurrency(Number(inquiry.per_plate_rate)) : '—' },
+              { label: 'Add On', value: inquiry.add_on ? formatCurrency(Number(inquiry.add_on)) : '—' },
               { label: 'Total Amount', value: inquiry.total_amount ? formatCurrency(inquiry.total_amount) : '—' },
               { label: 'Follow-up Date', value: formatDate(inquiry.follow_up_date) },
               { label: 'Created', value: formatDate(inquiry.created_at) },

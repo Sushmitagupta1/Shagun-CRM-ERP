@@ -12,6 +12,7 @@ class InquiryCreate(BaseModel):
     inquiry_date: date | None = None
     pax: int | None = None
     per_plate_rate: Decimal | None = None
+    add_on: Decimal | None = None
     assigned_to: uuid.UUID | None = None
     follow_up_date: date | None = None
     remarks: str | None = None
@@ -25,6 +26,7 @@ class InquiryUpdate(BaseModel):
     inquiry_date: date | None = None
     pax: int | None = None
     per_plate_rate: Decimal | None = None
+    add_on: Decimal | None = None
     assigned_to: uuid.UUID | None = None
     follow_up_date: date | None = None
     remarks: str | None = None
@@ -39,6 +41,7 @@ class InquiryResponse(BaseModel):
     inquiry_date: date | None
     pax: int | None
     per_plate_rate: Decimal | None
+    add_on: float | None = None
     status: str
     assigned_to: uuid.UUID | None
     created_by: uuid.UUID
@@ -53,7 +56,7 @@ class InquiryResponse(BaseModel):
     @model_validator(mode='after')
     def compute_total_amount(self):
         if self.per_plate_rate is not None and self.pax is not None:
-            self.total_amount = float(self.per_plate_rate) * self.pax
+            self.total_amount = float(self.per_plate_rate) * self.pax + (self.add_on or 0)
         return self
 
     class Config:

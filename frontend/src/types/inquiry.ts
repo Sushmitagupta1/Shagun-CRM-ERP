@@ -19,6 +19,7 @@ export interface Inquiry {
   inquiry_date: string | null
   pax: number | null
   per_plate_rate: number | null
+  add_on: number | null
   total_amount: number | null
   status: InquiryStatus
   assigned_to: string | null
@@ -39,6 +40,7 @@ export interface InquiryCreate {
   inquiry_date?: string
   pax?: number
   per_plate_rate?: number
+  add_on?: number
   assigned_to?: string
   follow_up_date?: string
   remarks?: string

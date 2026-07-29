@@ -12,6 +12,7 @@ const inquirySchema = z.object({
   event_date: z.string().optional(),
   pax: z.number().min(1).optional(),
   per_plate_rate: z.number().min(0).optional(),
+  add_on: z.number().min(0).optional(),
   follow_up_date: z.string().optional(),
   remarks: z.string().optional(),
 })
@@ -35,8 +36,8 @@ export function InquiryForm({ initialData, onSubmit, loading }: InquiryFormProps
     defaultValues: initialData,
   })
 
-  const [pax, perPlateRate] = watch(['pax', 'per_plate_rate'])
-  const totalAmount = (pax || 0) * (perPlateRate || 0)
+  const [pax, perPlateRate, addOn] = watch(['pax', 'per_plate_rate', 'add_on'])
+  const totalAmount = (pax || 0) * (perPlateRate || 0) + (addOn || 0)
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -64,17 +65,17 @@ export function InquiryForm({ initialData, onSubmit, loading }: InquiryFormProps
 
       <div>
         <label className="mb-1 block text-sm font-medium text-gray-700">Event Type *</label>
-        <select
+        <input
           {...register('event_type')}
+          list="event-types"
+          placeholder="e.g. Wedding"
           className="h-10 w-full rounded-lg border border-gray-200 px-3 text-sm"
-        >
-          <option value="">Select type</option>
+        />
+        <datalist id="event-types">
           {EVENT_TYPES.map((t) => (
-            <option key={t} value={t}>
-              {t}
-            </option>
+            <option key={t} value={t} />
           ))}
-        </select>
+        </datalist>
         {errors.event_type && (
           <p className="mt-1 text-xs text-red-500">{errors.event_type.message}</p>
         )}
@@ -112,6 +113,16 @@ export function InquiryForm({ initialData, onSubmit, loading }: InquiryFormProps
         <input
           {...register('per_plate_rate')}
           type="number"
+          className="h-10 w-full rounded-lg border border-gray-200 px-3 text-sm"
+        />
+      </div>
+
+      <div>
+        <label className="mb-1 block text-sm font-medium text-gray-700">Add On (₹)</label>
+        <input
+          {...register('add_on')}
+          type="number"
+          placeholder="Extra charges"
           className="h-10 w-full rounded-lg border border-gray-200 px-3 text-sm"
         />
       </div>
