@@ -2,6 +2,7 @@ import uuid
 from datetime import date, datetime
 from decimal import Decimal
 from pydantic import BaseModel, model_validator
+from app.models.inquiry import InquiryStatus, PaymentStatus
 
 
 class InquiryCreate(BaseModel):
@@ -16,6 +17,13 @@ class InquiryCreate(BaseModel):
     assigned_to: uuid.UUID | None = None
     follow_up_date: date | None = None
     remarks: str | None = None
+    menu_uploaded: bool | None = None
+    method: str | None = None
+    method_details: str | None = None
+    advance_payment_date: date | None = None
+    remaining_payment_date: date | None = None
+    birthday_date: date | None = None
+    anniversary_date: date | None = None
 
 
 class InquiryUpdate(BaseModel):
@@ -28,8 +36,15 @@ class InquiryUpdate(BaseModel):
     per_plate_rate: Decimal | None = None
     add_on: Decimal | None = None
     assigned_to: uuid.UUID | None = None
-    follow_up_date: date | None = None
     remarks: str | None = None
+    menu_uploaded: bool | None = None
+    menu_content: str | None = None
+    method: str | None = None
+    method_details: str | None = None
+    advance_payment_date: date | None = None
+    remaining_payment_date: date | None = None
+    birthday_date: date | None = None
+    anniversary_date: date | None = None
 
 
 class InquiryResponse(BaseModel):
@@ -42,13 +57,22 @@ class InquiryResponse(BaseModel):
     pax: int | None
     per_plate_rate: Decimal | None
     add_on: float | None = None
-    status: str
+    status: InquiryStatus
     assigned_to: uuid.UUID | None
     created_by: uuid.UUID
-    follow_up_date: date | None
     remarks: str | None
+    menu_uploaded: bool = False
+    menu_content: str | None = None
+    menu_file_name: str | None = None
+    presentation_file_name: str | None = None
     advance_amount: Decimal
-    payment_status: str
+    payment_status: PaymentStatus
+    method: str | None = None
+    method_details: str | None = None
+    advance_payment_date: date | None = None
+    remaining_payment_date: date | None = None
+    birthday_date: date | None = None
+    anniversary_date: date | None = None
     total_amount: float | None = None
     created_at: datetime
     updated_at: datetime
@@ -58,6 +82,23 @@ class InquiryResponse(BaseModel):
         if self.per_plate_rate is not None and self.pax is not None:
             self.total_amount = float(self.per_plate_rate) * self.pax + (self.add_on or 0)
         return self
+
+    class Config:
+        from_attributes = True
+
+
+class FollowUpCreate(BaseModel):
+    follow_up_date: date
+    remarks: str | None = None
+
+
+class FollowUpResponse(BaseModel):
+    id: uuid.UUID
+    inquiry_id: uuid.UUID
+    follow_up_date: date
+    remarks: str | None
+    created_by: uuid.UUID
+    created_at: datetime
 
     class Config:
         from_attributes = True

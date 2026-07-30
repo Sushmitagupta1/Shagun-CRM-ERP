@@ -11,6 +11,12 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     CORS_ORIGINS: str = '["http://localhost:5173"]'
     ENVIRONMENT: str = "development"
+    UPLOAD_DIR: str = "/app/uploads"
+    MAX_UPLOAD_SIZE: int = 20 * 1024 * 1024  # 20 MB
+    ALLOWED_EXTENSIONS: list[str] = [
+        ".pdf", ".docx", ".xlsx", ".pptx", ".ppt",
+        ".jpg", ".jpeg", ".png", ".webp", ".txt", ".csv",
+    ]
 
     @property
     def cors_origins_list(self) -> List[str]:
