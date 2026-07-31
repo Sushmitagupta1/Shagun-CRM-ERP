@@ -92,3 +92,15 @@ export async function uploadInquiryFile(
   const response = await client.post(`/inquiries/${id}/upload?file_type=${fileType}`, formData)
   return response.data
 }
+
+export async function downloadInquiryFile(id: string, fileType: 'menu' | 'presentation', fileName?: string | null): Promise<void> {
+  const response = await client.get(`/inquiries/${id}/file/${fileType}`, { responseType: 'blob' })
+  const url = window.URL.createObjectURL(new Blob([response.data]))
+  const link = document.createElement('a')
+  link.href = url
+  link.setAttribute('download', fileName || `${fileType}_${id}`)
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  window.URL.revokeObjectURL(url)
+}
