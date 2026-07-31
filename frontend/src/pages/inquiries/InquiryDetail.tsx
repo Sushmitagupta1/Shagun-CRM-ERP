@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getInquiry, updateInquiryStatus, exportSingleInquiryExcel, updateInquiry, getFollowUps, addFollowUp, uploadInquiryFile, downloadInquiryFile } from '@/api/inquiries'
+import { getInquiry, updateInquiryStatus, exportSingleInquiryExcel, updateInquiry, getFollowUps, addFollowUp, uploadInquiryFile, downloadInquiryFile, getMeetings, addMeeting, updateMeetingStatus } from '@/api/inquiries'
 import PageHeader from '@/components/common/PageHeader'
 import StatusPill from '@/components/common/StatusPill'
 import { INQUIRY_STATUSES, PAYMENT_STATUSES } from '@/lib/constants'
@@ -118,6 +118,32 @@ export default function InquiryDetail() {
     onError: () => toast.error('Failed to add follow-up'),
   })
 
+  const { data: meetings = [], refetch: refetchMeetings } = useQuery({
+    queryKey: ['meetings', id],
+    queryFn: () => getMeetings(id!),
+    enabled: !!id,
+  })
+
+  const addMeetingMutation = useMutation({
+    mutationFn: (data: { meeting_at: string; remarks?: string }) => addMeeting(id!, data),
+    onSuccess: () => {
+      refetchMeetings()
+      queryClient.invalidateQueries({ queryKey: ['dashboard', 'presentation'] })
+      toast.success('Meeting added')
+    },
+    onError: () => toast.error('Failed to add meeting'),
+  })
+
+  const completeMeetingMutation = useMutation({
+    mutationFn: ({ meetingId }: { meetingId: string }) => updateMeetingStatus(id!, meetingId, 'completed'),
+    onSuccess: () => {
+      refetchMeetings()
+      queryClient.invalidateQueries({ queryKey: ['dashboard', 'presentation'] })
+      toast.success('Meeting marked complete')
+    },
+    onError: () => toast.error('Failed to update meeting'),
+  })
+
   const statusMutation = useMutation({
     mutationFn: (status: string) => updateInquiryStatus(id!, status),
     onSuccess: () => {
@@ -160,6 +186,10 @@ export default function InquiryDetail() {
   const [showAddFollowUp, setShowAddFollowUp] = useState(false)
   const [newFollowUpDate, setNewFollowUpDate] = useState('')
   const [newFollowUpRemarks, setNewFollowUpRemarks] = useState('')
+  const [showAddMeeting, setShowAddMeeting] = useState(false)
+  const [newMeetingDate, setNewMeetingDate] = useState('')
+  const [newMeetingTime, setNewMeetingTime] = useState('')
+  const [newMeetingRemarks, setNewMeetingRemarks] = useState('')
 
   const menuFile = inquiry?.menu_file_name || (inquiry?.menu_content ? 'Menu.txt' : null)
   const presentationFile = inquiry?.presentation_file_name || null
@@ -634,6 +664,88 @@ export default function InquiryDetail() {
               </motion.div>
             )}
           </AnimatePresence>
+
+          <div className="mt-4 border-t border-gray-100 pt-4">
+            <div className="mb-3 flex items-center justify-between">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-gray-400">Meetings</h4>
+              {(isAdmin || isPresentationExec) && (
+                <button onClick={() => setShowAddMeeting(!showAddMeeting)}
+                  className="flex h-7 items-center gap-1 rounded-lg border border-gray-200 px-2.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50">
+                  <Plus size={14} /> Add Meeting
+                </button>
+              )}
+            </div>
+
+            {showAddMeeting && (
+              <div className="mb-3 rounded-lg border border-gray-200 bg-gray-50 p-3">
+                <div className="flex flex-wrap items-end gap-2">
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-gray-600">Date *</label>
+                    <input type="date" value={newMeetingDate} onChange={(e) => setNewMeetingDate(e.target.value)}
+                      className="h-8 rounded-lg border border-gray-200 px-2 text-sm" />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-gray-600">Time *</label>
+                    <input type="time" value={newMeetingTime} onChange={(e) => setNewMeetingTime(e.target.value)}
+                      className="h-8 rounded-lg border border-gray-200 px-2 text-sm" />
+                  </div>
+                  <div className="min-w-[160px] flex-1">
+                    <label className="mb-1 block text-xs font-medium text-gray-600">Remark</label>
+                    <input value={newMeetingRemarks} onChange={(e) => setNewMeetingRemarks(e.target.value)}
+                      placeholder="Meeting notes..."
+                      className="h-8 w-full rounded-lg border border-gray-200 px-2 text-sm" />
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (!newMeetingDate || !newMeetingTime) return
+                      addMeetingMutation.mutate(
+                        { meeting_at: `${newMeetingDate}T${newMeetingTime}`, remarks: newMeetingRemarks || undefined },
+                        { onSuccess: () => { setShowAddMeeting(false); setNewMeetingDate(''); setNewMeetingTime(''); setNewMeetingRemarks('') } }
+                      )
+                    }}
+                    disabled={!newMeetingDate || !newMeetingTime || addMeetingMutation.isPending}
+                    className="flex h-8 items-center gap-1 rounded-lg bg-maroon px-3 text-xs font-bold text-white transition-colors hover:bg-maroon-dark disabled:opacity-50"
+                  >
+                    {addMeetingMutation.isPending ? 'Saving...' : 'Save'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {meetings.length === 0 ? (
+              <p className="text-xs text-gray-400">No meetings scheduled yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {meetings.map((mtg) => {
+                  const d = new Date(mtg.meeting_at)
+                  const done = mtg.status === 'completed'
+                  return (
+                    <div key={mtg.id} className="flex items-start gap-3 rounded-lg border border-gray-100 bg-white p-3">
+                      <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ${done ? 'bg-emerald-100 text-emerald-600' : 'bg-indigo-100 text-indigo-600'}`}>
+                        {done ? <CheckCircle2 size={14} /> : d.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-gray-900">
+                          {d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          <span className="ml-1 text-xs font-normal text-gray-400">
+                            · {d.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}
+                          </span>
+                        </p>
+                        {mtg.remarks && <p className="mt-0.5 text-xs text-gray-500">{mtg.remarks}</p>}
+                      </div>
+                      {!done && (isAdmin || isPresentationExec) && (
+                        <button onClick={() => completeMeetingMutation.mutate({ meetingId: mtg.id })}
+                          disabled={completeMeetingMutation.isPending}
+                          className="flex h-7 items-center gap-1 rounded-lg border border-gray-200 px-2 text-[10px] font-medium text-gray-600 hover:bg-emerald-50">
+                          <CheckCircle2 size={11} /> Mark done
+                        </button>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
         </WorkflowSection>
       )}
 
