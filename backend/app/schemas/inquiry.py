@@ -1,6 +1,7 @@
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Literal
 from pydantic import BaseModel, model_validator
 from app.models.inquiry import InquiryStatus, PaymentStatus
 
@@ -97,6 +98,28 @@ class FollowUpResponse(BaseModel):
     inquiry_id: uuid.UUID
     follow_up_date: date
     remarks: str | None
+    created_by: uuid.UUID
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class MeetingCreate(BaseModel):
+    meeting_at: datetime
+    remarks: str | None = None
+
+
+class MeetingStatusUpdate(BaseModel):
+    status: Literal["scheduled", "completed"]
+
+
+class MeetingResponse(BaseModel):
+    id: uuid.UUID
+    inquiry_id: uuid.UUID
+    meeting_at: datetime
+    remarks: str | None
+    status: str
     created_by: uuid.UUID
     created_at: datetime
 
