@@ -1,11 +1,24 @@
-import { useState, useRef, useEffect, useMemo } from 'react'
+import { useState, useRef, useEffect } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Bell, Search, LogOut, Calendar, Clock, ChevronRight, X, Activity, Menu } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { ROLE_LABELS } from '@/lib/constants'
-import { getNotificationsForRole } from '@/lib/notifications'
+import { getNotifications } from '@/api/notifications'
 import { useNavigate } from 'react-router-dom'
 import { useSidebarStore } from '@/store/sidebarStore'
+
+function timeAgo(iso: string) {
+  const diff = Date.now() - new Date(iso).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins} min ago`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours} hr ago`
+  const days = Math.floor(hours / 24)
+  if (days < 30) return `${days} day${days !== 1 ? 's' : ''} ago`
+  return new Date(iso).toLocaleDateString()
+}
 
 function getDaysInMonth(year: number, month: number) {
   return new Date(year, month + 1, 0).getDate()
@@ -23,8 +36,15 @@ export default function TopNav() {
   const [notifTab, setNotifTab] = useState<'events' | 'followups' | 'activity'>('events')
   const panelRef = useRef<HTMLDivElement>(null)
 
-  const roleNotifs = useMemo(() => getNotificationsForRole(user?.role.name), [user?.role.name])
-  const unreadCount = roleNotifs.filter((n) => !n.read).length
+  const { data: notifData } = useQuery({
+    queryKey: ['notifications', 'topnav'],
+    queryFn: () => getNotifications({ per_page: 20 }),
+    refetchInterval: 60000,
+  })
+
+  const roleNotifs = notifData?.items ?? []
+  const unreadCount = roleNotifs.filter((n) => !n.is_read).length
+  const eventsToday = roleNotifs.filter((n) => n.type === 'event' && n.title === 'Event today').length
 
   const roleEvents = roleNotifs.filter((n) => ['event', 'meeting', 'kitchen', 'warehouse', 'vendor'].includes(n.type))
   const roleFollowups = roleNotifs.filter((n) => ['followup', 'inquiry', 'status', 'menu'].includes(n.type))
@@ -91,7 +111,7 @@ export default function TopNav() {
           <Calendar size={14} className="text-maroon" />
           <span className="font-medium">{today.getDate()} {monthNames[today.getMonth()].slice(0, 3)}</span>
           <span className="text-gray-400">·</span>
-          <span>{roleEvents.length} events today</span>
+          <span>{eventsToday} events today</span>
         </div>
 
         {/* Bell Notification */}
@@ -212,13 +232,13 @@ export default function TopNav() {
                         <p className="py-4 text-center text-xs text-gray-400">No events for your role</p>
                       ) : (
                         roleEvents.map((n) => (
-                          <div key={n.id} className={`mb-1 flex items-center gap-2 rounded-lg px-3 py-2 ${n.read ? 'bg-gray-50' : 'bg-blue-50'}`}>
+                          <div key={n.id} className={`mb-1 flex items-center gap-2 rounded-lg px-3 py-2 ${n.is_read ? 'bg-gray-50' : 'bg-blue-50'}`}>
                             <Clock size={12} className="text-blue-500" />
                             <div className="min-w-0 flex-1">
                               <p className="text-xs font-medium text-gray-900 truncate">{n.title}</p>
-                              <p className="text-[10px] text-gray-500">{n.detail}</p>
+                              <p className="text-[10px] text-gray-500">{n.message}</p>
                             </div>
-                            <span className="shrink-0 text-[10px] text-gray-400">{n.time}</span>
+                            <span className="shrink-0 text-[10px] text-gray-400">{timeAgo(n.created_at)}</span>
                           </div>
                         ))
                       )}
@@ -233,15 +253,15 @@ export default function TopNav() {
                       <p className="py-4 text-center text-xs text-gray-400">No follow-ups for your role</p>
                     ) : (
                       roleFollowups.map((n) => (
-                        <div key={n.id} className={`mb-1 flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors hover:bg-gray-100 ${n.read ? 'bg-gray-50' : 'bg-blue-50/30'}`}>
+                        <div key={n.id} className={`mb-1 flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors hover:bg-gray-100 ${n.is_read ? 'bg-gray-50' : 'bg-blue-50/30'}`}>
                           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-purple-100">
-                            <n.icon size={14} className="text-purple-600" />
+                            <Clock size={14} className="text-purple-600" />
                           </div>
                           <div className="min-w-0 flex-1">
                             <p className="text-xs font-medium text-gray-900">{n.title}</p>
-                            <p className="text-[10px] text-gray-500">{n.detail}</p>
+                            <p className="text-[10px] text-gray-500">{n.message}</p>
                           </div>
-                          <span className="shrink-0 text-[10px] text-gray-400">{n.time}</span>
+                          <span className="shrink-0 text-[10px] text-gray-400">{timeAgo(n.created_at)}</span>
                         </div>
                       ))
                     )}
@@ -255,15 +275,15 @@ export default function TopNav() {
                       <p className="py-4 text-center text-xs text-gray-400">No recent activity for your role</p>
                     ) : (
                       roleActivity.map((n) => (
-                        <div key={n.id} className={`mb-1 flex items-start gap-3 rounded-lg px-3 py-2.5 transition-colors hover:bg-gray-50 ${n.read ? '' : 'bg-blue-50/30'}`}>
+                        <div key={n.id} className={`mb-1 flex items-start gap-3 rounded-lg px-3 py-2.5 transition-colors hover:bg-gray-50 ${n.is_read ? '' : 'bg-blue-50/30'}`}>
                           <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-100">
                             <Activity size={11} className="text-emerald-600" />
                           </div>
                           <div className="min-w-0 flex-1">
                             <p className="text-xs font-medium text-gray-900">{n.title}</p>
-                            <p className="text-[10px] text-gray-500">{n.detail}</p>
+                            <p className="text-[10px] text-gray-500">{n.message}</p>
                           </div>
-                          <span className="shrink-0 text-[10px] text-gray-400">{n.time}</span>
+                          <span className="shrink-0 text-[10px] text-gray-400">{timeAgo(n.created_at)}</span>
                         </div>
                       ))
                     )}
