@@ -1,11 +1,10 @@
 export type InquiryStatus =
-  | 'new'
-  | 'follow_up'
-  | 'menu_ready'
-  | 'presentation_sent'
-  | 'negotiation'
-  | 'confirmed'
-  | 'completed'
+  | 'new_inquiry'
+  | 'followup'
+  | 'client_confirmation'
+  | 'menu_sent'
+  | 'advance_receive'
+  | 'operation_handover'
   | 'cancelled'
 
 export type PaymentStatus = 'unpaid' | 'partial' | 'paid'
@@ -24,12 +23,30 @@ export interface Inquiry {
   status: InquiryStatus
   assigned_to: string | null
   created_by: string
-  follow_up_date: string | null
   remarks: string | null
+  menu_uploaded: boolean
+  menu_content: string | null
+  menu_file_name: string | null
+  presentation_file_name: string | null
   advance_amount: number
   payment_status: PaymentStatus
+  method: string | null
+  method_details: string | null
+  advance_payment_date: string | null
+  remaining_payment_date: string | null
+  birthday_date: string | null
+  anniversary_date: string | null
   created_at: string
   updated_at: string
+}
+
+export interface FollowUp {
+  id: string
+  inquiry_id: string
+  follow_up_date: string
+  remarks: string | null
+  created_by: string
+  created_at: string
 }
 
 export interface InquiryCreate {
@@ -44,6 +61,14 @@ export interface InquiryCreate {
   assigned_to?: string
   follow_up_date?: string
   remarks?: string
+  menu_uploaded?: boolean
+  menu_content?: string
+  method?: string
+  method_details?: string
+  advance_payment_date?: string
+  remaining_payment_date?: string
+  birthday_date?: string
+  anniversary_date?: string
 }
 
 export interface InquiryUpdate extends Partial<InquiryCreate> {}
@@ -56,4 +81,7 @@ export interface InquiryListParams {
   search?: string
   sort_by?: string
   sort_order?: 'asc' | 'desc'
+  event_type?: string
+  date_from?: string
+  date_to?: string
 }
