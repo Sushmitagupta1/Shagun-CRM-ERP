@@ -6,9 +6,9 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_
 from app.database import get_db
-from app.models.inquiry import Inquiry, InquiryStatus, PaymentStatus, FollowUp
+from app.models.inquiry import Inquiry, InquiryStatus, PaymentStatus, FollowUp, Meeting
 from app.models.user import User
-from app.schemas.inquiry import InquiryCreate, InquiryUpdate, InquiryResponse, FollowUpCreate, FollowUpResponse
+from app.schemas.inquiry import InquiryCreate, InquiryUpdate, InquiryResponse, FollowUpCreate, FollowUpResponse, MeetingCreate, MeetingStatusUpdate, MeetingResponse
 from app.schemas.common import PaginatedResponse
 from app.middleware.auth import get_current_user
 
@@ -315,6 +315,58 @@ async def add_follow_up(
     await db.commit()
     await db.refresh(follow_up)
     return FollowUpResponse.model_validate(follow_up)
+
+
+@router.get("/{inquiry_id}/meetings", response_model=list[MeetingResponse])
+async def list_meetings(
+    inquiry_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    await get_inquiry_or_404(db, inquiry_id)
+    result = await db.execute(
+        select(Meeting)
+        .where(Meeting.inquiry_id == inquiry_id)
+        .order_by(Meeting.meeting_at.asc())
+    )
+    return [MeetingResponse.model_validate(m) for m in result.scalars().all()]
+
+
+@router.post("/{inquiry_id}/meetings", response_model=MeetingResponse, status_code=201)
+async def add_meeting(
+    inquiry_id: uuid.UUID, data: MeetingCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    inquiry = await get_inquiry_or_404(db, inquiry_id)
+    meeting = Meeting(
+        id=uuid.uuid4(), inquiry_id=inquiry.id,
+        meeting_at=data.meeting_at,
+        remarks=data.remarks,
+        created_by=current_user.id,
+    )
+    db.add(meeting)
+    await db.commit()
+    await db.refresh(meeting)
+    return MeetingResponse.model_validate(meeting)
+
+
+@router.patch("/{inquiry_id}/meetings/{meeting_id}", response_model=MeetingResponse)
+async def update_meeting_status(
+    inquiry_id: uuid.UUID, meeting_id: uuid.UUID, data: MeetingStatusUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(Meeting).where(Meeting.id == meeting_id, Meeting.inquiry_id == inquiry_id)
+    )
+    meeting = result.scalar_one_or_none()
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    meeting.status = data.status
+    await db.commit()
+    await db.refresh(meeting)
+    return MeetingResponse.model_validate(meeting)
 
 
 @router.patch("/{inquiry_id}/status")
