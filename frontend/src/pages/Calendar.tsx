@@ -42,6 +42,21 @@ export default function CalendarPage() {
 
   const events: Inquiry[] = (data?.items ?? []).filter((i) => i.status !== 'cancelled')
 
+  const upTo = new Date(today)
+  upTo.setDate(upTo.getDate() + 90)
+  const upStart = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+  const upEnd = `${upTo.getFullYear()}-${String(upTo.getMonth() + 1).padStart(2, '0')}-${String(upTo.getDate()).padStart(2, '0')}`
+
+  const { data: upcomingData } = useQuery({
+    queryKey: ['upcoming-events', upStart, upEnd],
+    queryFn: () => getInquiries({ per_page: 100, event_date_from: upStart, event_date_to: upEnd }),
+  })
+
+  const upcomingEvents: Inquiry[] = (upcomingData?.items ?? [])
+    .filter((i) => i.status !== 'cancelled')
+    .sort((a, b) => (a.event_date ?? '').localeCompare(b.event_date ?? ''))
+    .slice(0, 10)
+
   const prevMonth = () => {
     if (currentMonth === 0) { setCurrentMonth(11); setCurrentYear(currentYear - 1) }
     else setCurrentMonth(currentMonth - 1)
@@ -242,6 +257,51 @@ export default function CalendarPage() {
               })
             )}
           </div>
+
+          {upcomingEvents.length > 0 && (
+            <>
+              <div className="border-t border-gray-100 px-5 py-3">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-gray-400">Upcoming Events</h4>
+              </div>
+              <div className="space-y-3 p-4">
+                {upcomingEvents.map((event) => {
+                  const statusMeta = INQUIRY_STATUSES[event.status as keyof typeof INQUIRY_STATUSES]
+                  return (
+                    <div
+                      key={event.id}
+                      className="flex items-start gap-3 rounded-lg border border-gray-100 p-3 transition-colors hover:border-gray-200"
+                    >
+                      <div className="flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-lg bg-maroon/5">
+                        <span className="text-sm font-bold text-maroon">
+                          {event.event_date ? new Date(event.event_date + 'T00:00:00').getDate() : '—'}
+                        </span>
+                        <span className="text-[9px] font-medium uppercase text-maroon/70">
+                          {event.event_date ? new Date(event.event_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short' }) : ''}
+                        </span>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold text-gray-900">{event.client_name}</p>
+                        <p className="truncate text-xs text-gray-500">{event.event_type} · {event.pax ?? '—'} guests</p>
+                      </div>
+                      <div className="flex flex-col items-end gap-1">
+                        {statusMeta && (
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${statusMeta.color}`}>
+                            {statusMeta.label}
+                          </span>
+                        )}
+                        <button
+                          onClick={() => navigate(`/inquiries/${event.id}`)}
+                          className="flex items-center gap-1 text-[10px] font-medium text-maroon hover:underline"
+                        >
+                          <ExternalLink size={11} /> View
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </>
+          )}
         </motion.div>
       </div>
     </div>
