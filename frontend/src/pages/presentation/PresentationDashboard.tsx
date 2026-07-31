@@ -4,7 +4,6 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { usePresentationKPIs } from '@/hooks/useDashboard'
 import { useInquiries } from '@/hooks/useInquiries'
 import { useAuth } from '@/hooks/useAuth'
-import { toast } from 'sonner'
 import PageHeader from '@/components/common/PageHeader'
 import StatusPill from '@/components/common/StatusPill'
 import { KPICardSkeleton } from '@/components/common/Skeleton'
@@ -15,13 +14,7 @@ import {
   Calendar,
   Clock,
   FileImage,
-  Upload,
-  Palette,
-  Phone,
   CheckCircle2,
-  Plus,
-  MoreVertical,
-  ArrowRight,
   Sparkles,
   Eye,
   Bot,
@@ -32,34 +25,18 @@ import {
   MessageSquare,
 } from 'lucide-react'
 
-const themeLibrary = [
-  { id: '1', name: 'Royal Wedding', category: 'Wedding', gradient: 'from-rose-600 to-pink-700', used: 12 },
-  { id: '2', name: 'Corporate Elegance', category: 'Corporate', gradient: 'from-slate-700 to-slate-900', used: 8 },
-  { id: '3', name: 'Birthday Carnival', category: 'Birthday', gradient: 'from-yellow-400 to-amber-500', used: 5 },
-  { id: '4', name: 'Garden Party', category: 'Anniversary', gradient: 'from-emerald-500 to-teal-600', used: 3 },
-]
-
-const todayMeetings = [
-  { id: '1', client: 'Sharma Family', time: '11:00 AM', type: 'Theme Selection', status: 'upcoming' },
-  { id: '2', client: 'Tata Corp', time: '2:30 PM', type: 'Final Walkthrough', status: 'upcoming' },
-  { id: '3', client: 'Mehta Family', time: '4:00 PM', type: 'Concept Review', status: 'completed' },
-]
-
-const presentationPipeline = [
-  { stage: 'New Assignment', count: 3, color: 'bg-blue-500' },
-  { stage: 'Mood Board', count: 2, color: 'bg-purple-500' },
-  { stage: 'Theme Ready', count: 1, color: 'bg-amber-500' },
-  { stage: 'Client Approved', count: 0, color: 'bg-emerald-500' },
-]
-
 export default function PresentationDashboard() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const firstName = user?.full_name?.split(' ')[0] ?? 'Shayank'
   const { data: kpis, isLoading } = usePresentationKPIs()
+  const meetings = kpis?.meetings ?? []
+  const todayKey = new Date().toLocaleDateString('en-IN')
+  const todayMeetings = meetings.filter((m) => new Date(m.meeting_at).toLocaleDateString('en-IN') === todayKey)
+  const upcomingMeetings = meetings.filter((m) => new Date(m.meeting_at).toLocaleDateString('en-IN') !== todayKey)
   const { data: inquiriesData } = useInquiries({ per_page: 10 })
   const assignedInquiries = inquiriesData?.items?.filter(
-    (i) => i.status !== 'confirmed' && i.status !== 'cancelled'
+    (i) => i.status !== 'advance_receive' && i.status !== 'operation_handover'
   ) ?? []
 
   // AI Chat
@@ -102,7 +79,7 @@ export default function PresentationDashboard() {
         {isLoading
           ? Array.from({ length: 3 }).map((_, i) => <KPICardSkeleton key={i} />)
           : [
-              { label: 'Assigned Inquiries', value: kpis?.assigned_inquiries ?? 0, desc: 'Inquiries needing presentations', icon: Presentation, iconBg: 'bg-blue-50', iconColor: 'text-blue-500', to: '/inquiries' },
+              { label: 'New Inquiry', value: kpis?.new_inquiry ?? 0, desc: 'New inquiries assigned', icon: Presentation, iconBg: 'bg-blue-50', iconColor: 'text-blue-500', to: '/inquiries' },
               { label: 'Pending Presentations', value: kpis?.pending_presentations ?? 0, desc: 'Awaiting client approval', icon: FileImage, iconBg: 'bg-amber-50', iconColor: 'text-amber-500', to: '/inquiries' },
               { label: 'Meetings Today', value: kpis?.client_meetings_today ?? 0, desc: 'Scheduled client calls', icon: Calendar, iconBg: 'bg-emerald-50', iconColor: 'text-emerald-500', to: '/reports' },
             ].map((kpi, i) => (
@@ -140,113 +117,95 @@ export default function PresentationDashboard() {
               <Clock size={14} className="text-amber-500" /> Today's Meetings
             </h3>
             <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700">
-              {todayMeetings.filter((m) => m.status === 'upcoming').length} pending
+              {meetings.filter((m) => m.status === 'scheduled').length} pending
             </span>
           </div>
           <div className="space-y-0">
-            {todayMeetings.map((mtg, i) => (
-              <motion.div
-                key={mtg.id}
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.3 + i * 0.06 }}
-                className="flex items-center gap-3 border-b border-gray-50 px-5 py-3 last:border-0"
-              >
-                <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold ${
-                  mtg.status === 'completed'
-                    ? 'bg-emerald-100 text-emerald-600'
-                    : 'bg-blue-100 text-blue-600'
-                }`}>
-                  {mtg.status === 'completed' ? <CheckCircle2 size={14} /> : mtg.time.split(':')[0]}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-xs font-semibold text-gray-900">{mtg.client}</p>
-                  <p className="text-[10px] text-gray-400">{mtg.type} · {mtg.time}</p>
-                </div>
-              </motion.div>
-            ))}
+            {meetings.length === 0 && (
+              <p className="px-5 py-6 text-center text-xs text-gray-400">No meetings scheduled.</p>
+            )}
+            {todayMeetings.length > 0 && (
+              <>
+                <p className="border-b border-gray-100 bg-gray-50 px-5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-400">Today</p>
+                {todayMeetings.map((mtg, i) => {
+                  const d = new Date(mtg.meeting_at)
+                  const timeStr = d.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })
+                  const done = mtg.status === 'completed'
+                  return (
+                    <motion.div
+                      key={mtg.id}
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.3 + i * 0.06 }}
+                      className="flex items-center gap-3 border-b border-gray-50 px-5 py-3 last:border-0"
+                    >
+                      <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold ${
+                        done ? 'bg-emerald-100 text-emerald-600' : 'bg-blue-100 text-blue-600'
+                      }`}>
+                        {done ? <CheckCircle2 size={14} /> : timeStr.split(':')[0]}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-xs font-semibold text-gray-900">{mtg.client_name}</p>
+                        <p className="text-[10px] text-gray-400">{mtg.event_type} · {timeStr}</p>
+                        {mtg.remarks && <p className="truncate text-[10px] text-gray-400">{mtg.remarks}</p>}
+                      </div>
+                    </motion.div>
+                  )
+                })}
+              </>
+            )}
+            {upcomingMeetings.length > 0 && (
+              <>
+                <p className="border-b border-gray-100 bg-gray-50 px-5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-400">Upcoming</p>
+                {upcomingMeetings.map((mtg, i) => {
+                  const d = new Date(mtg.meeting_at)
+                  const timeStr = d.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })
+                  const dateStr = d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+                  const done = mtg.status === 'completed'
+                  return (
+                    <motion.div
+                      key={mtg.id}
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.3 + i * 0.06 }}
+                      className="flex items-center gap-3 border-b border-gray-50 px-5 py-3 last:border-0"
+                    >
+                      <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold ${
+                        done ? 'bg-emerald-100 text-emerald-600' : 'bg-blue-100 text-blue-600'
+                      }`}>
+                        {done ? <CheckCircle2 size={14} /> : dateStr}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-xs font-semibold text-gray-900">{mtg.client_name}</p>
+                        <p className="text-[10px] text-gray-400">{mtg.event_type} · {timeStr}</p>
+                        {mtg.remarks && <p className="truncate text-[10px] text-gray-400">{mtg.remarks}</p>}
+                      </div>
+                    </motion.div>
+                  )
+                })}
+              </>
+            )}
           </div>
         </motion.div>
 
-        {/* Presentation Pipeline */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.3 }}
-          className="rounded-xl border border-gray-100 bg-white p-5 shadow-md"
-        >
-          <h3 className="mb-4 text-sm font-bold text-gray-900">Presentation Pipeline</h3>
-          <div className="space-y-3">
-            {presentationPipeline.map((step, i) => (
-              <motion.div
-                key={step.stage}
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.4 + i * 0.06 }}
-                className="flex items-center gap-3"
-              >
-                <div className={`h-2 w-2 shrink-0 rounded-full ${step.color}`} />
-                <span className="flex-1 text-xs text-gray-600">{step.stage}</span>
-                <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-bold text-gray-700">
-                  {step.count}
-                </span>
-              </motion.div>
-            ))}
-          </div>
-          <button
-            onClick={() => toast.info('Opening presentation board...')}
-            className="mt-4 flex w-full items-center justify-center gap-1 rounded-lg border border-gray-200 bg-gray-50 py-2 text-xs font-semibold text-gray-600 transition-colors hover:bg-gray-100"
-          >
-            View All <ArrowRight size={12} />
-          </button>
-        </motion.div>
 
-        {/* Quick Actions */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.4 }}
-          className="rounded-xl border border-gray-100 bg-white p-5 shadow-md"
-        >
-          <h3 className="mb-4 text-sm font-bold text-gray-900">Quick Actions</h3>
-          <div className="grid grid-cols-2 gap-2.5">
-            {[
-              { label: 'AI Chat', icon: MessageSquare, action: () => setChatOpen(true), color: 'bg-maroon/10 text-maroon' },
-              { label: 'Upload Theme', icon: Upload, action: () => toast.success('Theme upload started'), color: 'bg-purple-50 text-purple-600' },
-              { label: 'New Meeting', icon: Phone, action: () => toast.info('Schedule meeting'), color: 'bg-blue-50 text-blue-600' },
-              { label: 'View Themes', icon: Palette, action: () => toast.info('Opening theme library'), color: 'bg-amber-50 text-amber-600' },
-            ].map((act, i) => (
-              <motion.button
-                key={act.label}
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: 0.5 + i * 0.06 }}
-                whileHover={{ y: -2 }}
-                onClick={act.action}
-                className="flex items-center gap-2.5 rounded-lg border border-gray-100 bg-white p-3 text-left transition-colors hover:bg-gray-50"
-              >
-                <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${act.color}`}>
-                  <act.icon size={16} />
-                </div>
-                <span className="text-[11px] font-semibold text-gray-700">{act.label}</span>
-              </motion.button>
-            ))}
-          </div>
-        </motion.div>
       </div>
 
-      {/* Bottom Row — Assigned Inquiries (8 cols) + Theme Library (4 cols) */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-        {/* Assigned Inquiries Table */}
+      {/* Bottom Row — Inquiry Details */}
+      <div className="grid grid-cols-1 gap-4">
+        {/* Inquiry Details Table */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.5 }}
-          className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-md lg:col-span-8"
+          className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-md"
         >
           <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3">
-            <h3 className="text-sm font-bold text-gray-900">Assigned Inquiries</h3>
-            <span className="text-[10px] text-gray-400">{assignedInquiries.length} total</span>
+            <h3 className="text-sm font-bold text-gray-900">Inquiry Details</h3>
+            <button onClick={() => navigate('/inquiries')}
+              className="rounded-lg bg-gold px-3 py-1.5 text-[10px] font-bold text-white shadow transition-colors hover:bg-gold-hover">
+              View Inquiry
+            </button>
           </div>
           <div className="overflow-y-auto" style={{ maxHeight: 280 }}>
             <table className="w-full">
@@ -284,14 +243,10 @@ export default function PresentationDashboard() {
                       />
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-1">
-                        <button className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-blue-600" title="View">
-                          <Eye size={14} />
-                        </button>
-                        <button className="rounded p-1 text-gray-400 hover:bg-gray-100">
-                          <MoreVertical size={14} />
-                        </button>
-                      </div>
+                      <button onClick={() => navigate(`/inquiries/${inq.id}`)}
+                        className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-blue-600" title="View">
+                        <Eye size={14} />
+                      </button>
                     </td>
                   </motion.tr>
                 ))}
@@ -300,39 +255,7 @@ export default function PresentationDashboard() {
           </div>
         </motion.div>
 
-        {/* Theme Library Sidebar */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.6 }}
-          className="rounded-xl border border-gray-100 bg-white p-5 shadow-md lg:col-span-4"
-        >
-          <div className="mb-3 flex items-center justify-between">
-            <h3 className="flex items-center gap-1.5 text-sm font-bold text-gray-900">
-              <Palette size={14} className="text-purple-500" /> Theme Library
-            </h3>
-            <button className="rounded-md bg-purple-50 p-1.5 text-purple-600 transition-colors hover:bg-purple-100">
-              <Plus size={14} />
-            </button>
-          </div>
-          <div className="space-y-2.5">
-            {themeLibrary.map((theme, i) => (
-              <motion.div
-                key={theme.id}
-                initial={{ opacity: 0, x: 10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.7 + i * 0.06 }}
-                className="group flex items-center gap-3 rounded-lg border border-gray-100 p-2.5 transition-colors hover:bg-gray-50"
-              >
-                <div className={`h-10 w-10 shrink-0 rounded-lg bg-gradient-to-br ${theme.gradient}`} />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-xs font-semibold text-gray-900">{theme.name}</p>
-                  <p className="text-[10px] text-gray-400">{theme.category} · Used {theme.used}x</p>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </motion.div>
+
       </div>
 
       {/* AI Chat Modal */}
