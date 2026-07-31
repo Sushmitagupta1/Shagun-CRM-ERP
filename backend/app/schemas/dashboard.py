@@ -14,7 +14,23 @@ class AdminKPIs(BaseModel):
     pending_warehouse_requests: int
 
 
+class NextFollowUp(BaseModel):
+    client_name: str
+    follow_up_date: str
+    remarks: str | None = None
+
+
+class MeetingInfo(BaseModel):
+    id: str
+    client_name: str
+    event_type: str
+    meeting_at: str
+    remarks: str | None = None
+    status: str
+
+
 class SalesKPIs(BaseModel):
+    total_inquiries: int
     new_inquiries: int
     followups_today: int
     overdue_followups: int
@@ -25,6 +41,7 @@ class SalesKPIs(BaseModel):
     pending_payments: int
     total_sales_value: float
     conversion_rate: float
+    next_follow_up: NextFollowUp | None = None
 
 
 class FinanceKPIs(BaseModel):
@@ -42,9 +59,11 @@ class MenuPlannerKPIs(BaseModel):
 
 
 class PresentationKPIs(BaseModel):
+    new_inquiry: int
     assigned_inquiries: int
     pending_presentations: int
     client_meetings_today: int
+    meetings: list[MeetingInfo] = []
 
 
 class OperationsKPIs(BaseModel):
