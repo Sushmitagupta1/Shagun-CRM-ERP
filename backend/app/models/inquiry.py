@@ -76,3 +76,15 @@ class FollowUp(UUIDMixin, TimestampMixin, Base):
     follow_up_date: Mapped[date] = mapped_column(Date, nullable=False)
     remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+
+
+class Meeting(UUIDMixin, TimestampMixin, Base):
+    __tablename__ = "meetings"
+
+    inquiry_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("inquiries.id", ondelete="CASCADE"), nullable=False
+    )
+    meeting_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="scheduled", nullable=False)
+    created_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
