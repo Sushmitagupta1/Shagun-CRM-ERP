@@ -1,6 +1,6 @@
 import client from './client'
 import type { PaginatedResponse } from '@/types/common'
-import type { Inquiry, InquiryCreate, FollowUp } from '@/types/inquiry'
+import type { Inquiry, InquiryCreate, FollowUp, Meeting } from '@/types/inquiry'
 
 export async function getInquiries(params: {
   page?: number
@@ -105,4 +105,19 @@ export async function downloadInquiryFile(id: string, fileType: 'menu' | 'presen
   link.click()
   document.body.removeChild(link)
   window.URL.revokeObjectURL(url)
+}
+
+export async function getMeetings(id: string): Promise<Meeting[]> {
+  const response = await client.get(`/inquiries/${id}/meetings`)
+  return response.data
+}
+
+export async function addMeeting(id: string, data: { meeting_at: string; remarks?: string }): Promise<Meeting> {
+  const response = await client.post(`/inquiries/${id}/meetings`, data)
+  return response.data
+}
+
+export async function updateMeetingStatus(id: string, meetingId: string, status: 'scheduled' | 'completed'): Promise<Meeting> {
+  const response = await client.patch(`/inquiries/${id}/meetings/${meetingId}`, { status })
+  return response.data
 }

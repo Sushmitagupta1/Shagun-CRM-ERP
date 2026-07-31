@@ -12,6 +12,7 @@ export interface AdminKPIs {
 }
 
 export interface SalesKPIs {
+  total_inquiries: number
   new_inquiries: number
   followups_today: number
   overdue_followups: number
@@ -22,6 +23,7 @@ export interface SalesKPIs {
   pending_payments: number
   total_sales_value: number
   conversion_rate: number
+  next_follow_up: { client_name: string; follow_up_date: string; remarks: string | null } | null
 }
 
 export interface FinanceKPIs {
@@ -53,10 +55,21 @@ export interface MenuPlannerKPIs {
   ai_menus_generated: number
 }
 
+export interface MeetingInfo {
+  id: string
+  client_name: string
+  event_type: string
+  meeting_at: string
+  remarks: string | null
+  status: string
+}
+
 export interface PresentationKPIs {
+  new_inquiry: number
   assigned_inquiries: number
   pending_presentations: number
   client_meetings_today: number
+  meetings: MeetingInfo[]
 }
 
 export interface OperationsKPIs {

@@ -49,6 +49,16 @@ export interface FollowUp {
   created_at: string
 }
 
+export interface Meeting {
+  id: string
+  inquiry_id: string
+  meeting_at: string
+  remarks: string | null
+  status: 'scheduled' | 'completed'
+  created_by: string
+  created_at: string
+}
+
 export interface InquiryCreate {
   client_name: string
   client_phone: string
