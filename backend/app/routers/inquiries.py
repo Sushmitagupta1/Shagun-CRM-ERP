@@ -49,12 +49,19 @@ async def list_inquiries(
     status: str | None = None, assigned_to: uuid.UUID | None = None,
     search: str | None = None, event_type: str | None = None,
     date_from: str | None = None, date_to: str | None = None,
+    event_date_from: str | None = None, event_date_to: str | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     query = select(Inquiry)
     count_query = select(func.count(Inquiry.id))
     query, count_query = apply_filters(query, count_query, status, assigned_to, search, event_type, date_from, date_to)
+    if event_date_from:
+        query = query.where(Inquiry.event_date >= date.fromisoformat(event_date_from))
+        count_query = count_query.where(Inquiry.event_date >= date.fromisoformat(event_date_from))
+    if event_date_to:
+        query = query.where(Inquiry.event_date <= date.fromisoformat(event_date_to))
+        count_query = count_query.where(Inquiry.event_date <= date.fromisoformat(event_date_to))
     total_result = await db.execute(count_query)
     total = total_result.scalar()
     query = query.order_by(Inquiry.created_at.desc()).offset((page - 1) * per_page).limit(per_page)

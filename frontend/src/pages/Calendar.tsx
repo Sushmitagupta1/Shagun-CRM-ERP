@@ -1,17 +1,12 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import PageHeader from '@/components/common/PageHeader'
-import { ChevronLeft, ChevronRight, Clock, MapPin, Users } from 'lucide-react'
-
-const events = [
-  { id: '1', client: 'Priya & Rahul Sharma', type: 'Wedding', date: '2026-07-24', time: '10:00 AM', venue: 'JW Marriott', pax: 250, status: 'confirmed' },
-  { id: '2', client: 'Tata Motors Corp', type: 'Corporate Gala', date: '2026-07-24', time: '2:30 PM', venue: 'Taj Lands End', pax: 150, status: 'confirmed' },
-  { id: '3', client: 'Mehta Family', type: 'Birthday', date: '2026-07-25', time: '11:00 AM', venue: 'Grand Hyatt', pax: 80, status: 'confirmed' },
-  { id: '4', client: 'Agarwal Family', type: 'Anniversary', date: '2026-07-26', time: '7:00 PM', venue: 'The Leela', pax: 120, status: 'confirmed' },
-  { id: '5', client: 'Gupta Wedding', type: 'Wedding', date: '2026-07-28', time: '6:00 PM', venue: 'ITC Grand Bharat', pax: 300, status: 'confirmed' },
-  { id: '6', client: 'Infosys Team Dinner', type: 'Corporate', date: '2026-07-30', time: '8:00 PM', venue: 'Trident BKC', pax: 60, status: 'confirmed' },
-  { id: '7', client: 'Kapoor Engagement', type: 'Engagement', date: '2026-08-02', time: '5:00 PM', venue: 'Sahara Star', pax: 100, status: 'pending' },
-]
+import { getInquiries } from '@/api/inquiries'
+import type { Inquiry } from '@/types/inquiry'
+import { INQUIRY_STATUSES } from '@/lib/constants'
+import { ChevronLeft, ChevronRight, Users, ExternalLink } from 'lucide-react'
 
 function getDaysInMonth(year: number, month: number) {
   return new Date(year, month + 1, 0).getDate()
@@ -24,8 +19,11 @@ function getFirstDayOfMonth(year: number, month: number) {
 const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 const dayShort = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
 
+const CONFIRMED_STATUSES = ['client_confirmation', 'advance_receive', 'operation_handover']
+
 export default function CalendarPage() {
   const today = new Date()
+  const navigate = useNavigate()
   const [currentMonth, setCurrentMonth] = useState(today.getMonth())
   const [currentYear, setCurrentYear] = useState(today.getFullYear())
   const [selectedDate, setSelectedDate] = useState<string>(
@@ -34,6 +32,15 @@ export default function CalendarPage() {
 
   const daysInMonth = getDaysInMonth(currentYear, currentMonth)
   const firstDay = getFirstDayOfMonth(currentYear, currentMonth)
+  const monthStart = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-01`
+  const monthEnd = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['calendar-events', currentYear, currentMonth],
+    queryFn: () => getInquiries({ per_page: 100, event_date_from: monthStart, event_date_to: monthEnd }),
+  })
+
+  const events: Inquiry[] = (data?.items ?? []).filter((i) => i.status !== 'cancelled')
 
   const prevMonth = () => {
     if (currentMonth === 0) { setCurrentMonth(11); setCurrentYear(currentYear - 1) }
@@ -53,7 +60,7 @@ export default function CalendarPage() {
 
   const getEventsForDate = (day: number) => {
     const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-    return events.filter((e) => e.date === dateStr)
+    return events.filter((e) => e.event_date === dateStr)
   }
 
   const selectedEvents = (() => {
@@ -65,6 +72,8 @@ export default function CalendarPage() {
   const isToday = (day: number) => {
     return day === today.getDate() && currentMonth === today.getMonth() && currentYear === today.getFullYear()
   }
+
+  const isConfirmed = (event: Inquiry) => CONFIRMED_STATUSES.includes(event.status)
 
   return (
     <div className="space-y-6">
@@ -146,10 +155,10 @@ export default function CalendarPage() {
                       <div
                         key={e.id}
                         className={`truncate rounded px-1 py-0.5 text-[9px] font-medium ${
-                          e.status === 'confirmed' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+                          isConfirmed(e) ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
                         }`}
                       >
-                        {e.client}
+                        {e.client_name}
                       </div>
                     ))}
                     {dayEvents.length > 2 && (
@@ -177,49 +186,60 @@ export default function CalendarPage() {
                 day: 'numeric',
               })}
             </h3>
-            <p className="text-xs text-gray-500">{selectedEvents.length} event{selectedEvents.length !== 1 ? 's' : ''}</p>
+            <p className="text-xs text-gray-500">
+              {isLoading ? 'Loading…' : `${selectedEvents.length} event${selectedEvents.length !== 1 ? 's' : ''}`}
+            </p>
           </div>
 
           <div className="space-y-3 p-4">
-            {selectedEvents.length === 0 ? (
+            {isLoading ? (
+              <div className="flex justify-center py-8">
+                <div className="h-6 w-6 animate-spin rounded-full border-2 border-maroon border-t-transparent" />
+              </div>
+            ) : selectedEvents.length === 0 ? (
               <div className="py-8 text-center">
                 <p className="text-sm text-gray-400">No events on this date</p>
               </div>
             ) : (
-              selectedEvents.map((event, i) => (
-                <motion.div
-                  key={event.id}
-                  initial={{ opacity: 0, x: 10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: i * 0.1 }}
-                  className="rounded-lg border border-gray-100 p-4 transition-colors hover:border-gray-200"
-                >
-                  <div className="mb-2 flex items-start justify-between">
-                    <div>
-                      <p className="text-sm font-semibold text-gray-900">{event.client}</p>
-                      <span className="mt-0.5 inline-block rounded-full bg-maroon/10 px-2 py-0.5 text-[10px] font-medium text-maroon">
-                        {event.type}
-                      </span>
+              selectedEvents.map((event, i) => {
+                const statusMeta = INQUIRY_STATUSES[event.status as keyof typeof INQUIRY_STATUSES]
+                return (
+                  <motion.div
+                    key={event.id}
+                    initial={{ opacity: 0, x: 10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: i * 0.1 }}
+                    className="rounded-lg border border-gray-100 p-4 transition-colors hover:border-gray-200"
+                  >
+                    <div className="mb-2 flex items-start justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-gray-900">{event.client_name}</p>
+                        <span className="mt-0.5 inline-block rounded-full bg-maroon/10 px-2 py-0.5 text-[10px] font-medium text-maroon">
+                          {event.event_type}
+                        </span>
+                      </div>
+                      <div className="flex flex-col items-end gap-1">
+                        {statusMeta && (
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${statusMeta.color}`}>
+                            {statusMeta.label}
+                          </span>
+                        )}
+                        <button
+                          onClick={() => navigate(`/inquiries/${event.id}`)}
+                          className="flex items-center gap-1 text-[10px] font-medium text-maroon hover:underline"
+                        >
+                          <ExternalLink size={11} /> View
+                        </button>
+                      </div>
                     </div>
-                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                      event.status === 'confirmed' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
-                    }`}>
-                      {event.status === 'confirmed' ? 'Confirmed' : 'Pending'}
-                    </span>
-                  </div>
-                  <div className="space-y-1.5">
-                    <div className="flex items-center gap-2 text-xs text-gray-600">
-                      <Clock size={12} className="text-gray-400" /> {event.time}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center gap-2 text-xs text-gray-600">
+                        <Users size={12} className="text-gray-400" /> {event.pax ?? '—'} guests
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2 text-xs text-gray-600">
-                      <MapPin size={12} className="text-gray-400" /> {event.venue}
-                    </div>
-                    <div className="flex items-center gap-2 text-xs text-gray-600">
-                      <Users size={12} className="text-gray-400" /> {event.pax} guests
-                    </div>
-                  </div>
-                </motion.div>
-              ))
+                  </motion.div>
+                )
+              })
             )}
           </div>
         </motion.div>
