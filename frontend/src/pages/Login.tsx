@@ -11,7 +11,7 @@ import { useAuthStore } from '@/store/authStore'
 import { getHomeForRole } from '@/routes/ProtectedRoute'
 
 const loginSchema = z.object({
-  email: z.string().email('Invalid email address'),
+  username: z.string().min(1, 'Username is required'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
 })
 
@@ -93,28 +93,28 @@ export default function Login() {
           <h2 className="mb-6 text-lg font-bold text-gray-900">Sign In</h2>
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-            {/* Email */}
+            {/* Username */}
             <motion.div
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.3 }}
             >
               <label className="mb-1.5 block text-sm font-medium text-gray-700">
-                Email
+                Username
               </label>
               <input
-                {...register('email')}
-                type="email"
-                placeholder="admin@shaguncatering.com"
+                {...register('username')}
+                type="text"
+                placeholder="Enter username"
                 className="h-10 w-full rounded-lg border border-gray-200 px-3 text-sm transition-all duration-200 focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/20"
               />
-              {errors.email && (
+              {errors.username && (
                 <motion.p
                   initial={{ opacity: 0, y: -5 }}
                   animate={{ opacity: 1, y: 0 }}
                   className="mt-1 text-xs text-red-500"
                 >
-                  {errors.email.message}
+                  {errors.username.message}
                 </motion.p>
               )}
             </motion.div>

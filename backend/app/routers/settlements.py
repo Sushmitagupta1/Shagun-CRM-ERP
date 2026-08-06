@@ -19,7 +19,7 @@ router = APIRouter(prefix="/api/settlements", tags=["settlements"])
 
 @router.get("", response_model=PaginatedResponse[SettlementResponse])
 async def list_settlements(page: int = Query(1, ge=1), per_page: int = Query(20, ge=1, le=100), status: str | None = None, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_role("admin"))):
-    query = select(Settlement)
+    query = select(Settlement, Inquiry.client_name).join(Inquiry, Settlement.inquiry_id == Inquiry.id)
     count_query = select(func.count(Settlement.id))
     if status:
         query = query.where(Settlement.status == status)
@@ -28,9 +28,14 @@ async def list_settlements(page: int = Query(1, ge=1), per_page: int = Query(20,
     total = total_result.scalar()
     query = query.order_by(Settlement.created_at.desc()).offset((page - 1) * per_page).limit(per_page)
     result = await db.execute(query)
-    settlements = result.scalars().all()
+    rows = result.all()
+    items = []
+    for s, client_name in rows:
+        resp = SettlementResponse.model_validate(s)
+        resp.client_name = client_name
+        items.append(resp)
     return PaginatedResponse(
-        items=[SettlementResponse.model_validate(s) for s in settlements],
+        items=items,
         total=total, page=page, per_page=per_page,
         total_pages=math.ceil(total / per_page) if total > 0 else 0,
     )

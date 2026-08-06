@@ -204,6 +204,9 @@ export default function FinancePage() {
             <thead>
               <tr className="border-b border-gray-200 bg-gray-50">
                 <th className="px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                  Client Name
+                </th>
+                <th className="px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
                   Settlement ID
                 </th>
                 <th className="px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
@@ -229,13 +232,13 @@ export default function FinancePage() {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={7} className="px-5 py-8 text-center">
+                  <td colSpan={8} className="px-5 py-8 text-center">
                     <div className="mx-auto h-6 w-6 animate-spin rounded-full border-4 border-gold border-t-transparent" />
                   </td>
                 </tr>
               ) : settlements?.items?.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-5 py-8 text-center text-gray-400">
+                  <td colSpan={8} className="px-5 py-8 text-center text-gray-400">
                     No settlements yet
                   </td>
                 </tr>
@@ -245,6 +248,9 @@ export default function FinancePage() {
                     key={s.id}
                     className="border-b border-gray-100 transition-colors hover:bg-gray-50"
                   >
+                    <td className="px-5 py-3.5 text-sm font-semibold text-gray-900">
+                      {s.client_name ?? '—'}
+                    </td>
                     <td className="px-5 py-3.5 font-mono text-sm text-gray-600">
                       {s.id.slice(0, 8)}...
                     </td>

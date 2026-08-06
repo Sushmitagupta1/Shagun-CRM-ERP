@@ -3,6 +3,7 @@ export type SettlementStatus = 'pending' | 'completed'
 export interface Settlement {
   id: string
   inquiry_id: string
+  client_name?: string
   revenue: number
   vendor_cost: number
   other_expenses: number

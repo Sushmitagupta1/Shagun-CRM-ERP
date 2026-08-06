@@ -20,6 +20,7 @@ import {
   Trash2,
   ChefHat,
   Presentation,
+  PhoneCall,
   Truck,
   Package,
   BarChart3,
@@ -33,6 +34,7 @@ import {
   Save,
   Edit3,
   Download,
+  Play,
 } from 'lucide-react'
 
 const PROGRESS_STEPS = [
@@ -227,6 +229,10 @@ export default function InquiryDetail() {
   const [showIngredientUpload, setShowIngredientUpload] = useState(false)
   const [viewMenu, setViewMenu] = useState(false)
 
+  const callRecordingFile = inquiry?.call_recording_file_name || null
+  const [showCallRecordingUpload, setShowCallRecordingUpload] = useState(false)
+  const [callRecordingUrl, setCallRecordingUrl] = useState<string | null>(null)
+
   const [ingredients, setIngredients] = useState<IngredientRow[]>([])
   const [newIngredient, setNewIngredient] = useState<IngredientRow>({ item: '', qty: '', unit: 'kg', priority: 'Medium' })
 
@@ -361,6 +367,34 @@ export default function InquiryDetail() {
     }
   }
 
+  const handleCallRecordingUpload = async (file?: File) => {
+    if (!file) return
+    try {
+      await uploadInquiryFile(id!, 'call_recording', file)
+      refetch()
+      setCallRecordingUrl(null)
+      toast.success('Call recording uploaded')
+      setShowCallRecordingUpload(false)
+    } catch (err) {
+      const message =
+        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Upload failed'
+      toast.error(message)
+    }
+  }
+
+  const handleCallRecordingPlay = async () => {
+    if (!callRecordingFile) return
+    try {
+      const res = await fetch(`/api/inquiries/${id}/file/call_recording`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+      if (!res.ok) throw new Error()
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      setCallRecordingUrl((prev) => { if (prev) URL.revokeObjectURL(prev); return url })
+    } catch { toast.error('Failed to load call recording') }
+  }
+
   const stage2Fields = [
     { label: 'Per Plate Rate', value: inquiry.per_plate_rate ? formatCurrency(Number(inquiry.per_plate_rate)) : '—', key: 'per_plate_rate' as const, type: 'number' },
     { label: 'Add-ons', value: inquiry.add_on ? formatCurrency(Number(inquiry.add_on)) : '—', key: 'add_on' as const, type: 'number' },
@@ -430,6 +464,7 @@ export default function InquiryDetail() {
               { label: 'Phone', value: inquiry.client_phone },
               { label: 'Event Type', value: inquiry.event_type },
               { label: 'Event Date', value: formatDate(inquiry.event_date) },
+              { label: 'Venue', value: inquiry.venue || '—' },
               { label: 'Pax', value: inquiry.pax ?? '—' },
               { label: 'Inquiry Date', value: formatDate(inquiry.inquiry_date) },
               { label: 'Created', value: formatDate(inquiry.created_at) },
@@ -1039,6 +1074,63 @@ export default function InquiryDetail() {
               </div>
             )}
           </div>
+        </WorkflowSection>
+      )}
+
+      {/* === CALL RECORDING SECTION === */}
+      {!isKitchen && (callRecordingFile || isAdmin || isSalesHead || isPresentationExec) && (
+        <WorkflowSection icon={PhoneCall} iconColor="text-emerald-600" title="Call Recording"
+          visibleRoles={['admin', 'sales_head', 'presentation_exec']} role={role}>
+          <div className="flex items-center justify-between">
+            <div>
+              {callRecordingFile ? (
+                <div className="flex items-center gap-2">
+                  <PhoneCall size={14} className="text-emerald-500" />
+                  <span className="text-sm font-medium text-gray-900">{callRecordingFile}</span>
+                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Uploaded</span>
+                </div>
+              ) : (
+                <p className="text-sm text-gray-400">No call recording uploaded yet</p>
+              )}
+            </div>
+            <div className="flex gap-2">
+              {(isAdmin || isSalesHead || isPresentationExec) && (
+                <button onClick={() => setShowCallRecordingUpload(!showCallRecordingUpload)}
+                  className="flex h-8 items-center gap-1.5 rounded-lg bg-maroon px-3 text-xs font-bold text-white hover:bg-maroon-dark">
+                  <Upload size={14} /> Upload Recording
+                </button>
+              )}
+              <button onClick={handleCallRecordingPlay} disabled={!callRecordingFile}
+                className="flex h-8 items-center gap-1.5 rounded-lg border border-gray-200 px-3 text-xs font-medium hover:bg-gray-50 disabled:opacity-50">
+                <Play size={14} /> Play
+              </button>
+              <button onClick={() => downloadInquiryFile(id!, 'call_recording', callRecordingFile)} disabled={!callRecordingFile}
+                className="flex h-8 items-center gap-1.5 rounded-lg border border-gray-200 px-3 text-xs font-medium hover:bg-gray-50 disabled:opacity-50">
+                <Download size={14} /> Download
+              </button>
+            </div>
+          </div>
+          <AnimatePresence>
+            {showCallRecordingUpload && (
+              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+                className="mt-3 overflow-hidden rounded-lg border border-gray-200 bg-gray-50 p-4">
+                <p className="mb-2 text-xs font-medium text-gray-600">Upload call recording (MP3/WAV/M4A/OGG/AAC, max 100MB)</p>
+                <label className="flex h-9 w-fit cursor-pointer items-center gap-2 rounded-lg border-2 border-dashed border-gray-300 px-4 text-xs font-medium text-gray-600 hover:border-maroon hover:text-maroon">
+                  <Upload size={14} /> Choose file
+                  <input type="file" className="hidden" accept=".mp3,.wav,.m4a,.ogg,.aac,.amr,audio/*"
+                    onChange={(e) => {
+                      handleCallRecordingUpload(e.target.files?.[0])
+                      e.target.value = ''
+                    }} />
+                </label>
+              </motion.div>
+            )}
+          </AnimatePresence>
+          {callRecordingUrl && (
+            <div className="mt-3">
+              <audio controls src={callRecordingUrl} className="w-full" />
+            </div>
+          )}
         </WorkflowSection>
       )}
 

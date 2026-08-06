@@ -18,7 +18,7 @@ async def test_health(client):
 
 async def test_login_success(client):
     response = await client.post("/api/auth/login", json={
-        "email": "admin@shaguncatering.com",
+        "username": "admin@shaguncatering.com",
         "password": "admin123",
     })
     assert response.status_code == 200
@@ -27,9 +27,18 @@ async def test_login_success(client):
     assert data["token_type"] == "bearer"
 
 
+async def test_login_with_username(client):
+    response = await client.post("/api/auth/login", json={
+        "username": "admin",
+        "password": "admin123",
+    })
+    assert response.status_code == 200
+    assert "access_token" in response.json()
+
+
 async def test_login_wrong_password(client):
     response = await client.post("/api/auth/login", json={
-        "email": "admin@shaguncatering.com",
+        "username": "admin@shaguncatering.com",
         "password": "wrongpassword",
     })
     assert response.status_code == 401
@@ -37,7 +46,7 @@ async def test_login_wrong_password(client):
 
 async def test_login_nonexistent_user(client):
     response = await client.post("/api/auth/login", json={
-        "email": "nobody@example.com",
+        "username": "nobody@example.com",
         "password": "test123",
     })
     assert response.status_code == 401
@@ -45,7 +54,7 @@ async def test_login_nonexistent_user(client):
 
 async def test_me_with_valid_token(client):
     login_resp = await client.post("/api/auth/login", json={
-        "email": "admin@shaguncatering.com",
+        "username": "admin@shaguncatering.com",
         "password": "admin123",
     })
     token = login_resp.json()["access_token"]
@@ -58,3 +67,21 @@ async def test_me_with_valid_token(client):
 async def test_me_without_token(client):
     response = await client.get("/api/auth/me")
     assert response.status_code == 403
+
+
+async def test_refresh_with_cookie(client):
+    login_resp = await client.post("/api/auth/login", json={
+        "username": "admin@shaguncatering.com",
+        "password": "admin123",
+    })
+    assert login_resp.status_code == 200
+    refresh_resp = await client.post("/api/auth/refresh")
+    assert refresh_resp.status_code == 200
+    data = refresh_resp.json()
+    assert "access_token" in data
+    assert data["token_type"] == "bearer"
+
+
+async def test_refresh_without_cookie(client):
+    refresh_resp = await client.post("/api/auth/refresh")
+    assert refresh_resp.status_code == 401

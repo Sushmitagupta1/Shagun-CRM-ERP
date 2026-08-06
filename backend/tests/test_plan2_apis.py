@@ -13,7 +13,7 @@ async def client():
 
 async def login(client: AsyncClient) -> str:
     resp = await client.post("/api/auth/login", json={
-        "email": "admin@shaguncatering.com",
+        "username": "admin@shaguncatering.com",
         "password": "admin123",
     })
     assert resp.status_code == 200, f"Login failed: {resp.status_code} {resp.text}"
@@ -61,7 +61,7 @@ async def test_create_and_list_inquiry(client):
     assert create_resp.status_code == 201
     data = create_resp.json()
     assert data["client_name"] == "Rajesh Kumar"
-    assert data["status"] == "new"
+    assert data["status"] == "new_inquiry"
     assert data["payment_status"] == "unpaid"
 
     list_resp = await client.get("/api/inquiries", headers=auth(token))
@@ -77,10 +77,10 @@ async def test_update_inquiry_status(client):
         "event_type": "Birthday",
     })
     inquiry_id = create_resp.json()["id"]
-    resp = await client.patch(f"/api/inquiries/{inquiry_id}/status", headers=auth(token), params={"new_status": "follow_up"})
+    resp = await client.patch(f"/api/inquiries/{inquiry_id}/status", headers=auth(token), params={"new_status": "followup"})
     assert resp.status_code == 200
     get_resp = await client.get(f"/api/inquiries/{inquiry_id}", headers=auth(token))
-    assert get_resp.json()["status"] == "follow_up"
+    assert get_resp.json()["status"] == "followup"
 
 
 async def test_invalid_status_transition(client):

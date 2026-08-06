@@ -7,8 +7,9 @@ import { Loader2, ArrowRight, CheckCircle2, ChevronLeft } from 'lucide-react'
 
 const stage1Schema = z.object({
   client_name: z.string().min(1, 'Client name is required'),
-  client_phone: z.string().min(10, 'Phone must be at least 10 digits'),
+  client_phone: z.string().min(10, 'Phone must be at least 10 digits').or(z.literal('')).optional(),
   event_type: z.string().min(1, 'Event type is required'),
+  venue: z.string().optional(),
   inquiry_date: z.string().optional(),
   event_date: z.string().optional(),
   pax: z.number().min(1).optional(),
@@ -95,8 +96,9 @@ export function InquiryForm({ onStage1Submit, onStage2Submit }: InquiryFormProps
           </div>
           <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-gray-600">
             <p><span className="font-medium text-gray-900">Client:</span> {stage1Data.client_name}</p>
-            <p><span className="font-medium text-gray-900">Phone:</span> {stage1Data.client_phone}</p>
+            <p><span className="font-medium text-gray-900">Phone:</span> {stage1Data.client_phone || '—'}</p>
             <p><span className="font-medium text-gray-900">Event:</span> {stage1Data.event_type}</p>
+            <p><span className="font-medium text-gray-900">Venue:</span> {stage1Data.venue || '—'}</p>
             <p><span className="font-medium text-gray-900">Pax:</span> {stage1Data.pax || '—'}</p>
             <p><span className="font-medium text-gray-900">Date:</span> {stage1Data.event_date || '—'}</p>
           </div>
@@ -160,7 +162,7 @@ export function InquiryForm({ onStage1Submit, onStage2Submit }: InquiryFormProps
         {errors1.client_name && <p className="mt-1 text-xs text-red-500">{errors1.client_name.message}</p>}
       </div>
       <div>
-        <label className="mb-1 block text-sm font-medium text-gray-700">Phone *</label>
+        <label className="mb-1 block text-sm font-medium text-gray-700">Phone</label>
         <input {...stage1Form.register('client_phone')}
           className="h-10 w-full rounded-lg border border-gray-200 px-3 text-sm" />
         {errors1.client_phone && <p className="mt-1 text-xs text-red-500">{errors1.client_phone.message}</p>}
@@ -173,6 +175,11 @@ export function InquiryForm({ onStage1Submit, onStage2Submit }: InquiryFormProps
           {EVENT_TYPES.map((t) => <option key={t} value={t} />)}
         </datalist>
         {errors1.event_type && <p className="mt-1 text-xs text-red-500">{errors1.event_type.message}</p>}
+      </div>
+      <div>
+        <label className="mb-1 block text-sm font-medium text-gray-700">Venue</label>
+        <input {...stage1Form.register('venue')} placeholder="e.g. The Grand Palace, Delhi"
+          className="h-10 w-full rounded-lg border border-gray-200 px-3 text-sm" />
       </div>
       <div>
         <label className="mb-1 block text-sm font-medium text-gray-700">Inquiry Date</label>

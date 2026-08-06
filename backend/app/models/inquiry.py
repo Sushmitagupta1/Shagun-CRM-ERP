@@ -28,7 +28,7 @@ class Inquiry(UUIDMixin, TimestampMixin, Base):
     __tablename__ = "inquiries"
 
     client_name: Mapped[str] = mapped_column(String(200), nullable=False)
-    client_phone: Mapped[str] = mapped_column(String(20), nullable=False)
+    client_phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
     event_type: Mapped[str] = mapped_column(String(100), nullable=False)
     event_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     inquiry_date: Mapped[date | None] = mapped_column(Date, nullable=True)
@@ -76,6 +76,9 @@ class Inquiry(UUIDMixin, TimestampMixin, Base):
     remaining_payment_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     birthday_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     anniversary_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    venue: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    call_recording_file_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    call_recording_file_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
 
 
 class FollowUp(UUIDMixin, TimestampMixin, Base):

@@ -95,7 +95,7 @@ export async function exportSingleInquiryExcel(id: string): Promise<void> {
   window.URL.revokeObjectURL(url)
 }
 
-export type InquiryFileType = 'menu' | 'presentation' | 'ingredient' | 'inventory' | 'returned' | 'transferred' | 'wastage'
+export type InquiryFileType = 'menu' | 'presentation' | 'ingredient' | 'inventory' | 'returned' | 'transferred' | 'wastage' | 'call_recording'
 
 export async function uploadInquiryFile(
   id: string,

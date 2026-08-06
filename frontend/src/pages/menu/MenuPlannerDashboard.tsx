@@ -16,7 +16,6 @@ import { INQUIRY_STATUSES } from '@/lib/constants'
 import {
   Sparkles,
   Clock,
-  Plus,
   FileText,
   Utensils,
   X,
@@ -73,12 +72,6 @@ export default function MenuPlannerDashboard() {
     <div className="space-y-5">
       <div className="flex items-center justify-between">
         <PageHeader title={`Hi, ${firstName}`} subtitle="Create menus, estimate costs, and manage AI-powered suggestions" />
-        <div className="flex gap-2">
-          <button onClick={() => setShowCreate(true)}
-            className="flex items-center gap-2 rounded-xl bg-gold px-4 py-2.5 text-sm font-bold text-white shadow-md transition-all hover:bg-gold-hover hover:shadow-lg">
-            <Plus size={16} /> New Inquiry
-          </button>
-        </div>
       </div>
 
       {/* Top — 4 KPI Cards */}
@@ -135,7 +128,7 @@ export default function MenuPlannerDashboard() {
       {/* Bottom Row — Menus to Prepare */}
       <div className="grid gap-4 lg:grid-cols-3">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.4 }}
-          className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-md lg:col-span-2">
+          className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-md lg:col-span-3">
           <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3">
             <h3 className="text-sm font-bold text-gray-900">Menus to Prepare</h3>
             <span className="text-[10px] text-gray-400">{assignedInquiries.length} pending</span>
@@ -174,31 +167,6 @@ export default function MenuPlannerDashboard() {
                 ))}
               </tbody>
             </table>
-          </div>
-        </motion.div>
-
-        {/* Quick Links — Templates & Library */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.5 }}
-          className="space-y-3">
-          <div onClick={() => navigate('/menu-library')}
-            className="flex cursor-pointer items-center gap-4 rounded-xl border border-gray-100 bg-white p-5 shadow-md transition-all hover:shadow-lg">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-emerald-50">
-              <Utensils size={22} className="text-emerald-500" />
-            </div>
-            <div>
-              <p className="text-sm font-bold text-gray-900">Menu Library</p>
-              <p className="text-[11px] text-gray-400">{templatesData?.length ?? 0} templates ready</p>
-            </div>
-          </div>
-          <div onClick={() => navigate('/inquiries')}
-            className="flex cursor-pointer items-center gap-4 rounded-xl border border-gray-100 bg-white p-5 shadow-md transition-all hover:shadow-lg">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-50">
-              <FileText size={22} className="text-blue-500" />
-            </div>
-            <div>
-              <p className="text-sm font-bold text-gray-900">All Inquiries</p>
-              <p className="text-[11px] text-gray-400">View and manage inquiries</p>
-            </div>
           </div>
         </motion.div>
       </div>

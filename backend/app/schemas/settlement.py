@@ -21,6 +21,7 @@ class SettlementUpdate(BaseModel):
 class SettlementResponse(BaseModel):
     id: uuid.UUID
     inquiry_id: uuid.UUID
+    client_name: str | None = None
     revenue: Decimal
     vendor_cost: Decimal
     other_expenses: Decimal

@@ -6,15 +6,14 @@ import { useInquiries } from '@/hooks/useInquiries'
 import KPICard from '@/components/common/KPICard'
 import PageHeader from '@/components/common/PageHeader'
 import StatusPill from '@/components/common/StatusPill'
-import { InquiryTrend } from '@/components/charts/InquiryTrend'
 import { ConversionRate } from '@/components/charts/ConversionRate'
 import { RevenueChart } from '@/components/charts/RevenueChart'
 import { KPICardSkeleton } from '@/components/common/Skeleton'
 import { formatCurrency } from '@/lib/utils'
 import { INQUIRY_STATUSES } from '@/lib/constants'
 import { useAuth } from '@/hooks/useAuth'
-import { generateReport, generateInsights, chatMessage } from '@/lib/gemini'
-import { Loader2, FileText, Brain, Send, MessageSquare, X, Bot, User, Sparkles } from 'lucide-react'
+import { generateReport, chatMessage } from '@/lib/gemini'
+import { Loader2, FileText, Send, MessageSquare, X, Bot, User, Sparkles } from 'lucide-react'
 
 export default function AdminDashboard() {
   const navigate = useNavigate()
@@ -53,11 +52,6 @@ export default function AdminDashboard() {
     setIsTyping(false)
   }
 
-  // AI Insights
-  const [insightContext, setInsightContext] = useState('Business performance and growth opportunities')
-  const [insightResult, setInsightResult] = useState('')
-  const [insightLoading, setInsightLoading] = useState(false)
-
   const handleGenerateReport = async () => {
     setReportLoading(true)
     setReportResult('')
@@ -65,15 +59,6 @@ export default function AdminDashboard() {
     const res = await generateReport({ type: reportType, data, period: 'this month' })
     setReportResult(res.error ?? res.text)
     setReportLoading(false)
-  }
-
-  const handleGenerateInsights = async () => {
-    setInsightLoading(true)
-    setInsightResult('')
-    const data = `Inquiries: ${kpis?.total_inquiries ?? 0}, Confirmed: ${kpis?.confirmed ?? 0}, Cancelled: ${kpis?.cancelled ?? 0}, Revenue: ${formatCurrency(kpis?.total_revenue ?? 0)}, Outstanding: ${formatCurrency(kpis?.outstanding_amount ?? 0)}, Kitchen Pending: ${kpis?.pending_kitchen_plans ?? 0}, Warehouse Pending: ${kpis?.pending_warehouse_requests ?? 0}`
-    const res = await generateInsights({ context: insightContext, data })
-    setInsightResult(res.error ?? res.text)
-    setInsightLoading(false)
   }
 
   const fmt = (t: string) => t.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br />')
@@ -119,9 +104,8 @@ export default function AdminDashboard() {
       </div>
 
       {/* Charts Row */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {[
-          { title: 'Monthly Inquiry Trend', child: <InquiryTrend data={trend ?? []} /> },
           { title: 'Inquiry Distribution', child: <ConversionRate data={conversion ?? []} /> },
           { title: 'Inquiry Volume', child: <RevenueChart data={trend ?? []} /> },
         ].map((chart, i) => (
@@ -140,9 +124,8 @@ export default function AdminDashboard() {
         ))}
       </div>
 
-      {/* AI Reports + AI Insights */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {/* AI Reports */}
+      {/* AI Reports */}
+      <div className="grid grid-cols-1 gap-4">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.5 }}
           className="rounded-xl border border-gray-100 bg-white p-5 shadow-md">
           <h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-gray-900">
@@ -162,27 +145,6 @@ export default function AdminDashboard() {
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
               className="mt-3 max-h-[300px] overflow-y-auto rounded-lg border border-blue-200 bg-blue-50/50 p-4 text-xs leading-relaxed text-gray-700"
               dangerouslySetInnerHTML={{ __html: fmt(reportResult) }} />
-          )}
-        </motion.div>
-
-        {/* AI Insights */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.6 }}
-          className="rounded-xl border border-gray-100 bg-white p-5 shadow-md">
-          <h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-gray-900">
-            <Brain size={16} className="text-maroon" /> AI Insights
-          </h3>
-          <div className="flex gap-2">
-            <input type="text" value={insightContext} onChange={(e) => setInsightContext(e.target.value)} placeholder="What do you want insights on?"
-              className="h-9 flex-1 rounded-lg border border-gray-200 bg-white px-2.5 text-xs placeholder:text-gray-300 focus:border-gold focus:ring-1 focus:ring-gold focus:outline-none" />
-            <button onClick={handleGenerateInsights} disabled={insightLoading}
-              className="flex h-9 items-center gap-1.5 rounded-lg bg-maroon px-4 text-xs font-bold text-white shadow hover:bg-maroon-dark disabled:opacity-50">
-              {insightLoading ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />} Analyze
-            </button>
-          </div>
-          {insightResult && (
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-              className="mt-3 max-h-[300px] overflow-y-auto rounded-lg border border-purple-200 bg-purple-50/50 p-4 text-xs leading-relaxed text-gray-700"
-              dangerouslySetInnerHTML={{ __html: fmt(insightResult) }} />
           )}
         </motion.div>
       </div>

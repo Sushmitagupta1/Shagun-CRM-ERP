@@ -58,10 +58,14 @@ async def create_user(data: UserCreate, db: AsyncSession = Depends(get_db), curr
     existing = await db.execute(select(User).where(User.email == data.email))
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Email already registered")
+    username = (data.username or data.email.split("@")[0]).strip()
+    existing_username = await db.execute(select(User).where(User.username == username))
+    if existing_username.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="Username already taken")
     role_result = await db.execute(select(Role).where(Role.id == data.role_id))
     if role_result.scalar_one_or_none() is None:
         raise HTTPException(status_code=400, detail="Invalid role")
-    user = User(id=uuid.uuid4(), email=data.email, password_hash=hash_password(data.password), full_name=data.full_name, role_id=data.role_id, is_active=True)
+    user = User(id=uuid.uuid4(), email=data.email, username=username, password_hash=hash_password(data.password), full_name=data.full_name, role_id=data.role_id, is_active=True)
     db.add(user)
     await db.flush()
     await db.refresh(user, ["role"])
@@ -74,7 +78,20 @@ async def update_user(user_id: uuid.UUID, data: UserUpdate, db: AsyncSession = D
     user = result.scalar_one_or_none()
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
-    for field, value in data.model_dump(exclude_unset=True).items():
+    payload = data.model_dump(exclude_unset=True)
+    if "username" in payload:
+        username = (payload["username"] or "").strip()
+        if not username:
+            raise HTTPException(status_code=400, detail="Username cannot be empty")
+        existing_username = await db.execute(select(User).where(User.username == username, User.id != user_id))
+        if existing_username.scalar_one_or_none():
+            raise HTTPException(status_code=400, detail="Username already taken")
+        payload["username"] = username
+    if "password" in payload:
+        password = payload.pop("password")
+        if password:
+            payload["password_hash"] = hash_password(password)
+    for field, value in payload.items():
         setattr(user, field, value)
     await db.flush()
     await db.refresh(user, ["role"])

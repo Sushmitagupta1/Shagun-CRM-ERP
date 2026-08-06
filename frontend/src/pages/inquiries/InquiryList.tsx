@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useInquiries } from '@/hooks/useInquiries'
 import { useAuth } from '@/hooks/useAuth'
-import { createInquiry, updateInquiry, updateInquiryStatus, exportInquiriesExcel } from '@/api/inquiries'
+import { createInquiry, updateInquiry, exportInquiriesExcel } from '@/api/inquiries'
 import PageHeader from '@/components/common/PageHeader'
 import StatusPill from '@/components/common/StatusPill'
 import { InquiryForm } from './InquiryForm'
@@ -11,7 +11,7 @@ import { INQUIRY_STATUSES, PAYMENT_STATUSES, EVENT_TYPES } from '@/lib/constants
 import { useDebounce } from '@/hooks/useDebounce'
 import { toast } from 'sonner'
 import { formatCurrency } from '@/lib/utils'
-import { Plus, Search, ChevronLeft, ChevronRight, FileSpreadsheet, FileText, Eye, Loader2, X } from 'lucide-react'
+import { Plus, Search, ChevronLeft, ChevronRight, FileSpreadsheet, FileText, Eye, X } from 'lucide-react'
 
 export default function InquiryList() {
   const navigate = useNavigate()
@@ -19,11 +19,7 @@ export default function InquiryList() {
   const queryClient = useQueryClient()
   const { user } = useAuth()
   const role = user?.role.name ?? ''
-  const isAdmin = role === 'admin'
-  const isSalesHead = role === 'sales_head'
-  const isPresentationExec = role === 'presentation_exec'
-  const canUpdateStatus = isAdmin || isSalesHead || isPresentationExec
-  const canSeeMenuSent = canUpdateStatus
+  const isMenuPlanner = role === 'menu_planner'
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') ?? '')
@@ -77,20 +73,6 @@ export default function InquiryList() {
     },
   })
 
-  const statusMutation = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: string }) => updateInquiryStatus(id, status),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['inquiries'] })
-      toast.success('Status updated')
-    },
-    onError: (err: unknown) => {
-      const message =
-        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
-        'Status update failed'
-      toast.error(message)
-    },
-  })
-
   const handleExportExcel = useCallback(async () => {
     setExporting(true)
     try {
@@ -117,7 +99,7 @@ export default function InquiryList() {
     const rows = data.items.map((i) => `
       <tr>
         <td>${i.client_name}</td>
-        <td>${i.client_phone}</td>
+        <td>${i.client_phone || '—'}</td>
         <td>${i.event_type}</td>
         <td>${i.pax ?? '—'}</td>
         <td>${i.per_plate_rate ? formatCurrency(Number(i.per_plate_rate)) : '—'}</td>
@@ -143,12 +125,14 @@ export default function InquiryList() {
       <PageHeader
         title="Inquiries"
         action={
-          <button
-            onClick={() => setShowCreate(!showCreate)}
-            className="flex h-9 items-center gap-2 rounded-lg bg-gold px-4 text-sm font-medium text-white shadow transition-colors hover:bg-gold-hover"
-          >
-            <Plus className="h-4 w-4" /> New Inquiry
-          </button>
+          !isMenuPlanner && (
+            <button
+              onClick={() => setShowCreate(!showCreate)}
+              className="flex h-9 items-center gap-2 rounded-lg bg-gold px-4 text-sm font-medium text-white shadow transition-colors hover:bg-gold-hover"
+            >
+              <Plus className="h-4 w-4" /> New Inquiry
+            </button>
+          )
         }
       />
 
@@ -376,61 +360,6 @@ export default function InquiryList() {
                           className="flex h-7 items-center gap-1 rounded-lg border border-gray-200 px-2 text-[10px] font-medium text-gray-600 hover:bg-gray-50">
                           <Eye size={12} /> View
                         </button>
-                        <div className="relative group">
-                          <button className="flex h-7 items-center gap-1 rounded-lg border border-gray-200 px-2 text-[10px] font-medium text-gray-600 hover:bg-gray-50">
-                            Update
-                          </button>
-                          <div className="absolute right-0 top-full z-10 mt-1 hidden w-40 rounded-lg border border-gray-200 bg-white shadow-lg group-hover:block">
-                            {canUpdateStatus && (
-                            <div className="py-1">
-                              {inquiry.status === 'new_inquiry' && (
-                                <button onClick={() => statusMutation.mutate({ id: inquiry.id, status: 'followup' })}
-                                  disabled={statusMutation.isPending}
-                                  className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50">
-                                  {statusMutation.isPending ? <Loader2 size={10} className="animate-spin" /> : null} Follow-up
-                                </button>
-                              )}
-                              {inquiry.status === 'followup' && (
-                                <>
-                                  {canSeeMenuSent && (
-                                    <button onClick={() => statusMutation.mutate({ id: inquiry.id, status: 'menu_sent' })}
-                                      disabled={statusMutation.isPending}
-                                      className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50">
-                                      Menu Sent
-                                    </button>
-                                  )}
-                                  <button onClick={() => statusMutation.mutate({ id: inquiry.id, status: 'new_inquiry' })}
-                                    disabled={statusMutation.isPending}
-                                    className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-red-600 hover:bg-red-50">
-                                    Cancel
-                                  </button>
-                                </>
-                              )}
-                              {inquiry.status === 'menu_sent' && (
-                                <button onClick={() => statusMutation.mutate({ id: inquiry.id, status: 'client_confirmation' })}
-                                  disabled={statusMutation.isPending}
-                                  className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50">
-                                  Client Confirmation
-                                </button>
-                              )}
-                              {inquiry.status === 'client_confirmation' && (
-                                <button onClick={() => statusMutation.mutate({ id: inquiry.id, status: 'advance_receive' })}
-                                  disabled={statusMutation.isPending}
-                                  className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50">
-                                  Advance Received
-                                </button>
-                              )}
-                              {inquiry.status === 'advance_receive' && (
-                                <button onClick={() => statusMutation.mutate({ id: inquiry.id, status: 'operation_handover' })}
-                                  disabled={statusMutation.isPending}
-                                  className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50">
-                                  Operation Handover
-                                </button>
-                              )}
-                            </div>
-                            )}
-                          </div>
-                        </div>
                       </div>
                     </td>
                   </tr>

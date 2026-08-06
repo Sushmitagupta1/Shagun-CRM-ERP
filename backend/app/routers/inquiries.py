@@ -274,6 +274,7 @@ ALLOWED_ROLES = {
     "returned": {"admin", "operations_manager", "warehouse"},
     "transferred": {"admin", "operations_manager", "warehouse"},
     "wastage": {"admin", "operations_manager", "warehouse"},
+    "call_recording": {"admin", "sales_head", "presentation_exec"},
 }
 
 FILE_TYPES = tuple(ALLOWED_ROLES.keys())
@@ -304,8 +305,9 @@ async def upload_inquiry_file(
     if ext not in settings.ALLOWED_EXTENSIONS:
         raise HTTPException(status_code=400, detail=f"File type '{ext}' not allowed")
     content = await file.read()
-    if len(content) > settings.MAX_UPLOAD_SIZE:
-        raise HTTPException(status_code=400, detail="File too large (max 20MB)")
+    max_size = settings.MAX_CALL_RECORDING_SIZE if file_type == "call_recording" else settings.MAX_UPLOAD_SIZE
+    if len(content) > max_size:
+        raise HTTPException(status_code=400, detail=f"File too large (max {max_size // (1024 * 1024)}MB)")
 
     upload_dir = os.path.join(settings.UPLOAD_DIR, str(inquiry_id), file_type)
     os.makedirs(upload_dir, exist_ok=True)
@@ -518,7 +520,7 @@ async def create_inquiry(data: InquiryCreate, db: AsyncSession = Depends(get_db)
         id=uuid.uuid4(), client_name=data.client_name, client_phone=data.client_phone,
         event_type=data.event_type, event_date=data.event_date, pax=data.pax,
         per_plate_rate=data.per_plate_rate, add_on=data.add_on,
-        assigned_to=data.assigned_to, remarks=data.remarks,
+        assigned_to=data.assigned_to, remarks=data.remarks, venue=data.venue,
         created_by=current_user.id,
         status=InquiryStatus.FOLLOWUP if data.follow_up_date else InquiryStatus.NEW_INQUIRY,
         payment_status=PaymentStatus.UNPAID,
@@ -794,7 +796,10 @@ async def update_status(inquiry_id: uuid.UUID, new_status: str, db: AsyncSession
     if current_user.role.name not in ("admin", "sales_head", "presentation_exec"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only admin, sales head or presentation exec can update status")
     inquiry = await get_inquiry_or_404(db, inquiry_id)
-    target_status = InquiryStatus(new_status)
+    try:
+        target_status = InquiryStatus(new_status)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid status: {new_status}")
     inquiry.status = target_status
     await db.flush()
     return {"message": f"Status updated to {target_status.value}"}

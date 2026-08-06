@@ -13,6 +13,7 @@ class RoleResponse(BaseModel):
 class UserResponse(BaseModel):
     id: uuid.UUID
     email: str
+    username: str | None = None
     full_name: str
     role: RoleResponse
     is_active: bool
@@ -27,10 +28,13 @@ class UserCreate(BaseModel):
     password: str
     full_name: str
     role_id: uuid.UUID
+    username: str | None = None
 
 
 class UserUpdate(BaseModel):
     email: EmailStr | None = None
+    username: str | None = None
+    password: str | None = None
     full_name: str | None = None
     role_id: uuid.UUID | None = None
     is_active: bool | None = None

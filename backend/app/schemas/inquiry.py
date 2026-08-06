@@ -8,7 +8,7 @@ from app.models.inquiry import InquiryStatus, PaymentStatus
 
 class InquiryCreate(BaseModel):
     client_name: str
-    client_phone: str
+    client_phone: str | None = None
     event_type: str
     event_date: date | None = None
     inquiry_date: date | None = None
@@ -25,6 +25,7 @@ class InquiryCreate(BaseModel):
     remaining_payment_date: date | None = None
     birthday_date: date | None = None
     anniversary_date: date | None = None
+    venue: str | None = None
 
 
 class InquiryUpdate(BaseModel):
@@ -46,12 +47,13 @@ class InquiryUpdate(BaseModel):
     remaining_payment_date: date | None = None
     birthday_date: date | None = None
     anniversary_date: date | None = None
+    venue: str | None = None
 
 
 class InquiryResponse(BaseModel):
     id: uuid.UUID
     client_name: str
-    client_phone: str
+    client_phone: str | None = None
     event_type: str
     event_date: date | None
     inquiry_date: date | None
@@ -80,6 +82,8 @@ class InquiryResponse(BaseModel):
     remaining_payment_date: date | None = None
     birthday_date: date | None = None
     anniversary_date: date | None = None
+    venue: str | None = None
+    call_recording_file_name: str | None = None
     total_amount: float | None = None
     created_at: datetime
     updated_at: datetime

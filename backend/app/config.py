@@ -14,9 +14,11 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
     UPLOAD_DIR: str = "/app/uploads"
     MAX_UPLOAD_SIZE: int = 20 * 1024 * 1024  # 20 MB
+    MAX_CALL_RECORDING_SIZE: int = 100 * 1024 * 1024  # 100 MB
     ALLOWED_EXTENSIONS: list[str] = [
         ".pdf", ".docx", ".xlsx", ".pptx", ".ppt",
         ".jpg", ".jpeg", ".png", ".webp", ".txt", ".csv",
+        ".mp3", ".wav", ".m4a", ".ogg", ".aac", ".amr",
     ]
 
     @field_validator("DATABASE_URL", mode="after")

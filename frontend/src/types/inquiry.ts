@@ -12,7 +12,7 @@ export type PaymentStatus = 'unpaid' | 'partial' | 'paid'
 export interface Inquiry {
   id: string
   client_name: string
-  client_phone: string
+  client_phone: string | null
   event_type: string
   event_date: string | null
   inquiry_date: string | null
@@ -42,6 +42,8 @@ export interface Inquiry {
   remaining_payment_date: string | null
   birthday_date: string | null
   anniversary_date: string | null
+  venue: string | null
+  call_recording_file_name: string | null
   created_at: string
   updated_at: string
 }
@@ -70,7 +72,7 @@ export interface Meeting {
 
 export interface InquiryCreate {
   client_name: string
-  client_phone: string
+  client_phone?: string
   event_type: string
   event_date?: string
   inquiry_date?: string
@@ -88,6 +90,7 @@ export interface InquiryCreate {
   remaining_payment_date?: string
   birthday_date?: string
   anniversary_date?: string
+  venue?: string
 }
 
 export interface InquiryUpdate extends Partial<InquiryCreate> {}
