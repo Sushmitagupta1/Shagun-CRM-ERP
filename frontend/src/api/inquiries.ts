@@ -1,6 +1,7 @@
 import client from './client'
 import type { PaginatedResponse } from '@/types/common'
 import type { Inquiry, InquiryCreate, FollowUp, Meeting } from '@/types/inquiry'
+import type { InventoryMovement, InventoryMovementCreate } from '@/types/inventory'
 
 export async function getInquiries(params: {
   page?: number
@@ -13,6 +14,7 @@ export async function getInquiries(params: {
   date_to?: string
   event_date_from?: string
   event_date_to?: string
+  followup?: string
 }): Promise<PaginatedResponse<Inquiry>> {
   const response = await client.get('/inquiries', { params })
   return response.data
@@ -35,6 +37,10 @@ export async function updateInquiry(id: string, data: Partial<InquiryCreate>): P
 
 export async function updateInquiryStatus(id: string, status: string): Promise<void> {
   await client.patch(`/inquiries/${id}/status?new_status=${status}`)
+}
+
+export async function setPresentationNotRequired(id: string, notRequired: boolean): Promise<void> {
+  await client.patch(`/inquiries/${id}/presentation-not-required?not_required=${notRequired}`)
 }
 
 export async function updatePayment(id: string, paymentStatus: string, advanceAmount?: number): Promise<void> {
@@ -72,6 +78,11 @@ export async function addFollowUp(id: string, data: { follow_up_date: string; re
   return response.data
 }
 
+export async function updateFollowUpDone(id: string, followUpId: string, data: { is_done: boolean; remarks?: string }): Promise<FollowUp> {
+  const response = await client.patch(`/inquiries/${id}/follow-ups/${followUpId}`, data)
+  return response.data
+}
+
 export async function exportSingleInquiryExcel(id: string): Promise<void> {
   const response = await client.get(`/inquiries/${id}/export/excel`, { responseType: 'blob' })
   const url = window.URL.createObjectURL(new Blob([response.data]))
@@ -84,9 +95,11 @@ export async function exportSingleInquiryExcel(id: string): Promise<void> {
   window.URL.revokeObjectURL(url)
 }
 
+export type InquiryFileType = 'menu' | 'presentation' | 'ingredient' | 'inventory' | 'returned' | 'transferred' | 'wastage'
+
 export async function uploadInquiryFile(
   id: string,
-  fileType: 'menu' | 'presentation',
+  fileType: InquiryFileType,
   file: File
 ): Promise<{ file_name: string; file_path: string }> {
   const formData = new FormData()
@@ -95,7 +108,7 @@ export async function uploadInquiryFile(
   return response.data
 }
 
-export async function downloadInquiryFile(id: string, fileType: 'menu' | 'presentation', fileName?: string | null): Promise<void> {
+export async function downloadInquiryFile(id: string, fileType: InquiryFileType, fileName?: string | null): Promise<void> {
   const response = await client.get(`/inquiries/${id}/file/${fileType}`, { responseType: 'blob' })
   const url = window.URL.createObjectURL(new Blob([response.data]))
   const link = document.createElement('a')
@@ -107,8 +120,53 @@ export async function downloadInquiryFile(id: string, fileType: 'menu' | 'presen
   window.URL.revokeObjectURL(url)
 }
 
+export async function viewInquiryFile(id: string, fileType: InquiryFileType): Promise<void> {
+  const response = await client.get(`/inquiries/${id}/file/${fileType}`, { responseType: 'blob' })
+  const url = window.URL.createObjectURL(new Blob([response.data]))
+  window.open(url, '_blank')
+}
+
+export async function previewInquiryFile(
+  id: string,
+  fileType: InquiryFileType
+): Promise<{ file_name: string; rows: (string | number)[][] }> {
+  const response = await client.get(`/inquiries/${id}/file/${fileType}/preview`)
+  return response.data
+}
+
 export async function getMeetings(id: string): Promise<Meeting[]> {
   const response = await client.get(`/inquiries/${id}/meetings`)
+  return response.data
+}
+
+export interface CalendarFollowUp {
+  id: string
+  inquiry_id: string
+  client_name: string
+  event_type: string
+  follow_up_date: string
+  remarks: string | null
+  is_done: boolean
+}
+
+export interface CalendarMeeting {
+  id: string
+  inquiry_id: string
+  client_name: string
+  event_type: string
+  meeting_at: string
+  remarks: string | null
+  status: string
+}
+
+export interface CalendarData {
+  events: Inquiry[]
+  followups: CalendarFollowUp[]
+  meetings: CalendarMeeting[]
+}
+
+export async function getCalendarData(fromDate: string, toDate: string): Promise<CalendarData> {
+  const response = await client.get('/inquiries/calendar', { params: { from_date: fromDate, to_date: toDate } })
   return response.data
 }
 
@@ -117,7 +175,32 @@ export async function addMeeting(id: string, data: { meeting_at: string; remarks
   return response.data
 }
 
-export async function updateMeetingStatus(id: string, meetingId: string, status: 'scheduled' | 'completed'): Promise<Meeting> {
-  const response = await client.patch(`/inquiries/${id}/meetings/${meetingId}`, { status })
+export async function updateMeetingStatus(id: string, meetingId: string, status: 'scheduled' | 'completed', remarks?: string): Promise<Meeting> {
+  const response = await client.patch(`/inquiries/${id}/meetings/${meetingId}`, { status, remarks })
+  return response.data
+}
+
+export async function getInventoryMovements(inquiryId: string): Promise<InventoryMovement[]> {
+  const response = await client.get(`/inquiries/${inquiryId}/inventory-movements`)
+  return response.data
+}
+
+export async function addInventoryMovement(inquiryId: string, data: InventoryMovementCreate): Promise<InventoryMovement> {
+  const response = await client.post(`/inquiries/${inquiryId}/inventory-movements`, data)
+  return response.data
+}
+
+export async function deleteInventoryMovement(inquiryId: string, movementId: string): Promise<void> {
+  await client.delete(`/inquiries/${inquiryId}/inventory-movements/${movementId}`)
+}
+
+export async function uploadInventoryMovementFile(
+  inquiryId: string,
+  movementType: 'received' | 'returned' | 'transferred' | 'wastage',
+  file: File
+): Promise<{ file_name: string; entries_created: number }> {
+  const formData = new FormData()
+  formData.append('file', file)
+  const response = await client.post(`/inquiries/${inquiryId}/inventory-upload?movement_type=${movementType}`, formData)
   return response.data
 }

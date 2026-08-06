@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useSalesKPIs, useSalesFunnel } from '@/hooks/useDashboard'
 import { useInquiries } from '@/hooks/useInquiries'
 import PageHeader from '@/components/common/PageHeader'
@@ -9,7 +10,9 @@ import { formatCurrency } from '@/lib/utils'
 import { INQUIRY_STATUSES } from '@/lib/constants'
 import { useAuth } from '@/hooks/useAuth'
 import { useNavigate } from 'react-router-dom'
-import { generateInsights, estimateCost, chatMessage } from '@/lib/gemini'
+import { chatMessage } from '@/lib/gemini'
+import { updateInquiry } from '@/api/inquiries'
+import { toast } from 'sonner'
 import {
   Calendar,
   Cake,
@@ -18,12 +21,8 @@ import {
   CheckCircle,
   Clock,
   TrendingUp,
-  Brain,
   Loader2,
   Send,
-  Calculator,
-  Users,
-  Utensils,
   MessageSquare,
   Sparkles,
   X,
@@ -31,40 +30,67 @@ import {
   User,
 } from 'lucide-react'
 
-const clientReminders = [
-  { id: '1', name: 'Priya Sharma', type: 'birthday', date: '2026-07-24', client: 'Priya & Rahul Sharma' },
-  { id: '2', name: 'Rahul Sharma', type: 'anniversary', date: '2026-07-24', client: 'Priya & Rahul Sharma' },
-  { id: '3', name: 'Mehta Family', type: 'birthday', date: '2026-07-26', client: 'Mehta Family' },
-  { id: '4', name: 'Gupta Ji', type: 'anniversary', date: '2026-07-28', client: 'Gupta Wedding' },
-]
+function getUpcomingReminders(inquiries: { id: string; client_name: string; birthday_date: string | null; anniversary_date: string | null }[]) {
+  const today = new Date()
+  const in15Days = new Date(today.getTime() + 15 * 24 * 60 * 60 * 1000)
+  const reminders: { id: string; name: string; type: string; date: string; client: string }[] = []
+  for (const i of inquiries) {
+    if (i.birthday_date) {
+      const d = new Date(i.birthday_date)
+      d.setFullYear(today.getFullYear())
+      if (d >= today && d <= in15Days) {
+        reminders.push({ id: `${i.id}-bday`, name: i.client_name, type: 'birthday', date: i.birthday_date, client: i.client_name })
+      }
+    }
+    if (i.anniversary_date) {
+      const d = new Date(i.anniversary_date)
+      d.setFullYear(today.getFullYear())
+      if (d >= today && d <= in15Days) {
+        reminders.push({ id: `${i.id}-anniv`, name: i.client_name, type: 'anniversary', date: i.anniversary_date, client: i.client_name })
+      }
+    }
+  }
+  return reminders
+}
 
 const funnelStages = [
-  { label: 'New', color: '#5A0016' },
+  { label: 'New Inquiry', color: '#5A0016' },
   { label: 'Follow Up', color: '#7F1D1D' },
-  { label: 'Menu Ready', color: '#991B1B' },
-  { label: 'Presentation Sent', color: '#B91C1C' },
-  { label: 'Negotiation', color: '#DC2626' },
-  { label: 'Confirmed', color: '#10B981' },
-  { label: 'Cancelled', color: '#374151' },
+  { label: 'Menu Sent', color: '#991B1B' },
+  { label: 'Client Confirmation', color: '#B91C1C' },
+  { label: 'Advance Receive', color: '#10B981' },
+  { label: 'Operation Handover', color: '#14B8A6' },
 ]
 
 export default function SalesDashboard() {
   const { user } = useAuth()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const firstName = user?.full_name?.split(' ')[0] ?? 'Sales'
+  const role = user?.role.name ?? ''
+  const canManageReminders = role === 'admin' || role === 'sales_head'
   const { data: kpis, isLoading } = useSalesKPIs()
   const { data: funnel } = useSalesFunnel()
   const { data: inquiriesData } = useInquiries({ page: 1, per_page: 10 })
-  const [followUpTab, setFollowUpTab] = useState<'today' | 'upcoming' | 'overdue'>('today')
-  const [insightContext, setInsightContext] = useState('Sales pipeline performance and client conversion')
-  const [insightResult, setInsightResult] = useState('')
-  const [insightLoading, setInsightLoading] = useState(false)
-
-  // Cost Estimator
-  const [costInput, setCostInput] = useState({ menu: '', guests: '100', eventType: 'Wedding' })
-  const [costResult, setCostResult] = useState('')
-  const [costLoading, setCostLoading] = useState(false)
-
+  const { data: allInquiriesData } = useInquiries({ page: 1, per_page: 100 })
+  // Reminder modal
+  const [showReminderModal, setShowReminderModal] = useState(false)
+  const [reminderClientId, setReminderClientId] = useState('')
+  const [reminderType, setReminderType] = useState<'birthday' | 'anniversary'>('birthday')
+  const [reminderDate, setReminderDate] = useState('')
+  const reminderMutation = useMutation({
+    mutationFn: ({ id, type, date }: { id: string; type: 'birthday' | 'anniversary'; date: string }) =>
+      updateInquiry(id, type === 'birthday' ? { birthday_date: date } : { anniversary_date: date }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['inquiries'] })
+      toast.success('Reminder saved')
+      setShowReminderModal(false)
+      setReminderClientId('')
+      setReminderType('birthday')
+      setReminderDate('')
+    },
+    onError: () => toast.error('Failed to save reminder'),
+  })
   // AI Chat
   const [chatOpen, setChatOpen] = useState(false)
   const [messages, setMessages] = useState<Array<{ id: string; role: 'user' | 'assistant'; content: string }>>([])
@@ -88,24 +114,7 @@ export default function SalesDashboard() {
     setIsTyping(false)
   }
 
-  const handleInsight = async () => {
-    setInsightLoading(true)
-    setInsightResult('')
-    const data = `New Inquiries: ${kpis?.new_inquiries ?? 0}, Confirmed: ${kpis?.confirmed ?? 0}, Conversion: ${kpis?.conversion_rate ?? 0}%, Follow-ups Today: ${kpis?.followups_today ?? 0}, Total Sales Value: ${kpis?.total_sales_value ?? 0}`
-    const res = await generateInsights({ context: insightContext, data })
-    setInsightResult(res.error ?? res.text)
-    setInsightLoading(false)
-  }
-
   const fmt = (t: string) => t.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br />')
-
-  const handleEstimateCost = async () => {
-    setCostLoading(true)
-    setCostResult('')
-    const res = await estimateCost(costInput)
-    setCostResult(res.error ?? res.text)
-    setCostLoading(false)
-  }
 
   if (isLoading) {
     return (
@@ -139,10 +148,10 @@ export default function SalesDashboard() {
       {/* Top Row — 6 KPI Cards */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-6">
         {[
-          { label: 'New Inquiries', value: kpis?.new_inquiries ?? 0, icon: Plus, accent: 'text-blue-600', nav: '/inquiries' },
-          { label: 'Follow-ups Today', value: kpis?.followups_today ?? 0, icon: Calendar, accent: 'text-amber-600', nav: '/inquiries' },
-          { label: 'Overdue Follow-ups', value: kpis?.overdue_followups ?? 0, icon: Clock, accent: 'text-red-600', urgent: true, nav: '/inquiries' },
-          { label: 'Confirmed', value: kpis?.confirmed ?? 0, icon: CheckCircle, accent: 'text-emerald-600', nav: '/reports' },
+          { label: 'Total Inquiries', value: kpis?.total_inquiries ?? 0, icon: Plus, accent: 'text-blue-600', nav: '/inquiries' },
+          { label: 'Follow-ups Today', value: kpis?.followups_today ?? 0, icon: Calendar, accent: 'text-amber-600', nav: '/inquiries?followup=today' },
+          { label: 'Overdue Follow-ups', value: kpis?.overdue_followups ?? 0, icon: Clock, accent: 'text-red-600', urgent: true, nav: '/inquiries?followup=overdue' },
+          { label: 'Confirmed', value: kpis?.confirmed ?? 0, icon: CheckCircle, accent: 'text-emerald-600', nav: '/inquiries?status=advance_receive,operation_handover' },
           { label: 'Total Sales', value: formatCurrency(totalRevenue), icon: TrendingUp, accent: 'text-maroon', nav: '/finance' },
           { label: 'Conversion', value: `${kpis?.conversion_rate ?? 0}%`, icon: TrendingUp, accent: 'text-purple-600', nav: '/reports' },
         ].map((kpi, i) => (
@@ -166,7 +175,7 @@ export default function SalesDashboard() {
         ))}
       </div>
 
-      {/* Middle Row — 3 Columns: Funnel | Follow-ups | Payment Donut */}
+      {/* Middle Row — 3 Columns: Funnel | Payment Donut | Next Follow-Up */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {/* Inquiry Pipeline Funnel */}
         <motion.div
@@ -212,77 +221,7 @@ export default function SalesDashboard() {
           </div>
         </motion.div>
 
-        {/* Tabbed Follow-Ups Widget */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.4 }}
-          className="rounded-xl border border-gray-100 bg-white shadow-md"
-          style={{ height: 330 }}
-        >
-          <div className="flex border-b border-gray-100">
-            {(['today', 'upcoming', 'overdue'] as const).map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setFollowUpTab(tab)}
-                className={`flex-1 py-3 text-center text-xs font-semibold capitalize transition-colors ${
-                  followUpTab === tab
-                    ? 'border-b-2 border-gold text-gray-900'
-                    : 'text-gray-400 hover:text-gray-600'
-                }`}
-              >
-                {tab}
-              </button>
-            ))}
-          </div>
-          <div className="space-y-2 p-4" style={{ height: 294, overflowY: 'auto' }}>
-            {followUpTab === 'today' && (
-              <>
-                {inquiriesData?.items?.filter((inq) => inq.follow_up_date === new Date().toISOString().slice(0, 10)).slice(0, 5).map((inq) => (
-                  <div key={inq.id} className="flex items-center justify-between rounded-lg bg-gray-50 p-2.5">
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-xs font-medium text-gray-900">{inq.client_name}</p>
-                      <p className="text-[10px] text-gray-500">{inq.event_type} · {inq.event_date ?? '—'}</p>
-                    </div>
-                    <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-600">Today</span>
-                  </div>
-                )) ?? <p className="py-6 text-center text-xs text-gray-400">No follow-ups today</p>}
-              </>
-            )}
-            {followUpTab === 'upcoming' && (
-              <>
-                {inquiriesData?.items?.filter((inq) => {
-                  const fd = inq.follow_up_date
-                  return fd && fd > new Date().toISOString().slice(0, 10)
-                }).slice(0, 5).map((inq) => (
-                  <div key={inq.id} className="flex items-center justify-between rounded-lg bg-gray-50 p-2.5">
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-xs font-medium text-gray-900">{inq.client_name}</p>
-                      <p className="text-[10px] text-gray-500">{inq.event_type}</p>
-                    </div>
-                    <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-600">{inq.follow_up_date}</span>
-                  </div>
-                )) ?? <p className="py-6 text-center text-xs text-gray-400">No upcoming follow-ups</p>}
-              </>
-            )}
-            {followUpTab === 'overdue' && (
-              <>
-                {inquiriesData?.items?.filter((inq) => {
-                  const fd = inq.follow_up_date
-                  return fd && fd < new Date().toISOString().slice(0, 10)
-                }).slice(0, 5).map((inq) => (
-                  <div key={inq.id} className="flex items-center justify-between rounded-lg bg-red-50 p-2.5">
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-xs font-medium text-gray-900">{inq.client_name}</p>
-                      <p className="text-[10px] text-red-500">Overdue since {inq.follow_up_date}</p>
-                    </div>
-                    <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-600">Overdue</span>
-                  </div>
-                )) ?? <p className="py-6 text-center text-xs text-gray-400">No overdue follow-ups</p>}
-              </>
-            )}
-          </div>
-        </motion.div>
+
 
         {/* Payment Overview Donut */}
         <motion.div
@@ -321,25 +260,25 @@ export default function SalesDashboard() {
             ))}
           </div>
         </motion.div>
-      </div>
 
-      {/* Bottom Row — 3 Columns: Banner | Reminders | Table */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {/* Next Follow-Up Banner */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.6 }}
           className="flex flex-col justify-between rounded-xl border border-blue-100 bg-blue-50/50 p-6 shadow-md"
-          style={{ height: 260 }}
+          style={{ height: 330 }}
         >
           <div>
             <h3 className="text-sm font-bold text-blue-900">Next Follow-Up</h3>
             <p className="mt-1 text-xs text-blue-600">
-              {inquiriesData?.items?.find((inq) => inq.follow_up_date && inq.follow_up_date >= new Date().toISOString().slice(0, 10))
-                ? `${inquiriesData.items.find((inq) => inq.follow_up_date && inq.follow_up_date >= new Date().toISOString().slice(0, 10))?.client_name} on ${inquiriesData.items.find((inq) => inq.follow_up_date && inq.follow_up_date >= new Date().toISOString().slice(0, 10))?.follow_up_date}`
+              {kpis?.next_follow_up
+                ? `${kpis.next_follow_up.client_name} on ${new Date(kpis.next_follow_up.follow_up_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}`
                 : 'No upcoming follow-ups'}
             </p>
+            {kpis?.next_follow_up?.remarks && (
+              <p className="mt-1.5 text-xs text-blue-500 italic">"{kpis.next_follow_up.remarks}"</p>
+            )}
           </div>
           <button
             onClick={() => navigate('/inquiries')}
@@ -348,6 +287,10 @@ export default function SalesDashboard() {
             View Pipeline
           </button>
         </motion.div>
+      </div>
+
+      {/* Bottom Row — 2 Columns: Reminders | Table */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
 
         {/* Client Reminders Widget */}
         <motion.div
@@ -357,9 +300,17 @@ export default function SalesDashboard() {
           className="rounded-xl border border-gray-100 bg-white p-5 shadow-md"
           style={{ height: 260, overflowY: 'auto' }}
         >
-          <h3 className="mb-3 text-sm font-semibold text-gray-900">Client Reminders</h3>
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-gray-900">Client Reminders</h3>
+            {canManageReminders && (
+              <button onClick={() => setShowReminderModal(true)}
+                className="flex h-7 items-center gap-1 rounded-lg border border-gray-200 px-2 text-[10px] font-medium text-gray-600 transition-colors hover:bg-gray-50">
+                <Plus size={12} /> Add Reminder
+              </button>
+            )}
+          </div>
           <div className="space-y-2">
-            {clientReminders.map((reminder) => (
+            {getUpcomingReminders(inquiriesData?.items ?? []).map((reminder) => (
               <div key={reminder.id} className="flex items-center gap-3 rounded-lg bg-gray-50 p-2.5 transition-colors hover:bg-gray-100">
                 <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
                   reminder.type === 'birthday' ? 'bg-pink-100' : 'bg-purple-100'
@@ -411,6 +362,11 @@ export default function SalesDashboard() {
                         label={INQUIRY_STATUSES[inq.status as keyof typeof INQUIRY_STATUSES]?.label ?? inq.status}
                         color={INQUIRY_STATUSES[inq.status as keyof typeof INQUIRY_STATUSES]?.color ?? 'bg-gray-100 text-gray-800'}
                       />
+                      {inq.menu_content && (
+                        <span className="ml-2 inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
+                          Menu Ready
+                        </span>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -420,62 +376,170 @@ export default function SalesDashboard() {
         </motion.div>
       </div>
 
-      {/* AI Cost Estimation */}
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.5 }}
-        className="rounded-xl border border-gray-100 bg-white p-5 shadow-md">
-        <h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-gray-900">
-          <Calculator size={16} className="text-maroon" /> AI Cost Estimation
-        </h3>
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-          <div className="md:col-span-2">
-            <label className="mb-1 flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-gray-500">Menu Description</label>
-            <input type="text" value={costInput.menu} onChange={(e) => setCostInput({ ...costInput, menu: e.target.value })} placeholder="e.g. Paneer Tikka, Shahi Paneer, Dal Makhani, Naan..."
-              className="h-9 w-full rounded-lg border border-gray-200 bg-white px-2.5 text-xs placeholder:text-gray-300 focus:border-gold focus:ring-1 focus:ring-gold focus:outline-none" />
-          </div>
-          <div>
-            <label className="mb-1 flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-gray-500"><Users size={10} /> Guests</label>
-            <input type="text" value={costInput.guests} onChange={(e) => setCostInput({ ...costInput, guests: e.target.value })}
-              className="h-9 w-full rounded-lg border border-gray-200 bg-white px-2.5 text-xs focus:border-gold focus:ring-1 focus:ring-gold focus:outline-none" />
-          </div>
-          <div>
-            <label className="mb-1 flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-gray-500"><Utensils size={10} /> Event Type</label>
-            <select value={costInput.eventType} onChange={(e) => setCostInput({ ...costInput, eventType: e.target.value })}
-              className="h-9 w-full rounded-lg border border-gray-200 bg-white px-2.5 text-xs focus:border-gold focus:ring-1 focus:ring-gold focus:outline-none">
-              <option value="Wedding">Wedding</option><option value="Corporate">Corporate</option><option value="Birthday">Birthday</option><option value="Anniversary">Anniversary</option>
-            </select>
-          </div>
+      {/* Today's Follow-ups Panel */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, delay: 0.85 }}
+        className="rounded-xl border border-gray-100 bg-white p-5 shadow-md"
+      >
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-900">
+            <Calendar size={15} className="text-amber-600" /> Today's Follow-ups
+          </h3>
+          <button
+            onClick={() => navigate('/inquiries?followup=today')}
+            className="flex h-8 items-center rounded-lg border border-gray-200 px-3 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50"
+          >
+            View all
+          </button>
         </div>
-        <button onClick={handleEstimateCost} disabled={costLoading}
-          className="mt-3 flex h-10 items-center gap-2 rounded-lg bg-maroon px-6 text-xs font-bold text-white shadow hover:bg-maroon-dark disabled:opacity-50">
-          {costLoading ? <><Loader2 size={14} className="animate-spin" /> Estimating...</> : <><Calculator size={14} /> Estimate Cost</>}
-        </button>
-        {costResult && (
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-            className="mt-3 max-h-[300px] overflow-y-auto rounded-lg border border-emerald-200 bg-emerald-50/50 p-4 text-xs leading-relaxed text-gray-700"
-            dangerouslySetInnerHTML={{ __html: fmt(costResult) }} />
+        {kpis?.today_followups?.length ? (
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-3">
+            {kpis.today_followups.map((fu) => (
+              <button
+                key={fu.id}
+                onClick={() => navigate(`/inquiries/${fu.inquiry_id}`)}
+                className="flex items-start gap-3 rounded-lg border border-gray-100 bg-gray-50 p-3 text-left transition-colors hover:border-amber-200 hover:bg-amber-50"
+              >
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-100 text-xs font-bold text-amber-700">
+                  {new Date(fu.follow_up_date).getDate()}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-xs font-bold text-gray-900">{fu.client_name}</p>
+                  <p className="truncate text-[10px] text-gray-500">{fu.event_type}</p>
+                  {fu.remarks && <p className="mt-0.5 line-clamp-2 text-[10px] italic text-gray-400">"{fu.remarks}"</p>}
+                </div>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="py-4 text-center text-xs text-gray-400">No follow-ups scheduled for today.</p>
         )}
       </motion.div>
 
-      {/* AI Insights */}
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.6 }}
-        className="rounded-xl border border-gray-100 bg-white p-5 shadow-md">
-        <h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-gray-900">
-          <Brain size={16} className="text-maroon" /> AI Sales Insights
-        </h3>
-        <div className="flex gap-2">
-          <input type="text" value={insightContext} onChange={(e) => setInsightContext(e.target.value)} placeholder="What do you want insights on?"
-            className="h-9 flex-1 rounded-lg border border-gray-200 bg-white px-2.5 text-xs placeholder:text-gray-300 focus:border-gold focus:ring-1 focus:ring-gold focus:outline-none" />
-          <button onClick={handleInsight} disabled={insightLoading}
-            className="flex h-9 items-center gap-1.5 rounded-lg bg-maroon px-4 text-xs font-bold text-white shadow hover:bg-maroon-dark disabled:opacity-50">
-            {insightLoading ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />} Analyze
+      {/* Meetings Panel — scheduled & completed meetings (Vinod overview) */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, delay: 0.9 }}
+        className="rounded-xl border border-gray-100 bg-white p-5 shadow-md"
+      >
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-900">
+            <Clock size={15} className="text-blue-600" /> Meetings
+          </h3>
+          <button
+            onClick={() => navigate('/calendar')}
+            className="flex h-8 items-center rounded-lg border border-gray-200 px-3 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50"
+          >
+            View calendar
           </button>
         </div>
-        {insightResult && (
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-            className="mt-3 max-h-[300px] overflow-y-auto rounded-lg border border-purple-200 bg-purple-50/50 p-4 text-xs leading-relaxed text-gray-700"
-            dangerouslySetInnerHTML={{ __html: fmt(insightResult) }} />
+        {kpis?.meetings?.length ? (
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-3">
+            {kpis.meetings.map((mtg) => {
+              const d = new Date(mtg.meeting_at)
+              const done = mtg.status === 'completed'
+              return (
+                <button
+                  key={mtg.id}
+                  onClick={() => mtg.inquiry_id && navigate(`/inquiries/${mtg.inquiry_id}`)}
+                  className="flex items-start gap-3 rounded-lg border border-gray-100 bg-gray-50 p-3 text-left transition-colors hover:border-blue-200 hover:bg-blue-50"
+                >
+                  <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ${done ? 'bg-emerald-100 text-emerald-600' : 'bg-blue-100 text-blue-700'}`}>
+                    {done ? <CheckCircle size={13} /> : d.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-bold text-gray-900">{mtg.client_name}</p>
+                    <p className="truncate text-[10px] text-gray-500">
+                      {mtg.event_type} · {d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    </p>
+                    {mtg.remarks && <p className="mt-0.5 line-clamp-2 text-[10px] italic text-gray-400">"{mtg.remarks}"</p>}
+                    <div className="mt-1 flex items-center gap-1.5">
+                      <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold ${done ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>
+                        {done ? 'Completed' : 'Scheduled'}
+                      </span>
+                      {mtg.created_by_name && (
+                        <span className="truncate text-[9px] text-gray-400">by {mtg.created_by_name}</span>
+                      )}
+                    </div>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        ) : (
+          <p className="py-4 text-center text-xs text-gray-400">No meetings scheduled.</p>
         )}
       </motion.div>
+
+
+      {/* Add Reminder Modal */}
+      <AnimatePresence>
+        {showReminderModal && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm" onClick={() => setShowReminderModal(false)}>
+            <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              className="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900">Add Client Reminder</h3>
+                  <p className="text-[11px] text-gray-400">Set birthday or anniversary for a client</p>
+                </div>
+                <button onClick={() => setShowReminderModal(false)} className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+                  <X size={16} />
+                </button>
+              </div>
+              <div className="space-y-3">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-600">Client *</label>
+                  <select value={reminderClientId} onChange={(e) => setReminderClientId(e.target.value)}
+                    className="h-9 w-full rounded-lg border border-gray-200 px-2 text-sm">
+                    <option value="">Select client…</option>
+                    {(allInquiriesData?.items ?? []).map((inq) => (
+                      <option key={inq.id} value={inq.id}>{inq.client_name} ({inq.event_type})</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-600">Type *</label>
+                  <div className="flex gap-2">
+                    {(['birthday', 'anniversary'] as const).map((t) => (
+                      <button key={t} onClick={() => setReminderType(t)}
+                        className={`flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg border text-xs font-semibold transition-colors ${
+                          reminderType === t
+                            ? t === 'birthday'
+                              ? 'border-pink-300 bg-pink-50 text-pink-700'
+                              : 'border-purple-300 bg-purple-50 text-purple-700'
+                            : 'border-gray-200 text-gray-500 hover:bg-gray-50'
+                        }`}>
+                        {t === 'birthday' ? <Cake size={14} /> : <PartyPopper size={14} />}
+                        {t === 'birthday' ? 'Birthday' : 'Anniversary'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-600">Date *</label>
+                  <input type="date" value={reminderDate} onChange={(e) => setReminderDate(e.target.value)}
+                    className="h-9 w-full rounded-lg border border-gray-200 px-2 text-sm" />
+                </div>
+                <button
+                  onClick={() => reminderMutation.mutate({ id: reminderClientId, type: reminderType, date: reminderDate })}
+                  disabled={!reminderClientId || !reminderDate || reminderMutation.isPending}
+                  className="flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-maroon text-sm font-bold text-white transition-colors hover:bg-maroon-dark disabled:opacity-50"
+                >
+                  {reminderMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />}
+                  Save Reminder
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* AI Chat Modal */}
       <AnimatePresence>
         {chatOpen && (

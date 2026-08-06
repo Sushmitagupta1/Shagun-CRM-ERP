@@ -2,23 +2,21 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Legend } from 'recharts'
 import type { StatusDistribution } from '@/types/dashboard'
 
 const COLORS: Record<string, string> = {
-  new: '#3B82F6',
-  follow_up: '#F59E0B',
-  menu_ready: '#8B5CF6',
-  presentation_sent: '#06B6D4',
-  negotiation: '#F97316',
-  confirmed: '#10B981',
-  cancelled: '#EF4444',
+  new_inquiry: '#3B82F6',
+  followup: '#F59E0B',
+  client_confirmation: '#8B5CF6',
+  menu_sent: '#06B6D4',
+  advance_receive: '#10B981',
+  operation_handover: '#14B8A6',
 }
 
 const LABELS: Record<string, string> = {
-  new: 'New',
-  follow_up: 'Follow Up',
-  menu_ready: 'Menu Ready',
-  presentation_sent: 'Presentation Sent',
-  negotiation: 'Negotiation',
-  confirmed: 'Confirmed',
-  cancelled: 'Cancelled',
+  new_inquiry: 'New Inquiry',
+  followup: 'Follow Up',
+  client_confirmation: 'Client Confirmation',
+  menu_sent: 'Menu Sent',
+  advance_receive: 'Advance Receive',
+  operation_handover: 'Operation Handover',
 }
 
 interface ConversionRateProps {

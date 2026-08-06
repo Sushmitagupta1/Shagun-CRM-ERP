@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getInquiry, updateInquiryStatus, exportSingleInquiryExcel, updateInquiry, getFollowUps, addFollowUp, uploadInquiryFile, downloadInquiryFile, getMeetings, addMeeting, updateMeetingStatus } from '@/api/inquiries'
+import { getInquiry, updateInquiryStatus, setPresentationNotRequired, exportSingleInquiryExcel, updateInquiry, getFollowUps, addFollowUp, updateFollowUpDone, uploadInquiryFile, downloadInquiryFile, getMeetings, addMeeting, updateMeetingStatus } from '@/api/inquiries'
 import PageHeader from '@/components/common/PageHeader'
 import StatusPill from '@/components/common/StatusPill'
 import { INQUIRY_STATUSES, PAYMENT_STATUSES } from '@/lib/constants'
@@ -25,6 +25,8 @@ import {
   BarChart3,
   ArrowRightLeft,
   RotateCcw,
+  RefreshCcw,
+  XCircle,
   AlertTriangle,
   X,
   Loader2,
@@ -32,15 +34,6 @@ import {
   Edit3,
   Download,
 } from 'lucide-react'
-
-const VALID_TRANSITIONS: Record<string, string[]> = {
-  new_inquiry: ['followup'],
-  followup: ['menu_sent', 'new_inquiry'],
-  menu_sent: ['client_confirmation', 'followup'],
-  client_confirmation: ['advance_receive', 'menu_sent'],
-  advance_receive: ['operation_handover', 'client_confirmation'],
-  operation_handover: [],
-}
 
 const PROGRESS_STEPS = [
   { key: 'new_inquiry', label: 'New Inquiry' },
@@ -94,6 +87,8 @@ export default function InquiryDetail() {
   const isKitchen = role === 'kitchen'
   const isOps = role === 'operations_manager'
   const isWarehouse = role === 'warehouse'
+  const canUpdateStatus = isAdmin || isSalesHead || isPresentationExec
+  const canManageFollowUps = canUpdateStatus
 
   const { data: inquiry, isLoading, refetch } = useQuery({
     queryKey: ['inquiry', id],
@@ -118,6 +113,17 @@ export default function InquiryDetail() {
     onError: () => toast.error('Failed to add follow-up'),
   })
 
+  const updateFollowUpDoneMutation = useMutation({
+    mutationFn: ({ followUpId, isDone, remarks }: { followUpId: string; isDone: boolean; remarks?: string }) =>
+      updateFollowUpDone(id!, followUpId, { is_done: isDone, remarks }),
+    onSuccess: () => {
+      refetchFollowUps()
+      queryClient.invalidateQueries({ queryKey: ['dashboard', 'sales'] })
+      toast.success('Follow-up updated')
+    },
+    onError: () => toast.error('Failed to update follow-up'),
+  })
+
   const { data: meetings = [], refetch: refetchMeetings } = useQuery({
     queryKey: ['meetings', id],
     queryFn: () => getMeetings(id!),
@@ -135,7 +141,8 @@ export default function InquiryDetail() {
   })
 
   const completeMeetingMutation = useMutation({
-    mutationFn: ({ meetingId }: { meetingId: string }) => updateMeetingStatus(id!, meetingId, 'completed'),
+    mutationFn: ({ meetingId, remarks }: { meetingId: string; remarks: string }) =>
+      updateMeetingStatus(id!, meetingId, 'completed', remarks),
     onSuccess: () => {
       refetchMeetings()
       queryClient.invalidateQueries({ queryKey: ['dashboard', 'presentation'] })
@@ -173,6 +180,22 @@ export default function InquiryDetail() {
     },
   })
 
+  const presentationNotRequiredMutation = useMutation({
+    mutationFn: (notRequired: boolean) => setPresentationNotRequired(id!, notRequired),
+    onSuccess: (_data, notRequired) => {
+      queryClient.invalidateQueries({ queryKey: ['inquiry', id] })
+      queryClient.invalidateQueries({ queryKey: ['inquiries'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard', 'presentation'] })
+      toast.success(notRequired ? 'Presentation marked as not required' : 'Presentation marked as required')
+    },
+    onError: (err: unknown) => {
+      const message =
+        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
+        'Failed to update'
+      toast.error(message)
+    },
+  })
+
   const [stage2Edit, setStage2Edit] = useState(false)
   const [stage2Form, setStage2Form] = useState({
     per_plate_rate: 0,
@@ -186,17 +209,23 @@ export default function InquiryDetail() {
   const [showAddFollowUp, setShowAddFollowUp] = useState(false)
   const [newFollowUpDate, setNewFollowUpDate] = useState('')
   const [newFollowUpRemarks, setNewFollowUpRemarks] = useState('')
+  const [statusDropdown, setStatusDropdown] = useState('')
+  const [doneFollowUpId, setDoneFollowUpId] = useState<string | null>(null)
+  const [doneFollowUpRemark, setDoneFollowUpRemark] = useState('')
   const [showAddMeeting, setShowAddMeeting] = useState(false)
   const [newMeetingDate, setNewMeetingDate] = useState('')
   const [newMeetingTime, setNewMeetingTime] = useState('')
   const [newMeetingRemarks, setNewMeetingRemarks] = useState('')
+  const [doneMeetingId, setDoneMeetingId] = useState<string | null>(null)
+  const [doneMeetingRemark, setDoneMeetingRemark] = useState('')
 
   const menuFile = inquiry?.menu_file_name || (inquiry?.menu_content ? 'Menu.txt' : null)
   const presentationFile = inquiry?.presentation_file_name || null
-  const [ingredientFile, setIngredientFile] = useState<string | null>(null)
+  const ingredientFile = inquiry?.ingredient_file_name || null
   const [showMenuUpload, setShowMenuUpload] = useState(false)
   const [showPresentationUpload, setShowPresentationUpload] = useState(false)
   const [showIngredientUpload, setShowIngredientUpload] = useState(false)
+  const [viewMenu, setViewMenu] = useState(false)
 
   const [ingredients, setIngredients] = useState<IngredientRow[]>([])
   const [newIngredient, setNewIngredient] = useState<IngredientRow>({ item: '', qty: '', unit: 'kg', priority: 'Medium' })
@@ -226,9 +255,6 @@ export default function InquiryDetail() {
     return <div className="py-20 text-center text-gray-500">Inquiry not found</div>
   }
 
-  const nextStatuses = (VALID_TRANSITIONS[inquiry.status] || []).filter(
-    (s) => s !== 'menu_sent' || isAdmin || isMenuPlanner
-  )
   const isStage2Reached = ['followup', 'menu_sent', 'client_confirmation', 'advance_receive', 'operation_handover'].includes(inquiry.status)
   const isOperationHandover = inquiry.status === 'operation_handover'
 
@@ -282,6 +308,30 @@ export default function InquiryDetail() {
     } catch { toast.error('Download failed') }
   }
 
+  const handleMenuDownloadAction = () => {
+    if (inquiry.menu_file_name) downloadInquiryFile(id!, 'menu', inquiry.menu_file_name)
+    else if (inquiry.menu_content) handleDownloadMenu()
+  }
+
+  const handleMenuView = () => {
+    if (inquiry.menu_content) { setViewMenu(true); return }
+    if (inquiry.menu_file_name) {
+      fetch(`/api/inquiries/${id}/file/menu`, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+        .then((res) => { if (!res.ok) throw new Error(); return res.blob() })
+        .then((blob) => window.open(URL.createObjectURL(blob), '_blank'))
+        .catch(() => toast.error('Failed to open menu'))
+    }
+  }
+
+  const handlePresentationView = () => {
+    if (presentationFile) {
+      fetch(`/api/inquiries/${id}/file/presentation`, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+        .then((res) => { if (!res.ok) throw new Error(); return res.blob() })
+        .then((blob) => window.open(URL.createObjectURL(blob), '_blank'))
+        .catch(() => toast.error('Failed to open presentation'))
+    }
+  }
+
   const handleFileUpload = async (type: 'menu' | 'presentation', file?: File) => {
     if (!file) return
     try {
@@ -297,10 +347,18 @@ export default function InquiryDetail() {
     }
   }
 
-  const handleIngredientUpload = () => {
-    setIngredientFile(`Ingredient List_${inquiry.client_name.replace(/\s+/g, '_')}.xlsx`)
-    toast.success('Ingredient list uploaded')
-    setShowIngredientUpload(false)
+  const handleIngredientUpload = async (file?: File) => {
+    if (!file) return
+    try {
+      await uploadInquiryFile(id!, 'ingredient', file)
+      refetch()
+      toast.success('Ingredient list uploaded')
+      setShowIngredientUpload(false)
+    } catch (err) {
+      const message =
+        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Upload failed'
+      toast.error(message)
+    }
   }
 
   const stage2Fields = [
@@ -364,7 +422,7 @@ export default function InquiryDetail() {
 
       {/* Stage 1: Basic Inquiry Details + Status + Follow-up History */}
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
-        <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-md lg:col-span-2">
+        <div className={`rounded-xl border border-gray-100 bg-white p-6 shadow-md ${isKitchen ? 'lg:col-span-3' : 'lg:col-span-2'}`}>
           <h3 className="mb-4 text-sm font-bold text-gray-900">Stage 1 — Basic Information</h3>
           <div className="grid grid-cols-2 gap-4">
             {[
@@ -385,9 +443,147 @@ export default function InquiryDetail() {
               <p className="text-xs text-gray-500">Remarks</p>
               <p className="text-sm font-medium text-gray-900">{inquiry.remarks ?? '—'}</p>
             </div>
+            {followUps.length > 0 && (
+              <div className="col-span-2">
+                <p className="mb-1.5 text-xs text-gray-500">Follow-up History</p>
+                <div className="space-y-1.5">
+                  {followUps.map((fu, fuIndex) => (
+                    <div key={fu.id} className={`flex items-start gap-2 rounded-lg border p-2 ${
+                      fu.is_done ? 'border-emerald-100 bg-emerald-50/40' : 'border-gray-100 bg-gray-50'
+                    }`}>
+                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-100 text-[10px] font-bold text-amber-700">
+                        {fuIndex + 1}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-semibold text-gray-800">
+                          Followup {fuIndex + 1} · {new Date(fu.follow_up_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          {fu.is_done && <span className="ml-1.5 text-[10px] font-bold text-emerald-600">Done</span>}
+                        </p>
+                        <p className="text-xs text-gray-500">{fu.remarks ?? 'No remark'}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
+          {isKitchen && (
+            <div className="mt-4 space-y-3">
+              <div className="flex items-center justify-between rounded-lg border border-gray-200 p-3">
+                <div className="flex items-center gap-2">
+                  <FileText size={14} className="text-emerald-500" />
+                  {inquiry.menu_content || menuFile ? (
+                    <>
+                      <span className="text-sm font-medium text-gray-900">{menuFile || 'Menu.txt'}</span>
+                      <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Uploaded</span>
+                    </>
+                  ) : (
+                    <span className="text-sm text-gray-400">No menu uploaded yet</span>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={handleMenuView} disabled={!menuFile && !inquiry.menu_content}
+                    className="flex h-8 items-center gap-1.5 rounded-lg border border-gray-200 px-3 text-xs font-medium hover:bg-gray-50 disabled:opacity-50">
+                    <Eye size={14} /> View
+                  </button>
+                  <button onClick={handleMenuDownloadAction} disabled={!menuFile && !inquiry.menu_content}
+                    className="flex h-8 items-center gap-1.5 rounded-lg border border-gray-200 px-3 text-xs font-medium hover:bg-gray-50 disabled:opacity-50">
+                    <Download size={14} /> Download
+                  </button>
+                </div>
+              </div>
+              <div className="rounded-lg border border-gray-200 p-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <FileSpreadsheet size={14} className="text-amber-500" />
+                    {ingredientFile ? (
+                      <>
+                        <span className="text-sm font-medium text-gray-900">{ingredientFile}</span>
+                        <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Uploaded</span>
+                      </>
+                    ) : (
+                      <span className="text-sm text-gray-400">No raw material list uploaded</span>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => setShowIngredientUpload(!showIngredientUpload)}
+                      className="flex h-8 items-center gap-1.5 rounded-lg border border-gray-200 px-3 text-xs font-medium hover:bg-gray-50">
+                      <Plus size={14} /> Add Rows
+                    </button>
+                    <label className="flex h-8 w-fit cursor-pointer items-center gap-1.5 rounded-lg border-2 border-dashed border-amber-300 px-3 text-xs font-medium text-amber-600 hover:border-amber-500">
+                      <Upload size={14} /> Upload Excel
+                      <input type="file" className="hidden" accept=".xlsx,.xls,.csv"
+                        onChange={(e) => { handleIngredientUpload(e.target.files?.[0]); e.target.value = '' }} />
+                    </label>
+                  </div>
+                </div>
+                {showIngredientUpload && (
+                  <div className="mt-3 rounded-lg border border-gray-100 bg-gray-50 p-3">
+                    <div className="grid grid-cols-4 gap-2">
+                      <input placeholder="Item name" value={newIngredient.item} onChange={(e) => setNewIngredient({ ...newIngredient, item: e.target.value })}
+                        className="h-8 rounded border border-gray-200 bg-white px-2 text-xs" />
+                      <input placeholder="Qty" value={newIngredient.qty} onChange={(e) => setNewIngredient({ ...newIngredient, qty: e.target.value })}
+                        className="h-8 rounded border border-gray-200 bg-white px-2 text-xs" />
+                      <select value={newIngredient.unit} onChange={(e) => setNewIngredient({ ...newIngredient, unit: e.target.value })}
+                        className="h-8 rounded border border-gray-200 bg-white px-2 text-xs">
+                        <option>kg</option><option>L</option><option>pcs</option><option>g</option><option>packs</option>
+                      </select>
+                      <select value={newIngredient.priority} onChange={(e) => setNewIngredient({ ...newIngredient, priority: e.target.value })}
+                        className="h-8 rounded border border-gray-200 bg-white px-2 text-xs">
+                        <option>High</option><option>Medium</option><option>Low</option>
+                      </select>
+                    </div>
+                    <div className="mt-2 flex gap-2">
+                      <button onClick={() => {
+                        if (newIngredient.item && newIngredient.qty) {
+                          setIngredients([...ingredients, newIngredient])
+                          setNewIngredient({ item: '', qty: '', unit: 'kg', priority: 'Medium' })
+                          toast.success('Ingredient added')
+                        }
+                      }} className="flex h-8 items-center gap-1 rounded-lg bg-emerald-500 px-3 text-xs font-bold text-white hover:bg-emerald-600">
+                        <Plus size={12} /> Add Row
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {ingredients.length > 0 && (
+                  <div className="mt-3 overflow-hidden rounded-lg border border-gray-200">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b border-gray-200 bg-gray-50">
+                          {['Item', 'Quantity', 'Unit', 'Priority', ''].map((h) => (
+                            <th key={h} className="px-3 py-2 text-left text-[10px] font-bold uppercase text-gray-500">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {ingredients.map((ing, i) => (
+                          <tr key={i} className="border-b border-gray-50">
+                            <td className="px-3 py-2 text-xs font-medium text-gray-900">{ing.item}</td>
+                            <td className="px-3 py-2 text-xs text-gray-600">{ing.qty}</td>
+                            <td className="px-3 py-2 text-xs text-gray-600">{ing.unit}</td>
+                            <td className="px-3 py-2">
+                              <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                                ing.priority === 'High' ? 'bg-red-100 text-red-700' :
+                                ing.priority === 'Medium' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'
+                              }`}>{ing.priority}</span>
+                            </td>
+                            <td className="px-3 py-2">
+                              <button onClick={() => setIngredients(ingredients.filter((_, idx) => idx !== i))}
+                                className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-500"><Trash2 size={12} /></button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
+        {!isKitchen && (
         <div className="space-y-4">
           {/* Status Card */}
           <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-md">
@@ -408,25 +604,23 @@ export default function InquiryDetail() {
                 <p className="text-sm font-bold text-gray-900">{formatCurrency(Number(inquiry.advance_amount))}</p>
               </div>
             )}
-            {nextStatuses.length > 0 && (
+            {canUpdateStatus && (
               <div className="space-y-2">
-                <p className="text-xs font-medium text-gray-500">Update Status</p>
-                {nextStatuses.map((status) => {
-                  const cannotProceed = statusMutation.isPending
-                  const isCancel = inquiry.status === 'followup' && status === 'new_inquiry'
-                  return (
-                    <button key={status} onClick={() => handleStatusChange(status)}
-                      disabled={cannotProceed}
-                      className={`flex h-9 w-full items-center justify-center gap-2 rounded-lg text-sm font-medium transition-colors ${
-                        isCancel ? 'border border-red-200 bg-white text-red-600 hover:bg-red-50' :
-                        status === 'operation_handover' ? 'bg-teal-500 text-white hover:bg-teal-600' :
-                        'bg-maroon text-white hover:bg-maroon-dark'
-                      } disabled:opacity-50`}>
-                      {statusMutation.isPending && <Loader2 size={14} className="animate-spin" />}
-                      {isCancel ? 'Cancel' : INQUIRY_STATUSES[status as keyof typeof INQUIRY_STATUSES]?.label ?? status}
-                    </button>
-                  )
-                })}
+                <p className="text-xs font-medium text-gray-500">Change Status</p>
+                <select
+                  value={statusDropdown || inquiry.status}
+                  onChange={(e) => {
+                    const val = e.target.value
+                    setStatusDropdown(val)
+                    handleStatusChange(val)
+                  }}
+                  disabled={statusMutation.isPending}
+                  className="h-9 w-full rounded-lg border border-gray-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-gold/30 disabled:opacity-50"
+                >
+                  {Object.entries(INQUIRY_STATUSES).map(([key, { label }]) => (
+                    <option key={key} value={key} disabled={key === inquiry.status}>{label}</option>
+                  ))}
+                </select>
               </div>
             )}
 
@@ -436,12 +630,14 @@ export default function InquiryDetail() {
                 <h3 className="flex items-center gap-2 text-sm font-bold text-gray-900">
                   Follow-ups
                 </h3>
-                <button
-                  onClick={() => setShowAddFollowUp(!showAddFollowUp)}
-                  className="flex h-7 items-center gap-1 rounded-lg border border-gray-200 px-2.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50"
-                >
-                  <Plus size={14} /> Add
-                </button>
+                {canManageFollowUps && (
+                  <button
+                    onClick={() => setShowAddFollowUp(!showAddFollowUp)}
+                    className="flex h-7 items-center gap-1 rounded-lg border border-gray-200 px-2.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50"
+                  >
+                    <Plus size={14} /> Add
+                  </button>
+                )}
               </div>
 
               {showAddFollowUp && (
@@ -481,17 +677,56 @@ export default function InquiryDetail() {
                 <p className="text-xs text-gray-400">No follow-ups yet.</p>
               ) : (
                 <div className="space-y-2">
-                  {followUps.map((fu) => (
-                    <div key={fu.id} className="flex items-start gap-3 rounded-lg border border-gray-100 bg-white p-3">
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700 text-xs font-bold">
-                        {new Date(fu.follow_up_date).getDate()}
+                  {followUps.map((fu, fuIndex) => (
+                    <div key={fu.id} className={`rounded-lg border p-3 ${
+                      fu.is_done ? 'border-emerald-100 bg-emerald-50/50' : 'border-gray-100 bg-white'
+                    }`}>
+                      <div className="flex items-start gap-3">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700 text-xs font-bold">
+                          {new Date(fu.follow_up_date).getDate()}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className={`text-sm font-medium ${fu.is_done ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
+                            Followup {fuIndex + 1} · {new Date(fu.follow_up_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          </p>
+                          {fu.remarks && <p className="mt-0.5 text-xs text-gray-500">{fu.remarks}</p>}
+                          {fu.is_done && (
+                            <p className="mt-0.5 text-[10px] text-emerald-600">
+                              Marked done {new Date(fu.updated_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                            </p>
+                          )}
+                        </div>
+                        {fu.is_done ? (
+                          <span className="flex h-7 shrink-0 items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-100 px-2 text-[10px] font-bold text-emerald-700">
+                            <CheckCircle2 size={11} /> Done
+                          </span>
+                        ) : canManageFollowUps ? (
+                          <button
+                            onClick={() => { setDoneFollowUpId(fu.id); setDoneFollowUpRemark('') }}
+                            disabled={updateFollowUpDoneMutation.isPending}
+                            className="flex h-7 shrink-0 items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2 text-[10px] font-medium text-emerald-700 transition-colors hover:bg-emerald-100 disabled:opacity-50">
+                            <CheckCircle2 size={11} /> Mark done
+                          </button>
+                        ) : null}
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-gray-900">
-                          {new Date(fu.follow_up_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                        </p>
-                        {fu.remarks && <p className="mt-0.5 text-xs text-gray-500">{fu.remarks}</p>}
-                      </div>
+                      {doneFollowUpId === fu.id && (
+                        <div className="mt-3 flex items-end gap-2 rounded-lg border border-gray-100 bg-gray-50 p-2">
+                          <input value={doneFollowUpRemark}
+                            onChange={(e) => setDoneFollowUpRemark(e.target.value)}
+                            placeholder="Add remark (required)"
+                            className="h-8 flex-1 rounded border border-gray-200 bg-white px-2 text-xs" />
+                          <button
+                            onClick={() => updateFollowUpDoneMutation.mutate(
+                              { followUpId: fu.id, isDone: true, remarks: doneFollowUpRemark },
+                              { onSuccess: () => setDoneFollowUpId(null) }
+                            )}
+                            disabled={updateFollowUpDoneMutation.isPending || !doneFollowUpRemark.trim()}
+                            className="flex h-8 items-center gap-1 rounded-lg bg-emerald-500 px-3 text-xs font-bold text-white hover:bg-emerald-600 disabled:opacity-50">
+                            {updateFollowUpDoneMutation.isPending ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />}
+                            Save
+                          </button>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -499,10 +734,11 @@ export default function InquiryDetail() {
             </div>
           </div>
         </div>
+        )}
       </div>
 
       {/* Stage 2: Client Confirmation & Payment Details */}
-      {(isStage2Reached || (isAdmin && inquiry.method)) && (
+      {!isKitchen && (isStage2Reached || (isAdmin && inquiry.method)) && (
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
           className="rounded-xl border border-gray-100 bg-white p-6 shadow-md">
           <div className="mb-4 flex items-center justify-between">
@@ -562,7 +798,7 @@ export default function InquiryDetail() {
       {/* === MENU SECTION === */}
       {(inquiry.menu_content || menuFile || isAdmin || isMenuPlanner) && (
         <WorkflowSection icon={ChefHat} iconColor="text-purple-500" title="Menu"
-          visibleRoles={['menu_planner', 'kitchen', 'operations_manager', 'warehouse', 'admin', 'sales_head', 'presentation_exec']}
+          visibleRoles={['menu_planner', 'operations_manager', 'warehouse', 'admin', 'sales_head', 'presentation_exec']}
           role={role}>
           <div className="flex items-center justify-between">
             <div>
@@ -577,18 +813,14 @@ export default function InquiryDetail() {
               )}
             </div>
             <div className="flex gap-2">
-              {inquiry.menu_content && (
-                <button onClick={handleDownloadMenu}
-                  className="flex h-8 items-center gap-1.5 rounded-lg border border-gray-200 px-3 text-xs font-medium hover:bg-gray-50">
-                  <Download size={14} /> Download TXT
-                </button>
-              )}
-              {inquiry.menu_file_name && (
-                <button onClick={() => downloadInquiryFile(id!, 'menu', inquiry.menu_file_name)}
-                  className="flex h-8 items-center gap-1.5 rounded-lg border border-gray-200 px-3 text-xs font-medium hover:bg-gray-50">
-                  <Download size={14} /> Download File
-                </button>
-              )}
+              <button onClick={handleMenuView} disabled={!menuFile && !inquiry.menu_content}
+                className="flex h-8 items-center gap-1.5 rounded-lg border border-gray-200 px-3 text-xs font-medium hover:bg-gray-50 disabled:opacity-50">
+                <Eye size={14} /> View
+              </button>
+              <button onClick={handleMenuDownloadAction} disabled={!menuFile && !inquiry.menu_content}
+                className="flex h-8 items-center gap-1.5 rounded-lg border border-gray-200 px-3 text-xs font-medium hover:bg-gray-50 disabled:opacity-50">
+                <Download size={14} /> Download
+              </button>
               {(isAdmin || isMenuPlanner) && (
                 <button onClick={() => setShowMenuUpload(!showMenuUpload)}
                   className="flex h-8 items-center gap-1.5 rounded-lg bg-maroon px-3 text-xs font-bold text-white hover:bg-maroon-dark">
@@ -617,13 +849,19 @@ export default function InquiryDetail() {
       )}
 
       {/* === PRESENTATION SECTION === */}
-      {(presentationFile || isAdmin || isPresentationExec) && (
+      {!isKitchen && (presentationFile || inquiry?.presentation_not_required || isAdmin || isPresentationExec) && (
         <WorkflowSection icon={Presentation} iconColor="text-indigo-500" title="Presentation"
-          visibleRoles={['presentation_exec', 'kitchen', 'operations_manager', 'warehouse', 'admin', 'sales_head', 'menu_planner']}
+          visibleRoles={['presentation_exec', 'operations_manager', 'warehouse', 'admin', 'sales_head', 'menu_planner']}
           role={role}>
           <div className="flex items-center justify-between">
             <div>
-              {presentationFile ? (
+              {inquiry?.presentation_not_required ? (
+                <div className="flex items-center gap-2">
+                  <FileText size={14} className="text-gray-400" />
+                  <span className="text-sm font-medium text-gray-700">Not required</span>
+                  <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-bold text-gray-600">Not Required</span>
+                </div>
+              ) : presentationFile ? (
                 <div className="flex items-center gap-2">
                   <FileText size={14} className="text-emerald-500" />
                   <span className="text-sm font-medium text-gray-900">{presentationFile}</span>
@@ -634,13 +872,28 @@ export default function InquiryDetail() {
               )}
             </div>
             <div className="flex gap-2">
-              {presentationFile && (
-                <button onClick={() => downloadInquiryFile(id!, 'presentation', presentationFile)}
-                  className="flex h-8 items-center gap-1.5 rounded-lg border border-gray-200 px-3 text-xs font-medium hover:bg-gray-50">
-                  <Download size={14} /> Download
+              {inquiry?.presentation_not_required ? (
+                <button onClick={() => presentationNotRequiredMutation.mutate(false)} disabled={presentationNotRequiredMutation.isPending}
+                  className="flex h-8 items-center gap-1.5 rounded-lg border border-gray-300 px-3 text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50">
+                  <RefreshCcw size={14} /> Mark as Required
                 </button>
+              ) : (
+                (isAdmin || isPresentationExec) && (
+                  <button onClick={() => presentationNotRequiredMutation.mutate(true)} disabled={presentationNotRequiredMutation.isPending}
+                    className="flex h-8 items-center gap-1.5 rounded-lg border border-gray-300 px-3 text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50">
+                    <XCircle size={14} /> Not Required
+                  </button>
+                )
               )}
-              {(isAdmin || isPresentationExec) && (
+              <button onClick={handlePresentationView} disabled={!presentationFile}
+                className="flex h-8 items-center gap-1.5 rounded-lg border border-gray-200 px-3 text-xs font-medium hover:bg-gray-50 disabled:opacity-50">
+                <Eye size={14} /> View
+              </button>
+              <button onClick={() => downloadInquiryFile(id!, 'presentation', presentationFile)} disabled={!presentationFile}
+                className="flex h-8 items-center gap-1.5 rounded-lg border border-gray-200 px-3 text-xs font-medium hover:bg-gray-50 disabled:opacity-50">
+                <Download size={14} /> Download
+              </button>
+              {(isAdmin || isPresentationExec) && !inquiry?.presentation_not_required && (
                 <button onClick={() => setShowPresentationUpload(!showPresentationUpload)}
                   className="flex h-8 items-center gap-1.5 rounded-lg bg-maroon px-3 text-xs font-bold text-white hover:bg-maroon-dark">
                   <Upload size={14} /> Upload Presentation
@@ -719,26 +972,66 @@ export default function InquiryDetail() {
                 {meetings.map((mtg) => {
                   const d = new Date(mtg.meeting_at)
                   const done = mtg.status === 'completed'
+                  const confirming = doneMeetingId === mtg.id
                   return (
-                    <div key={mtg.id} className="flex items-start gap-3 rounded-lg border border-gray-100 bg-white p-3">
-                      <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ${done ? 'bg-emerald-100 text-emerald-600' : 'bg-indigo-100 text-indigo-600'}`}>
-                        {done ? <CheckCircle2 size={14} /> : d.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}
+                    <div key={mtg.id} className="rounded-lg border border-gray-100 bg-white p-3">
+                      <div className="flex items-start gap-3">
+                        <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ${done ? 'bg-emerald-100 text-emerald-600' : 'bg-indigo-100 text-indigo-600'}`}>
+                          {done ? <CheckCircle2 size={14} /> : d.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <p className="text-sm font-medium text-gray-900">
+                              {d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                              <span className="ml-1 text-xs font-normal text-gray-400">
+                                · {d.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}
+                              </span>
+                            </p>
+                            {done && mtg.updated_at && (
+                              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+                                Done · {new Date(mtg.updated_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                              </span>
+                            )}
+                          </div>
+                          {mtg.remarks && <p className="mt-0.5 text-xs text-gray-500">{mtg.remarks}</p>}
+                        </div>
+                        {!done && (isAdmin || isPresentationExec) && !confirming && (
+                          <button onClick={() => { setDoneMeetingId(mtg.id); setDoneMeetingRemark('') }}
+                            disabled={completeMeetingMutation.isPending}
+                            className="flex h-7 items-center gap-1 rounded-lg border border-gray-200 px-2 text-[10px] font-medium text-gray-600 hover:bg-emerald-50">
+                            <CheckCircle2 size={11} /> Mark done
+                          </button>
+                        )}
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-gray-900">
-                          {d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                          <span className="ml-1 text-xs font-normal text-gray-400">
-                            · {d.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}
-                          </span>
-                        </p>
-                        {mtg.remarks && <p className="mt-0.5 text-xs text-gray-500">{mtg.remarks}</p>}
-                      </div>
-                      {!done && (isAdmin || isPresentationExec) && (
-                        <button onClick={() => completeMeetingMutation.mutate({ meetingId: mtg.id })}
-                          disabled={completeMeetingMutation.isPending}
-                          className="flex h-7 items-center gap-1 rounded-lg border border-gray-200 px-2 text-[10px] font-medium text-gray-600 hover:bg-emerald-50">
-                          <CheckCircle2 size={11} /> Mark done
-                        </button>
+                      {!done && confirming && (
+                        <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50/50 p-2">
+                          <input
+                            value={doneMeetingRemark}
+                            onChange={(e) => setDoneMeetingRemark(e.target.value)}
+                            placeholder="Add remark before marking done..."
+                            className="h-8 w-full rounded-lg border border-gray-200 bg-white px-2 text-xs"
+                          />
+                          <div className="mt-2 flex justify-end gap-2">
+                            <button
+                              onClick={() => setDoneMeetingId(null)}
+                              className="flex h-7 items-center rounded-lg border border-gray-200 bg-white px-2 text-[10px] font-medium text-gray-600 hover:bg-gray-50"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              onClick={() =>
+                                completeMeetingMutation.mutate(
+                                  { meetingId: mtg.id, remarks: doneMeetingRemark.trim() },
+                                  { onSuccess: () => { setDoneMeetingId(null); setDoneMeetingRemark('') } }
+                                )
+                              }
+                              disabled={!doneMeetingRemark.trim() || completeMeetingMutation.isPending}
+                              className="flex h-7 items-center gap-1 rounded-lg bg-emerald-600 px-2 text-[10px] font-bold text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
+                            >
+                              <CheckCircle2 size={11} /> Confirm done
+                            </button>
+                          </div>
+                        </div>
                       )}
                     </div>
                   )
@@ -749,10 +1042,10 @@ export default function InquiryDetail() {
         </WorkflowSection>
       )}
 
-      {/* === KITCHEN SECTION (operation_handover only) === */}
-      {isOperationHandover && isKitchen && (
-        <WorkflowSection icon={ChefHat} iconColor="text-amber-500" title="Kitchen — Ingredient List"
-          visibleRoles={['kitchen']} role={role}>
+      {/* === RAW MATERIAL SECTION (operation_handover only) — kitchen uploads, THOL/Lalit view === */}
+      {isOperationHandover && (isKitchen || isWarehouse || isOps) && (
+        <WorkflowSection icon={ChefHat} iconColor="text-amber-500" title="Kitchen — Raw Material List"
+          visibleRoles={['kitchen', 'warehouse', 'operations_manager']} role={role}>
           <div className="flex items-center justify-between mb-3">
             <div>
               {ingredientFile ? (
@@ -771,10 +1064,12 @@ export default function InquiryDetail() {
                   <Eye size={14} /> View List
                 </button>
               )}
-              <button onClick={() => setShowIngredientUpload(!showIngredientUpload)}
-                className="flex h-8 items-center gap-1.5 rounded-lg bg-amber-500 px-3 text-xs font-bold text-white hover:bg-amber-600">
-                <Upload size={14} /> {ingredientFile ? 'Re-upload' : 'Upload Ingredient List'}
-              </button>
+              {isKitchen && (
+                <button onClick={() => setShowIngredientUpload(!showIngredientUpload)}
+                  className="flex h-8 items-center gap-1.5 rounded-lg bg-amber-500 px-3 text-xs font-bold text-white hover:bg-amber-600">
+                  <Upload size={14} /> {ingredientFile ? 'Re-upload' : 'Upload Ingredient List'}
+                </button>
+              )}
             </div>
           </div>
           {ingredients.length > 0 && (
@@ -800,46 +1095,15 @@ export default function InquiryDetail() {
                         }`}>{ing.priority}</span>
                       </td>
                       <td className="px-3 py-2">
-                        <button onClick={() => setIngredients(ingredients.filter((_, idx) => idx !== i))}
-                          className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-500"><Trash2 size={12} /></button>
+                        {isKitchen && (
+                          <button onClick={() => setIngredients(ingredients.filter((_, idx) => idx !== i))}
+                            className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-500"><Trash2 size={12} /></button>
+                        )}
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-            </div>
-          )}
-          {showIngredientUpload && (
-            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
-              <div className="grid grid-cols-4 gap-2">
-                <input placeholder="Item name" value={newIngredient.item} onChange={(e) => setNewIngredient({ ...newIngredient, item: e.target.value })}
-                  className="h-8 rounded border border-gray-200 bg-white px-2 text-xs" />
-                <input placeholder="Qty" value={newIngredient.qty} onChange={(e) => setNewIngredient({ ...newIngredient, qty: e.target.value })}
-                  className="h-8 rounded border border-gray-200 bg-white px-2 text-xs" />
-                <select value={newIngredient.unit} onChange={(e) => setNewIngredient({ ...newIngredient, unit: e.target.value })}
-                  className="h-8 rounded border border-gray-200 bg-white px-2 text-xs">
-                  <option>kg</option><option>L</option><option>pcs</option><option>g</option><option>packs</option>
-                </select>
-                <select value={newIngredient.priority} onChange={(e) => setNewIngredient({ ...newIngredient, priority: e.target.value })}
-                  className="h-8 rounded border border-gray-200 bg-white px-2 text-xs">
-                  <option>High</option><option>Medium</option><option>Low</option>
-                </select>
-              </div>
-              <div className="mt-2 flex gap-2">
-                <button onClick={() => {
-                  if (newIngredient.item && newIngredient.qty) {
-                    setIngredients([...ingredients, newIngredient])
-                    setNewIngredient({ item: '', qty: '', unit: 'kg', priority: 'Medium' })
-                    toast.success('Ingredient added')
-                  }
-                }} className="flex h-8 items-center gap-1 rounded-lg bg-emerald-500 px-3 text-xs font-bold text-white hover:bg-emerald-600">
-                  <Plus size={12} /> Add Row
-                </button>
-                <button onClick={handleIngredientUpload}
-                  className="flex h-8 items-center gap-1 rounded-lg bg-maroon px-3 text-xs font-bold text-white hover:bg-maroon-dark">
-                  <Upload size={12} /> Upload Excel
-                </button>
-              </div>
             </div>
           )}
         </WorkflowSection>
@@ -1069,7 +1333,7 @@ export default function InquiryDetail() {
           visibleRoles={['admin']} role={role}>
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
             <ReportCard label="Menu" value={menuFile ? 'Uploaded' : 'Pending'} color={menuFile ? 'text-emerald-600' : 'text-amber-600'} />
-            <ReportCard label="Presentation" value={presentationFile ? 'Uploaded' : 'Pending'} color={presentationFile ? 'text-emerald-600' : 'text-amber-600'} />
+            <ReportCard label="Presentation" value={inquiry?.presentation_not_required ? 'Not Required' : presentationFile ? 'Uploaded' : 'Pending'} color={inquiry?.presentation_not_required ? 'text-gray-500' : presentationFile ? 'text-emerald-600' : 'text-amber-600'} />
             <ReportCard label="Ingredients" value={`${ingredients.length} items`} color={ingredients.length > 0 ? 'text-emerald-600' : 'text-amber-600'} />
             <ReportCard label="Dispatched" value={`${dispatchItems.filter((d) => d.status === 'Dispatched').length}/${dispatchItems.length}`} color="text-blue-600" />
           </div>
@@ -1101,6 +1365,16 @@ export default function InquiryDetail() {
       )}
 
       {/* === VIEW MODALS === */}
+      <ViewModal isOpen={viewMenu} onClose={() => setViewMenu(false)} title="Menu">
+        {inquiry.menu_content ? (
+          <pre className="max-h-[60vh] overflow-y-auto whitespace-pre-wrap rounded-lg border border-gray-100 bg-gray-50 p-4 text-xs text-gray-700">
+            {inquiry.menu_content}
+          </pre>
+        ) : (
+          <p className="py-8 text-center text-sm text-gray-400">No menu uploaded yet</p>
+        )}
+      </ViewModal>
+
       <ViewModal isOpen={viewIngredients} onClose={() => setViewIngredients(false)} title="Ingredient List">
         {ingredients.length > 0 ? (
           <table className="w-full">

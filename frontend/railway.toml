@@ -1,0 +1,6 @@
+[build]
+builder = "DOCKERFILE"
+dockerfile = "Dockerfile"
+
+[deploy]
+healthcheck_path = "/"

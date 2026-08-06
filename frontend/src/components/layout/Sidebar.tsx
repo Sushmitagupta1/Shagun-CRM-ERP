@@ -15,6 +15,7 @@ import {
   ClipboardList,
   Presentation,
   Truck,
+  BookOpen,
 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useSidebarStore } from '@/store/sidebarStore'
@@ -25,19 +26,21 @@ interface NavItem {
   label: string
   icon: React.ComponentType<{ size?: number; className?: string }>
   roles?: string[]
+  excludeRoles?: string[]
 }
 
 const navItems: NavItem[] = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin'] },
   { to: '/sales', label: 'My Pipeline', icon: ClipboardList, roles: ['sales_head'] },
   { to: '/menu', label: 'Menu Planning', icon: ChefHat, roles: ['menu_planner'] },
+  { to: '/menu-library', label: 'Menu Library', icon: BookOpen, roles: ['menu_planner', 'admin'] },
   { to: '/presentations', label: 'Presentations', icon: Presentation, roles: ['presentation_exec'] },
   { to: '/operations', label: 'Operations', icon: Truck, roles: ['operations_manager'] },
   { to: '/kitchen', label: 'Kitchen', icon: ChefHat, roles: ['kitchen'] },
   { to: '/warehouse', label: 'Warehouse (THOL)', icon: Package, roles: ['warehouse'] },
   { to: '/users', label: 'User Management', icon: Users, roles: ['admin'] },
   { to: '/finance', label: 'Finance & Settlements', icon: Wallet, roles: ['admin'] },
-  { to: '/inquiries', label: 'Inquiries', icon: FileText },
+  { to: '/inquiries', label: 'Inquiries', icon: FileText, excludeRoles: ['operations_manager'] },
   { to: '/calendar', label: 'Calendar', icon: Calendar },
   { to: '/notifications', label: 'Notifications', icon: Bell },
   { to: '/reports', label: 'Reports', icon: BarChart3, roles: ['admin'] },
@@ -85,7 +88,9 @@ function NavItems() {
   const location = useLocation()
 
   const filteredItems = navItems.filter(
-    (item) => !item.roles || item.roles.includes(user?.role.name ?? '')
+    (item) =>
+      (!item.roles || item.roles.includes(user?.role.name ?? '')) &&
+      !item.excludeRoles?.includes(user?.role.name ?? '')
   )
 
   // Close sidebar on route change (mobile)

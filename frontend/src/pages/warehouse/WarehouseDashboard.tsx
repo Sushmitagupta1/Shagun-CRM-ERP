@@ -11,7 +11,7 @@ import {
   AlertTriangle,
   ArrowUpFromLine,
   ArrowDownToLine,
-  MoreVertical,
+  Eye,
   ArrowRight,
   Truck,
 } from 'lucide-react'
@@ -124,8 +124,9 @@ export default function WarehouseDashboard() {
                             <ArrowUpFromLine size={14} />
                           </button>
                         )}
-                        <button className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
-                          <MoreVertical size={14} />
+                        <button onClick={() => navigate(`/inquiries/${d.id}`)}
+                          className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-blue-600" title="View">
+                          <Eye size={14} />
                         </button>
                       </div>
                     </td>

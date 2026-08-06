@@ -3,10 +3,10 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import PageHeader from '@/components/common/PageHeader'
-import { getInquiries } from '@/api/inquiries'
+import { getCalendarData, getInquiries } from '@/api/inquiries'
 import type { Inquiry } from '@/types/inquiry'
 import { INQUIRY_STATUSES } from '@/lib/constants'
-import { ChevronLeft, ChevronRight, Users, ExternalLink } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Users, ExternalLink, Calendar as CalendarIcon, CheckCircle2, Clock } from 'lucide-react'
 
 function getDaysInMonth(year: number, month: number) {
   return new Date(year, month + 1, 0).getDate()
@@ -21,14 +21,14 @@ const dayShort = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
 
 const CONFIRMED_STATUSES = ['client_confirmation', 'advance_receive', 'operation_handover']
 
+const toDateStr = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
 export default function CalendarPage() {
   const today = new Date()
   const navigate = useNavigate()
   const [currentMonth, setCurrentMonth] = useState(today.getMonth())
   const [currentYear, setCurrentYear] = useState(today.getFullYear())
-  const [selectedDate, setSelectedDate] = useState<string>(
-    `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
-  )
+  const [selectedDate, setSelectedDate] = useState<string>(toDateStr(today))
 
   const daysInMonth = getDaysInMonth(currentYear, currentMonth)
   const firstDay = getFirstDayOfMonth(currentYear, currentMonth)
@@ -36,16 +36,18 @@ export default function CalendarPage() {
   const monthEnd = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`
 
   const { data, isLoading } = useQuery({
-    queryKey: ['calendar-events', currentYear, currentMonth],
-    queryFn: () => getInquiries({ per_page: 100, event_date_from: monthStart, event_date_to: monthEnd }),
+    queryKey: ['calendar-data', currentYear, currentMonth],
+    queryFn: () => getCalendarData(monthStart, monthEnd),
   })
 
-  const events: Inquiry[] = (data?.items ?? []).filter((i) => i.status !== 'cancelled')
+  const events: Inquiry[] = (data?.events ?? []).filter((i) => i.status !== 'cancelled')
+  const followups = data?.followups ?? []
+  const meetings = data?.meetings ?? []
 
   const upTo = new Date(today)
   upTo.setDate(upTo.getDate() + 90)
-  const upStart = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
-  const upEnd = `${upTo.getFullYear()}-${String(upTo.getMonth() + 1).padStart(2, '0')}-${String(upTo.getDate()).padStart(2, '0')}`
+  const upStart = toDateStr(today)
+  const upEnd = toDateStr(upTo)
 
   const { data: upcomingData } = useQuery({
     queryKey: ['upcoming-events', upStart, upEnd],
@@ -70,19 +72,24 @@ export default function CalendarPage() {
   const goToToday = () => {
     setCurrentMonth(today.getMonth())
     setCurrentYear(today.getFullYear())
-    setSelectedDate(`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`)
+    setSelectedDate(toDateStr(today))
   }
 
-  const getEventsForDate = (day: number) => {
+  const getDayItems = (day: number) => {
     const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-    return events.filter((e) => e.event_date === dateStr)
+    return {
+      events: events.filter((e) => e.event_date === dateStr),
+      followups: followups.filter((f) => f.follow_up_date === dateStr),
+      meetings: meetings.filter((m) => toDateStr(new Date(m.meeting_at)) === dateStr),
+    }
   }
 
-  const selectedEvents = (() => {
+  const selectedItems = (() => {
     const parts = selectedDate.split('-')
-    const day = parseInt(parts[2])
-    return getEventsForDate(day)
+    return getDayItems(parseInt(parts[2]))
   })()
+
+  const selectedCount = selectedItems.events.length + selectedItems.followups.length + selectedItems.meetings.length
 
   const isToday = (day: number) => {
     return day === today.getDate() && currentMonth === today.getMonth() && currentYear === today.getFullYear()
@@ -90,11 +97,14 @@ export default function CalendarPage() {
 
   const isConfirmed = (event: Inquiry) => CONFIRMED_STATUSES.includes(event.status)
 
+  const formatMeetingTime = (iso: string) =>
+    new Date(iso).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Calendar"
-        subtitle="View events by date"
+        subtitle="Events, follow-ups & meetings by date"
         action={
           <button
             onClick={goToToday}
@@ -142,10 +152,16 @@ export default function CalendarPage() {
             ))}
             {Array.from({ length: daysInMonth }).map((_, i) => {
               const day = i + 1
-              const dayEvents = getEventsForDate(day)
+              const dayItems = getDayItems(day)
               const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
               const isSelected = dateStr === selectedDate
               const todayFlag = isToday(day)
+
+              const cells = [
+                ...dayItems.meetings.map((m) => ({ key: `m-${m.id}`, cls: 'bg-blue-100 text-blue-700', label: `MTG · ${m.client_name}` })),
+                ...dayItems.followups.map((f) => ({ key: `f-${f.id}`, cls: 'bg-gold/15 text-amber-900', label: `FU · ${f.client_name}` })),
+                ...dayItems.events.map((e) => ({ key: `e-${e.id}`, cls: isConfirmed(e) ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700', label: e.client_name })),
+              ]
 
               return (
                 <motion.div
@@ -166,18 +182,13 @@ export default function CalendarPage() {
                     {day}
                   </span>
                   <div className="mt-0.5 space-y-0.5">
-                    {dayEvents.slice(0, 2).map((e) => (
-                      <div
-                        key={e.id}
-                        className={`truncate rounded px-1 py-0.5 text-[9px] font-medium ${
-                          isConfirmed(e) ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
-                        }`}
-                      >
-                        {e.client_name}
+                    {cells.slice(0, 2).map((c) => (
+                      <div key={c.key} className={`truncate rounded px-1 py-0.5 text-[9px] font-medium ${c.cls}`}>
+                        {c.label}
                       </div>
                     ))}
-                    {dayEvents.length > 2 && (
-                      <span className="text-[9px] text-gray-400">+{dayEvents.length - 2} more</span>
+                    {cells.length > 2 && (
+                      <span className="text-[9px] text-gray-400">+{cells.length - 2} more</span>
                     )}
                   </div>
                 </motion.div>
@@ -186,7 +197,7 @@ export default function CalendarPage() {
           </div>
         </motion.div>
 
-        {/* Selected Date Events */}
+        {/* Selected Date Panel */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -202,7 +213,7 @@ export default function CalendarPage() {
               })}
             </h3>
             <p className="text-xs text-gray-500">
-              {isLoading ? 'Loading…' : `${selectedEvents.length} event${selectedEvents.length !== 1 ? 's' : ''}`}
+              {isLoading ? 'Loading…' : `${selectedCount} item${selectedCount !== 1 ? 's' : ''} scheduled`}
             </p>
           </div>
 
@@ -211,50 +222,115 @@ export default function CalendarPage() {
               <div className="flex justify-center py-8">
                 <div className="h-6 w-6 animate-spin rounded-full border-2 border-maroon border-t-transparent" />
               </div>
-            ) : selectedEvents.length === 0 ? (
+            ) : selectedCount === 0 ? (
               <div className="py-8 text-center">
-                <p className="text-sm text-gray-400">No events on this date</p>
+                <p className="text-sm text-gray-400">Nothing scheduled on this date</p>
               </div>
             ) : (
-              selectedEvents.map((event, i) => {
-                const statusMeta = INQUIRY_STATUSES[event.status as keyof typeof INQUIRY_STATUSES]
-                return (
+              <>
+                {selectedItems.meetings.map((m, i) => (
                   <motion.div
-                    key={event.id}
+                    key={m.id}
                     initial={{ opacity: 0, x: 10 }}
                     animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: i * 0.1 }}
-                    className="rounded-lg border border-gray-100 p-4 transition-colors hover:border-gray-200"
+                    transition={{ delay: i * 0.05 }}
+                    className="rounded-lg border border-blue-100 p-4 transition-colors hover:border-blue-200"
                   >
                     <div className="mb-2 flex items-start justify-between">
                       <div>
-                        <p className="text-sm font-semibold text-gray-900">{event.client_name}</p>
-                        <span className="mt-0.5 inline-block rounded-full bg-maroon/10 px-2 py-0.5 text-[10px] font-medium text-maroon">
-                          {event.event_type}
+                        <div className="flex items-center gap-1.5">
+                          <Clock size={12} className="text-blue-600" />
+                          <p className="text-sm font-semibold text-gray-900">{m.client_name}</p>
+                        </div>
+                        <span className="mt-1 inline-block rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-700">
+                          Meeting · {formatMeetingTime(m.meeting_at)}
                         </span>
                       </div>
-                      <div className="flex flex-col items-end gap-1">
-                        {statusMeta && (
-                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${statusMeta.color}`}>
-                            {statusMeta.label}
-                          </span>
-                        )}
-                        <button
-                          onClick={() => navigate(`/inquiries/${event.id}`)}
-                          className="flex items-center gap-1 text-[10px] font-medium text-maroon hover:underline"
-                        >
-                          <ExternalLink size={11} /> View
-                        </button>
-                      </div>
+                      <button
+                        onClick={() => navigate(`/inquiries/${m.inquiry_id}`)}
+                        className="flex items-center gap-1 text-[10px] font-medium text-maroon hover:underline"
+                      >
+                        <ExternalLink size={11} /> View
+                      </button>
                     </div>
-                    <div className="space-y-1.5">
-                      <div className="flex items-center gap-2 text-xs text-gray-600">
-                        <Users size={12} className="text-gray-400" /> {event.pax ?? '—'} guests
-                      </div>
-                    </div>
+                    {m.remarks && <p className="text-xs text-gray-500">{m.remarks}</p>}
                   </motion.div>
-                )
-              })
+                ))}
+
+                {selectedItems.followups.map((f, i) => (
+                  <motion.div
+                    key={f.id}
+                    initial={{ opacity: 0, x: 10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: i * 0.05 }}
+                    className="rounded-lg border border-gold/40 p-4 transition-colors hover:border-gold"
+                  >
+                    <div className="mb-2 flex items-start justify-between">
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <CalendarIcon size={12} className="text-amber-700" />
+                          <p className="text-sm font-semibold text-gray-900">{f.client_name}</p>
+                        </div>
+                        <span className="mt-1 inline-block rounded-full bg-gold/15 px-2 py-0.5 text-[10px] font-medium text-amber-900">
+                          Follow-up{f.is_done ? ' · Done' : ''}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => navigate(`/inquiries/${f.inquiry_id}`)}
+                        className="flex items-center gap-1 text-[10px] font-medium text-maroon hover:underline"
+                      >
+                        <ExternalLink size={11} /> View
+                      </button>
+                    </div>
+                    {f.remarks && <p className="text-xs text-gray-500">{f.remarks}</p>}
+                    {f.is_done && (
+                      <p className="mt-1 flex items-center gap-1 text-[10px] font-medium text-emerald-600">
+                        <CheckCircle2 size={11} /> Completed
+                      </p>
+                    )}
+                  </motion.div>
+                ))}
+
+                {selectedItems.events.map((event, i) => {
+                  const statusMeta = INQUIRY_STATUSES[event.status as keyof typeof INQUIRY_STATUSES]
+                  return (
+                    <motion.div
+                      key={event.id}
+                      initial={{ opacity: 0, x: 10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: i * 0.05 }}
+                      className="rounded-lg border border-gray-100 p-4 transition-colors hover:border-gray-200"
+                    >
+                      <div className="mb-2 flex items-start justify-between">
+                        <div>
+                          <p className="text-sm font-semibold text-gray-900">{event.client_name}</p>
+                          <span className="mt-0.5 inline-block rounded-full bg-maroon/10 px-2 py-0.5 text-[10px] font-medium text-maroon">
+                            {event.event_type}
+                          </span>
+                        </div>
+                        <div className="flex flex-col items-end gap-1">
+                          {statusMeta && (
+                            <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${statusMeta.color}`}>
+                              {statusMeta.label}
+                            </span>
+                          )}
+                          <button
+                            onClick={() => navigate(`/inquiries/${event.id}`)}
+                            className="flex items-center gap-1 text-[10px] font-medium text-maroon hover:underline"
+                          >
+                            <ExternalLink size={11} /> View
+                          </button>
+                        </div>
+                      </div>
+                      <div className="space-y-1.5">
+                        <div className="flex items-center gap-2 text-xs text-gray-600">
+                          <Users size={12} className="text-gray-400" /> {event.pax ?? '—'} guests
+                        </div>
+                      </div>
+                    </motion.div>
+                  )
+                })}
+              </>
             )}
           </div>
 

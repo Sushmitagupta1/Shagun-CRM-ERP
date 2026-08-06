@@ -36,7 +36,8 @@ export default function PresentationDashboard() {
   const upcomingMeetings = meetings.filter((m) => new Date(m.meeting_at).toLocaleDateString('en-IN') !== todayKey)
   const { data: inquiriesData } = useInquiries({ per_page: 10 })
   const assignedInquiries = inquiriesData?.items?.filter(
-    (i) => i.status !== 'advance_receive' && i.status !== 'operation_handover'
+    (i) => i.status !== 'advance_receive' && i.status !== 'operation_handover' && i.status !== 'cancelled'
+      && i.presentation_not_required !== true && !i.presentation_file_name
   ) ?? []
 
   // AI Chat
@@ -114,7 +115,7 @@ export default function PresentationDashboard() {
         >
           <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3.5">
             <h3 className="flex items-center gap-2 text-sm font-bold text-gray-900">
-              <Clock size={14} className="text-amber-500" /> Today's Meetings
+              <Clock size={14} className="text-amber-500" /> Upcoming Meetings
             </h3>
             <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700">
               {meetings.filter((m) => m.status === 'scheduled').length} pending
@@ -130,6 +131,7 @@ export default function PresentationDashboard() {
                 {todayMeetings.map((mtg, i) => {
                   const d = new Date(mtg.meeting_at)
                   const timeStr = d.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })
+                  const dateStr = d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
                   const done = mtg.status === 'completed'
                   return (
                     <motion.div
@@ -146,7 +148,7 @@ export default function PresentationDashboard() {
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-xs font-semibold text-gray-900">{mtg.client_name}</p>
-                        <p className="text-[10px] text-gray-400">{mtg.event_type} · {timeStr}</p>
+                        <p className="text-[10px] text-gray-400">{mtg.event_type} · {dateStr} · {timeStr}</p>
                         {mtg.remarks && <p className="truncate text-[10px] text-gray-400">{mtg.remarks}</p>}
                       </div>
                     </motion.div>
@@ -173,11 +175,11 @@ export default function PresentationDashboard() {
                       <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold ${
                         done ? 'bg-emerald-100 text-emerald-600' : 'bg-blue-100 text-blue-600'
                       }`}>
-                        {done ? <CheckCircle2 size={14} /> : dateStr}
+                        {done ? <CheckCircle2 size={14} /> : timeStr.split(':')[0]}
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-xs font-semibold text-gray-900">{mtg.client_name}</p>
-                        <p className="text-[10px] text-gray-400">{mtg.event_type} · {timeStr}</p>
+                        <p className="text-[10px] text-gray-400">{mtg.event_type} · {dateStr} · {timeStr}</p>
                         {mtg.remarks && <p className="truncate text-[10px] text-gray-400">{mtg.remarks}</p>}
                       </div>
                     </motion.div>
@@ -202,10 +204,6 @@ export default function PresentationDashboard() {
         >
           <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3">
             <h3 className="text-sm font-bold text-gray-900">Inquiry Details</h3>
-            <button onClick={() => navigate('/inquiries')}
-              className="rounded-lg bg-gold px-3 py-1.5 text-[10px] font-bold text-white shadow transition-colors hover:bg-gold-hover">
-              View Inquiry
-            </button>
           </div>
           <div className="overflow-y-auto" style={{ maxHeight: 280 }}>
             <table className="w-full">

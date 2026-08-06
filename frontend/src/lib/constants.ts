@@ -1,12 +1,10 @@
 export const INQUIRY_STATUSES = {
-  new: { label: 'New', color: 'bg-blue-100 text-blue-800' },
-  follow_up: { label: 'Follow Up', color: 'bg-amber-100 text-amber-800' },
-  menu_ready: { label: 'Menu Ready', color: 'bg-purple-100 text-purple-800' },
-  presentation_sent: { label: 'Presentation Sent', color: 'bg-indigo-100 text-indigo-800' },
-  negotiation: { label: 'Negotiation', color: 'bg-amber-100 text-amber-800' },
-  confirmed: { label: 'Confirmed', color: 'bg-emerald-100 text-emerald-800' },
-  completed: { label: 'Completed', color: 'bg-emerald-100 text-emerald-800' },
-  cancelled: { label: 'Cancelled', color: 'bg-rose-100 text-rose-800' },
+  new_inquiry: { label: 'New Inquiry', color: 'bg-blue-100 text-blue-800' },
+  followup: { label: 'Follow-up', color: 'bg-amber-100 text-amber-800' },
+  menu_sent: { label: 'Menu Sent', color: 'bg-indigo-100 text-indigo-800' },
+  client_confirmation: { label: 'Client Confirmation', color: 'bg-purple-100 text-purple-800' },
+  advance_receive: { label: 'Advance Received', color: 'bg-emerald-100 text-emerald-800' },
+  operation_handover: { label: 'Operation Handover', color: 'bg-teal-100 text-teal-800' },
 } as const
 
 export const PAYMENT_STATUSES = {
@@ -22,9 +20,9 @@ export const SETTLEMENT_STATUSES = {
 
 export const ROLE_LABELS: Record<string, string> = {
   admin: 'Administrator',
-  sales_head: 'Sales Head',
-  menu_planner: 'Menu Planner',
-  presentation_exec: 'Presentation Executive',
+  sales_head: 'Catering Sales Manager',
+  menu_planner: 'Data Entry Operator',
+  presentation_exec: 'Event Manager',
   operations_manager: 'Operations Manager',
   kitchen: 'Kitchen',
   warehouse: 'Warehouse',

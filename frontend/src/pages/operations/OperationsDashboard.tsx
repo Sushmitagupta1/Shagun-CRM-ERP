@@ -1,36 +1,22 @@
+import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { useOperationsKPIs } from '@/hooks/useDashboard'
 import { useInquiries } from '@/hooks/useInquiries'
 import { useAuth } from '@/hooks/useAuth'
 import { useNavigate } from 'react-router-dom'
-import { toast } from 'sonner'
 import PageHeader from '@/components/common/PageHeader'
-import StatusPill from '@/components/common/StatusPill'
 import { KPICardSkeleton } from '@/components/common/Skeleton'
-import { INQUIRY_STATUSES } from '@/lib/constants'
+import InventoryPanelModal from '@/components/inventory/InventoryPanelModal'
+import { uploadInventoryMovementFile } from '@/api/inquiries'
+import type { Inquiry } from '@/types/inquiry'
+import { toast } from 'sonner'
 import {
-  Calendar,
-  ChefHat,
-  Truck,
-  Package,
-  CheckCircle2,
-  ArrowRightLeft,
-  Image,
-  Plus,
   Clock,
-  DollarSign,
   Building2,
-  MoreVertical,
+  Eye,
+  Upload,
+  FileSpreadsheet,
 } from 'lucide-react'
-
-const eventTimeline = [
-  { stage: 'Planning', days: '7 days before', icon: Calendar, color: '#3B82F6', completed: true },
-  { stage: 'Kitchen', days: '7 days before', icon: ChefHat, color: '#F59E0B', completed: true },
-  { stage: 'Warehouse', days: '7 days before', icon: Package, color: '#8B5CF6', completed: false },
-  { stage: 'Execution', days: '1 day before', icon: Truck, color: '#EF4444', completed: false },
-  { stage: 'Completion', days: 'Same day', icon: CheckCircle2, color: '#10B981', completed: false },
-  { stage: 'Settlement', days: 'Same day', icon: DollarSign, color: '#6B7280', completed: false },
-]
 
 const todayEvents = [
   { id: '1', name: 'Sharma Wedding Reception', time: '6:00 PM', venue: 'Grand Palace Banquet' },
@@ -38,27 +24,32 @@ const todayEvents = [
   { id: '3', name: 'Mehta Family Birthday', time: '12:00 PM', venue: 'Hyatt Regency' },
 ]
 
-const vendorFinancials = [
-  { label: 'Pending Payments', value: '₹2,45,000', color: 'text-amber-600' },
-  { label: 'Paid This Month', value: '₹5,80,000', color: 'text-emerald-600' },
-  { label: 'Upcoming Dues', value: '₹1,20,000', color: 'text-rose-600' },
-]
-
 export default function OperationsDashboard() {
   const { user } = useAuth()
   const navigate = useNavigate()
   const firstName = user?.full_name?.split(' ')[0] ?? 'Operations'
   const { data: kpis, isLoading } = useOperationsKPIs()
-  const { data: inquiriesData } = useInquiries({ status: 'confirmed', per_page: 10 })
+  const { data: inquiriesData } = useInquiries({ status: 'operation_handover', per_page: 10 })
   const confirmedEvents = inquiriesData?.items ?? []
+  const [inventoryNames, setInventoryNames] = useState<Record<string, string>>({})
+  const [uploadingId, setUploadingId] = useState<string | null>(null)
+  const [selectedInquiry, setSelectedInquiry] = useState<Inquiry | null>(null)
 
-  const quickActions = [
-    { label: 'Create Vendor', icon: Plus, action: () => toast.success('Vendor form opened') },
-    { label: 'Warehouse', icon: Package, action: () => navigate('/warehouse') },
-    { label: 'Upload Photos', icon: Image, action: () => toast.info('Select an event to upload photos') },
-    { label: 'Transfer', icon: ArrowRightLeft, action: () => toast.info('Transfer panel opened') },
-    { label: 'Complete', icon: CheckCircle2, action: () => toast.info('Select an event to complete') },
-  ]
+  const handleInventoryUpload = async (inqId: string, file?: File) => {
+    if (!file) return
+    setUploadingId(inqId)
+    try {
+      const res = await uploadInventoryMovementFile(inqId, 'received', file)
+      setInventoryNames((prev) => ({ ...prev, [inqId]: file.name }))
+      toast.success(`Received: ${res.entries_created} entries added`)
+    } catch (err) {
+      const message =
+        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Upload failed'
+      toast.error(message)
+    } finally {
+      setUploadingId(null)
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -69,11 +60,11 @@ export default function OperationsDashboard() {
         {isLoading
           ? Array.from({ length: 5 }).map((_, i) => <KPICardSkeleton key={i} />)
           : [
-              { label: 'Confirmed Events', value: kpis?.upcoming_events ?? 0, color: 'text-blue-600', to: '/inquiries' },
-              { label: 'Pending Tasks', value: kpis?.todays_events ?? 0, color: 'text-amber-600', to: '/inquiries' },
-              { label: 'Vendors Active', value: kpis?.pending_kitchen_plans ?? 0, color: 'text-rose-600', to: '/inquiries' },
-              { label: 'Budget Utilization', value: kpis?.pending_vendor_requests ?? 0, color: 'text-purple-600', to: '/finance' },
-              { label: 'Completion Rate', value: kpis?.pending_warehouse_requests ?? 0, color: 'text-emerald-600', to: '/reports' },
+              { label: 'Upcoming Events', value: kpis?.upcoming_events ?? 0, color: 'text-blue-600', to: '/operations' },
+              { label: 'Pending Tasks', value: kpis?.todays_events ?? 0, color: 'text-amber-600', to: '/operations' },
+              { label: 'Vendors Active', value: kpis?.pending_kitchen_plans ?? 0, color: 'text-rose-600', to: '/operations' },
+              { label: 'Budget Utilization', value: kpis?.pending_vendor_requests ?? 0, color: 'text-purple-600', to: '/operations' },
+              { label: 'Completion Rate', value: kpis?.pending_warehouse_requests ?? 0, color: 'text-emerald-600', to: '/operations' },
             ].map((kpi, i) => (
               <motion.div
                 key={kpi.label}
@@ -90,44 +81,8 @@ export default function OperationsDashboard() {
             ))}
       </div>
 
-      {/* Middle Row — 3 Columns: Event Pipeline | Today's Schedule | Vendor Financials */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        {/* Event Pipeline Step-Tracker */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.3 }}
-          className="rounded-xl border border-gray-100 bg-white p-5 shadow-md"
-          style={{ minHeight: 320 }}
-        >
-          <h3 className="mb-4 text-sm font-bold text-gray-900">Event Pipeline</h3>
-          <div className="relative flex flex-col gap-0">
-            {/* Vertical line */}
-            <div className="absolute left-[11px] top-3 bottom-3 w-px bg-gray-200" />
-            {eventTimeline.map((step, i) => (
-              <motion.div
-                key={step.stage}
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.4 + i * 0.08 }}
-                className="relative flex items-center gap-3 py-2.5"
-              >
-                <div
-                  className={`relative z-10 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white ${
-                    step.completed ? 'bg-emerald-500' : 'bg-blue-100 text-blue-800'
-                  }`}
-                >
-                  {step.completed ? <CheckCircle2 size={12} /> : i + 1}
-                </div>
-                <div className="flex-1">
-                  <p className="text-xs font-semibold text-gray-900">{step.stage}</p>
-                  <p className="text-[10px] text-gray-400">{step.days}</p>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </motion.div>
-
+      {/* Middle Row — Today's Schedule */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-1">
         {/* Today's Events Schedule */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -156,109 +111,77 @@ export default function OperationsDashboard() {
             ))}
           </div>
         </motion.div>
-
-        {/* Vendor Financial Summary */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.5 }}
-          className="rounded-xl border border-gray-100 bg-white p-6 shadow-md"
-          style={{ minHeight: 320 }}
-        >
-          <h3 className="mb-5 text-sm font-bold text-gray-900">Vendor Financial Summary</h3>
-          <div className="space-y-4">
-            {vendorFinancials.map((item, i) => (
-              <motion.div
-                key={item.label}
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.6 + i * 0.08 }}
-                className="flex items-center justify-between border-b border-gray-100 pb-4 last:border-0 last:pb-0"
-              >
-                <span className="text-sm text-gray-500">{item.label}</span>
-                <span className={`text-lg font-bold tabular-nums ${item.color}`}>{item.value}</span>
-              </motion.div>
-            ))}
-          </div>
-        </motion.div>
       </div>
 
-      {/* Bottom Row — Quick Actions (5 cols) + Events Table (7 cols) */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-        {/* Quick Action Control Bar */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.6 }}
-          className="rounded-xl border border-gray-100 bg-white p-5 shadow-md lg:col-span-5"
-          style={{ minHeight: 260 }}
-        >
-          <h3 className="mb-4 text-sm font-bold text-gray-900">Quick Actions</h3>
-          <div className="grid grid-cols-3 gap-3">
-            {quickActions.map((action, i) => (
-              <motion.button
-                key={action.label}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.7 + i * 0.06 }}
-                whileHover={{ y: -2 }}
-                onClick={action.action}
-                className="flex flex-col items-center gap-2 rounded-[10px] border border-gray-200 bg-gray-50 p-3.5 text-center transition-colors hover:bg-gray-100"
-              >
-                <div className="flex h-[54px] w-[54px] items-center justify-center rounded-[10px] border border-gray-200 bg-white">
-                  <action.icon size={22} className="text-gold" />
-                </div>
-                <span className="text-[11px] font-semibold text-gray-700">{action.label}</span>
-              </motion.button>
-            ))}
-          </div>
-        </motion.div>
-
+      {/* Bottom Row — Upcoming Events Table */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-1">
         {/* Recent Events Table */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.7 }}
-          className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-md lg:col-span-7"
+          className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-md"
           style={{ minHeight: 260 }}
         >
           <div className="border-b border-gray-100 px-5 py-3">
-            <h3 className="text-sm font-bold text-gray-900">Confirmed Events</h3>
+            <h3 className="text-sm font-bold text-gray-900">Upcoming Events</h3>
           </div>
           <div className="overflow-y-auto" style={{ height: 226 }}>
             <table className="w-full">
               <thead>
                 <tr className="border-b border-gray-200 bg-gray-50">
-                  {['Client', 'Event', 'Date', 'Pax', 'Status', ''].map((h) => (
+                  {['Client Name', 'Number', 'Event Type', 'Function Date', 'Pax', 'Remark', 'Actions'].map((h) => (
                     <th key={h + Math.random()} className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-gray-500">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {confirmedEvents.slice(0, 5).map((inq) => (
-                  <tr key={inq.id} className="border-b border-gray-50 transition-colors hover:bg-gray-50">
-                    <td className="whitespace-nowrap px-4 py-3 text-xs font-medium text-gray-900">{inq.client_name}</td>
-                    <td className="whitespace-nowrap px-4 py-3 text-xs text-gray-600">{inq.event_type}</td>
-                    <td className="whitespace-nowrap px-4 py-3 text-xs text-gray-600">{inq.event_date ?? '—'}</td>
-                    <td className="whitespace-nowrap px-4 py-3 text-xs text-gray-600">{inq.pax ?? '—'}</td>
-                    <td className="whitespace-nowrap px-4 py-3">
-                      <StatusPill
-                        label={INQUIRY_STATUSES[inq.status as keyof typeof INQUIRY_STATUSES]?.label ?? inq.status}
-                        color={INQUIRY_STATUSES[inq.status as keyof typeof INQUIRY_STATUSES]?.color ?? 'bg-gray-100 text-gray-800'}
-                      />
-                    </td>
-                    <td className="px-4 py-3">
-                      <button className="rounded p-1 text-gray-400 hover:bg-gray-100">
-                        <MoreVertical size={14} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {confirmedEvents.slice(0, 5).map((inq) => {
+                  const inventoryName = inventoryNames[inq.id] ?? inq.inventory_file_name
+                  return (
+                    <tr key={inq.id} className="border-b border-gray-50 transition-colors hover:bg-gray-50">
+                      <td className="whitespace-nowrap px-4 py-3 text-xs font-medium text-gray-900">{inq.client_name}</td>
+                      <td className="whitespace-nowrap px-4 py-3 text-xs text-gray-600">{inq.client_phone ?? '—'}</td>
+                      <td className="whitespace-nowrap px-4 py-3 text-xs text-gray-600">{inq.event_type ?? '—'}</td>
+                      <td className="whitespace-nowrap px-4 py-3 text-xs text-gray-600">{inq.event_date ?? '—'}</td>
+                      <td className="whitespace-nowrap px-4 py-3 text-xs text-gray-600">{inq.pax ?? '—'}</td>
+                      <td className="max-w-[160px] truncate px-4 py-3 text-xs text-gray-600" title={inq.remarks ?? ''}>{inq.remarks ?? '—'}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => setSelectedInquiry(inq)}
+                            className="rounded bg-maroon p-1.5 text-white hover:bg-maroon-dark"
+                            title="Open details — menu, ingredient excel, inventory excel, stock register">
+                            <Eye size={14} />
+                          </button>
+                          <label className={`flex cursor-pointer items-center gap-1 rounded p-1 hover:bg-gray-100 hover:text-emerald-600 ${inventoryName ? 'text-emerald-600' : 'text-gray-400'}`} title={inventoryName ? `Inventory excel uploaded: ${inventoryName}` : 'Upload inventory excel'}>
+                            {uploadingId === inq.id ? (
+                              <span className="h-3 w-3 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
+                            ) : (
+                              <Upload size={14} />
+                            )}
+                            <input type="file" className="hidden" accept=".xlsx,.xls,.csv"
+                              onChange={(e) => { handleInventoryUpload(inq.id, e.target.files?.[0]); e.target.value = '' }} />
+                          </label>
+                          {inventoryName && (
+                            <FileSpreadsheet size={12} className="text-emerald-500" />
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
         </motion.div>
       </div>
+
+      <InventoryPanelModal
+        inquiry={selectedInquiry}
+        isOpen={Boolean(selectedInquiry)}
+        onClose={() => setSelectedInquiry(null)}
+      />
     </div>
   )
 }

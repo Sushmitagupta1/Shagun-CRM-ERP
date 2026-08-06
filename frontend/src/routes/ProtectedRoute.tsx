@@ -4,6 +4,7 @@ import { useAuth } from '@/hooks/useAuth'
 interface ProtectedRouteProps {
   children: React.ReactNode
   allowedRoles?: string[]
+  blockedRoles?: string[]
 }
 
 const ROLE_HOME: Record<string, string> = {
@@ -20,7 +21,7 @@ export function getHomeForRole(role?: string): string {
   return ROLE_HOME[role ?? ''] ?? '/inquiries'
 }
 
-export default function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
+export default function ProtectedRoute({ children, allowedRoles, blockedRoles }: ProtectedRouteProps) {
   const { isAuthenticated, isLoading, user, hasAnyRole } = useAuth()
 
   if (isLoading) {
@@ -36,6 +37,10 @@ export default function ProtectedRoute({ children, allowedRoles }: ProtectedRout
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />
+  }
+
+  if (blockedRoles?.includes(user?.role.name ?? '')) {
+    return <Navigate to={getHomeForRole(user?.role.name)} replace />
   }
 
   if (allowedRoles && !hasAnyRole(allowedRoles)) {

@@ -26,7 +26,7 @@ export default function FinancePage() {
 
   const { data: kpis, isLoading: kpisLoading } = useFinanceKPIs()
   const { data: settlements, isLoading } = useSettlements({ page, per_page: 10 })
-  const { data: confirmedInquiries } = useInquiries({ status: 'confirmed', per_page: 100 })
+  const { data: confirmedInquiries } = useInquiries({ status: 'operation_handover', per_page: 100 })
 
   const createMutation = useMutation({
     mutationFn: createSettlement,
@@ -109,7 +109,7 @@ export default function FinancePage() {
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">
-                Event (Confirmed Inquiry) *
+                Event (Handed Over) *
               </label>
               <select
                 value={form.inquiry_id}

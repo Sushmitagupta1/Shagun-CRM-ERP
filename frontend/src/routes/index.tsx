@@ -11,6 +11,8 @@ import ReportsPage from '@/pages/admin/ReportsPage'
 import SettingsPage from '@/pages/admin/SettingsPage'
 import SalesDashboard from '@/pages/sales/SalesDashboard'
 import MenuPlannerDashboard from '@/pages/menu/MenuPlannerDashboard'
+import MenuLibrary from '@/pages/menu/MenuLibrary'
+import MenuGenerator from '@/pages/menu/MenuGenerator'
 import PresentationDashboard from '@/pages/presentation/PresentationDashboard'
 import OperationsDashboard from '@/pages/operations/OperationsDashboard'
 import KitchenDashboard from '@/pages/kitchen/KitchenDashboard'
@@ -59,11 +61,19 @@ export const router = createBrowserRouter([
       },
       {
         path: 'inquiries',
-        element: <InquiryList />,
+        element: (
+          <ProtectedRoute blockedRoles={['operations_manager']}>
+            <InquiryList />
+          </ProtectedRoute>
+        ),
       },
       {
         path: 'inquiries/:id',
-        element: <InquiryDetail />,
+        element: (
+          <ProtectedRoute blockedRoles={['operations_manager']}>
+            <InquiryDetail />
+          </ProtectedRoute>
+        ),
       },
       {
         path: 'calendar',
@@ -86,6 +96,22 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute allowedRoles={['menu_planner']}>
             <MenuPlannerDashboard />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'menu-library',
+        element: (
+          <ProtectedRoute allowedRoles={['menu_planner', 'admin']}>
+            <MenuLibrary />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'menu-generator/:inquiryId',
+        element: (
+          <ProtectedRoute allowedRoles={['menu_planner']}>
+            <MenuGenerator />
           </ProtectedRoute>
         ),
       },

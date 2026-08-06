@@ -28,6 +28,12 @@ export interface Inquiry {
   menu_content: string | null
   menu_file_name: string | null
   presentation_file_name: string | null
+  presentation_not_required?: boolean
+  ingredient_file_name: string | null
+  inventory_file_name: string | null
+  returned_file_name: string | null
+  transferred_file_name: string | null
+  wastage_file_name: string | null
   advance_amount: number
   payment_status: PaymentStatus
   method: string | null
@@ -45,8 +51,10 @@ export interface FollowUp {
   inquiry_id: string
   follow_up_date: string
   remarks: string | null
+  is_done: boolean
   created_by: string
   created_at: string
+  updated_at: string
 }
 
 export interface Meeting {
@@ -57,6 +65,7 @@ export interface Meeting {
   status: 'scheduled' | 'completed'
   created_by: string
   created_at: string
+  updated_at: string
 }
 
 export interface InquiryCreate {

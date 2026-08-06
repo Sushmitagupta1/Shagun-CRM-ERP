@@ -6,6 +6,11 @@ export function useInquiries(params: {
   per_page?: number
   status?: string
   search?: string
+  assigned_to?: string
+  event_type?: string
+  date_from?: string
+  date_to?: string
+  followup?: string
 }) {
   return useQuery({
     queryKey: ['inquiries', params],

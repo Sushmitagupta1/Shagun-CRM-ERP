@@ -24,6 +24,17 @@ export interface SalesKPIs {
   total_sales_value: number
   conversion_rate: number
   next_follow_up: { client_name: string; follow_up_date: string; remarks: string | null } | null
+  today_followups: TodayFollowUp[]
+  meetings: MeetingInfo[]
+}
+
+export interface TodayFollowUp {
+  id: string
+  inquiry_id: string
+  client_name: string
+  event_type: string
+  follow_up_date: string
+  remarks: string | null
 }
 
 export interface FinanceKPIs {
@@ -57,11 +68,13 @@ export interface MenuPlannerKPIs {
 
 export interface MeetingInfo {
   id: string
+  inquiry_id?: string
   client_name: string
   event_type: string
   meeting_at: string
   remarks: string | null
   status: string
+  created_by_name?: string | null
 }
 
 export interface PresentationKPIs {

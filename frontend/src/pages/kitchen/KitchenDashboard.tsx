@@ -39,8 +39,10 @@ export default function KitchenDashboard() {
   const navigate = useNavigate()
   const firstName = user?.full_name?.split(' ')[0] ?? 'Kitchen'
   const { data: kpis, isLoading } = useKitchenKPIs()
-  const { data: inquiriesData } = useInquiries({ status: 'confirmed', per_page: 10 })
-  const events = inquiriesData?.items ?? []
+  const { data: inquiriesData } = useInquiries({ per_page: 20 })
+  const events = (inquiriesData?.items ?? [])
+    .filter((i) => i.event_date)
+    .sort((a, b) => (a.event_date ?? '').localeCompare(b.event_date ?? ''))
 
   return (
     <div className="space-y-5">
@@ -111,7 +113,8 @@ export default function KitchenDashboard() {
                           className="rounded p-1 text-gray-400 hover:bg-amber-50 hover:text-amber-600" title="Request Ingredients">
                           <UtensilsCrossed size={14} />
                         </button>
-                        <button className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600" title="View Plan">
+                        <button onClick={() => navigate(`/inquiries/${inq.id}`)}
+                          className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-blue-600" title="View Inquiry">
                           <Eye size={14} />
                         </button>
                       </div>

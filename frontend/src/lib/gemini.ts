@@ -41,8 +41,9 @@ export async function generateMenu(params: {
   budget: string
   guests: string
   eventType: string
+  customPrompt?: string
 }): Promise<GeminiResponse> {
-  const prompt = `You are a senior catering chef for Shagun Catering (pure veg only). Generate a detailed menu for:
+  const prompt = params.customPrompt || `You are a senior catering chef for Shagun Catering (pure veg only). Generate a detailed menu for:
 Event Type: ${params.eventType || 'General'}
 Season: ${params.season || 'All'}
 Budget: ${params.budget || 'Flexible'}

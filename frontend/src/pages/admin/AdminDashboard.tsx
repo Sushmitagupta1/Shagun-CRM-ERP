@@ -94,8 +94,8 @@ export default function AdminDashboard() {
           ? Array.from({ length: 5 }).map((_, i) => <KPICardSkeleton key={i} />)
           : [
               { label: 'Total Inquiries', value: kpis?.total_inquiries ?? 0, onClick: () => navigate('/inquiries') },
-              { label: 'Confirmed', value: kpis?.confirmed ?? 0, onClick: () => navigate('/inquiries') },
-              { label: 'Cancelled', value: kpis?.cancelled ?? 0, onClick: () => navigate('/inquiries') },
+              { label: 'Confirmed Bookings', value: kpis?.confirmed ?? 0, onClick: () => navigate('/inquiries') },
+              { label: 'Pending Payments', value: kpis?.pending_payments ?? 0, onClick: () => navigate('/inquiries') },
               { label: 'Upcoming Events', value: kpis?.upcoming_events ?? 0, onClick: () => navigate('/inquiries') },
               { label: "Today's Events", value: kpis?.today_events ?? 0, onClick: () => navigate('/inquiries') },
             ].map((kpi, i) => (
