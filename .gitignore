@@ -27,6 +27,9 @@ Thumbs.db
 # Docker
 pgdata/
 
+# Runtime uploads (persisted via Docker volume / Railway volume)
+uploads/
+
 # Logs
 *.log
 
