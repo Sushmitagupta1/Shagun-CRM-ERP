@@ -1,29 +1,40 @@
 import uuid
 import math
-from datetime import date
+from datetime import date, datetime, time
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_
 from app.database import get_db
 from app.models.inquiry import Inquiry, InquiryStatus, PaymentStatus, FollowUp, Meeting
-from app.models.user import User
-from app.schemas.inquiry import InquiryCreate, InquiryUpdate, InquiryResponse, FollowUpCreate, FollowUpResponse, MeetingCreate, MeetingStatusUpdate, MeetingResponse
+from app.models.inventory_movement import InventoryMovement
+from app.models.notification import Notification
+from app.models.user import User, Role
+from app.schemas.inquiry import InquiryCreate, InquiryUpdate, InquiryResponse, FollowUpCreate, FollowUpUpdate, FollowUpResponse, MeetingCreate, MeetingStatusUpdate, MeetingResponse, CalendarResponse
+from app.schemas.inventory import InventoryMovementCreate, InventoryMovementResponse
 from app.schemas.common import PaginatedResponse
 from app.middleware.auth import get_current_user
 
-from app.services.inquiry_service import can_transition, get_inquiry_or_404
+from app.services.inquiry_service import get_inquiry_or_404
 import os
 from fastapi import UploadFile, File
 from app.config import settings
 
 router = APIRouter(prefix="/api/inquiries", tags=["inquiries"])
 
+FOLLOWUP_NOTIFY_ROLES = ("admin", "sales_head", "menu_planner", "presentation_exec")
+FOLLOWUP_WRITE_ROLES = ("admin", "sales_head", "presentation_exec")
 
-def apply_filters(query, count_query, status, assigned_to, search, event_type, date_from, date_to):
+
+def apply_filters(query, count_query, status, assigned_to, search, event_type, date_from, date_to, followup=None):
     if status:
-        query = query.where(Inquiry.status == status)
-        count_query = count_query.where(Inquiry.status == status)
+        statuses = [s.strip() for s in status.split(",") if s.strip()]
+        if len(statuses) > 1:
+            query = query.where(Inquiry.status.in_(statuses))
+            count_query = count_query.where(Inquiry.status.in_(statuses))
+        else:
+            query = query.where(Inquiry.status == status)
+            count_query = count_query.where(Inquiry.status == status)
     if assigned_to:
         query = query.where(Inquiry.assigned_to == assigned_to)
         count_query = count_query.where(Inquiry.assigned_to == assigned_to)
@@ -40,6 +51,24 @@ def apply_filters(query, count_query, status, assigned_to, search, event_type, d
     if date_to:
         query = query.where(Inquiry.inquiry_date <= date.fromisoformat(date_to))
         count_query = count_query.where(Inquiry.inquiry_date <= date.fromisoformat(date_to))
+    if followup:
+        today = date.today()
+        if followup == "today":
+            subq = select(FollowUp.inquiry_id).where(
+                FollowUp.follow_up_date == today, FollowUp.is_done.is_(False)
+            )
+        elif followup == "overdue":
+            subq = (
+                select(FollowUp.inquiry_id)
+                .join(Inquiry, FollowUp.inquiry_id == Inquiry.id)
+                .where(FollowUp.follow_up_date < today, FollowUp.is_done.is_(False),
+                       Inquiry.status.in_([InquiryStatus.NEW_INQUIRY, InquiryStatus.FOLLOWUP]))
+            )
+        else:
+            subq = None
+        if subq is not None:
+            query = query.where(Inquiry.id.in_(subq))
+            count_query = count_query.where(Inquiry.id.in_(subq))
     return query, count_query
 
 
@@ -50,12 +79,13 @@ async def list_inquiries(
     search: str | None = None, event_type: str | None = None,
     date_from: str | None = None, date_to: str | None = None,
     event_date_from: str | None = None, event_date_to: str | None = None,
+    followup: str | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     query = select(Inquiry)
     count_query = select(func.count(Inquiry.id))
-    query, count_query = apply_filters(query, count_query, status, assigned_to, search, event_type, date_from, date_to)
+    query, count_query = apply_filters(query, count_query, status, assigned_to, search, event_type, date_from, date_to, followup)
     if event_date_from:
         query = query.where(Inquiry.event_date >= date.fromisoformat(event_date_from))
         count_query = count_query.where(Inquiry.event_date >= date.fromisoformat(event_date_from))
@@ -72,6 +102,60 @@ async def list_inquiries(
         total=total, page=page, per_page=per_page,
         total_pages=math.ceil(total / per_page) if total > 0 else 0,
     )
+
+
+@router.get("/calendar", response_model=CalendarResponse)
+async def calendar_events(
+    from_date: str = Query(...), to_date: str = Query(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    start = date.fromisoformat(from_date)
+    end = date.fromisoformat(to_date)
+    events_result = await db.execute(
+        select(Inquiry).where(Inquiry.event_date.isnot(None), Inquiry.event_date >= start, Inquiry.event_date <= end)
+    )
+    events = [InquiryResponse.model_validate(i) for i in events_result.scalars().all()]
+
+    fu_result = await db.execute(
+        select(FollowUp, Inquiry.client_name, Inquiry.event_type)
+        .join(Inquiry, FollowUp.inquiry_id == Inquiry.id)
+        .where(FollowUp.follow_up_date >= start, FollowUp.follow_up_date <= end)
+        .order_by(FollowUp.follow_up_date.asc())
+    )
+    followups = [
+        {
+            "id": str(fu.id),
+            "inquiry_id": str(fu.inquiry_id),
+            "client_name": name,
+            "event_type": event_type,
+            "follow_up_date": fu.follow_up_date.isoformat(),
+            "remarks": fu.remarks,
+            "is_done": fu.is_done,
+        }
+        for fu, name, event_type in fu_result.all()
+    ]
+
+    m_result = await db.execute(
+        select(Meeting, Inquiry.client_name, Inquiry.event_type)
+        .join(Inquiry, Meeting.inquiry_id == Inquiry.id)
+        .where(Meeting.meeting_at >= datetime.combine(start, time.min), Meeting.meeting_at <= datetime.combine(end, time.max))
+        .order_by(Meeting.meeting_at.asc())
+    )
+    meetings = [
+        {
+            "id": str(m.id),
+            "inquiry_id": str(m.inquiry_id),
+            "client_name": name,
+            "event_type": event_type,
+            "meeting_at": m.meeting_at.isoformat(),
+            "remarks": m.remarks,
+            "status": m.status,
+        }
+        for m, name, event_type in m_result.all()
+    ]
+
+    return CalendarResponse(events=events, followups=followups, meetings=meetings)
 
 
 @router.get("/export/excel")
@@ -185,6 +269,20 @@ async def download_menu(inquiry_id: uuid.UUID, db: AsyncSession = Depends(get_db
 ALLOWED_ROLES = {
     "menu": {"admin", "menu_planner"},
     "presentation": {"admin", "presentation_exec"},
+    "ingredient": {"admin", "kitchen"},
+    "inventory": {"admin", "operations_manager", "warehouse"},
+    "returned": {"admin", "operations_manager", "warehouse"},
+    "transferred": {"admin", "operations_manager", "warehouse"},
+    "wastage": {"admin", "operations_manager", "warehouse"},
+}
+
+FILE_TYPES = tuple(ALLOWED_ROLES.keys())
+
+INVENTORY_FILE_COLUMNS = {
+    "received": ("inventory_file_name", "inventory_file_path"),
+    "returned": ("returned_file_name", "returned_file_path"),
+    "transferred": ("transferred_file_name", "transferred_file_path"),
+    "wastage": ("wastage_file_name", "wastage_file_path"),
 }
 
 
@@ -196,8 +294,8 @@ async def upload_inquiry_file(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if file_type not in ("menu", "presentation"):
-        raise HTTPException(status_code=400, detail="file_type must be 'menu' or 'presentation'")
+    if file_type not in FILE_TYPES:
+        raise HTTPException(status_code=400, detail=f"file_type must be one of: {', '.join(FILE_TYPES)}")
     if current_user.role.name not in ALLOWED_ROLES[file_type]:
         raise HTTPException(status_code=403, detail="Not authorized")
     inquiry = await get_inquiry_or_404(db, inquiry_id)
@@ -220,7 +318,176 @@ async def upload_inquiry_file(
     await db.commit()
     await db.refresh(inquiry)
 
+    if file_type in ("menu", "presentation"):
+        notify_result = await db.execute(
+            select(User)
+            .join(User.role)
+            .where(Role.name == "sales_head", User.is_active.is_(True))
+        )
+        notify_users = notify_result.scalars().all()
+        label = "Menu" if file_type == "menu" else "Presentation"
+        message = f"{label} uploaded for {inquiry.client_name} ({inquiry.event_type})"
+        for u in notify_users:
+            db.add(Notification(
+                user_id=u.id,
+                title=f"{label} uploaded",
+                message=message[:500],
+                type="file_upload",
+                entity_type="inquiry",
+                entity_id=inquiry.id,
+            ))
+        await db.commit()
+
     return {"file_name": file.filename, "file_path": file_path}
+
+
+INVENTORY_HEADER_WORDS = {"item", "item name", "item_name", "itemname", "product", "material", "ingredient", "name", "description"}
+
+
+def parse_movement_file(file_path: str, ext: str):
+    rows: list[tuple[str, float, str | None]] = []
+    if ext == ".csv":
+        import csv
+        with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+            reader = csv.reader(f)
+            for raw in reader:
+                row = [c.strip() for c in raw]
+                if not any(row):
+                    continue
+                item = row[0] if len(row) > 0 else ""
+                if not item or item.lower() in INVENTORY_HEADER_WORDS:
+                    continue
+                try:
+                    qty = float((row[1] if len(row) > 1 else "").replace(",", "")) if len(row) > 1 and row[1] else 0.0
+                except (ValueError, TypeError):
+                    qty = 0.0
+                if qty <= 0:
+                    continue
+                unit = row[2] if len(row) > 2 and row[2] else None
+                rows.append((item, qty, unit))
+    else:
+        from openpyxl import load_workbook
+        wb = load_workbook(file_path, data_only=True)
+        ws = wb.active
+        for raw in ws.iter_rows(values_only=True):
+            row = ["" if c is None else str(c).strip() for c in raw]
+            if not any(row):
+                continue
+            item = row[0] if len(row) > 0 else ""
+            if not item or item.lower() in INVENTORY_HEADER_WORDS:
+                continue
+            try:
+                qty = float((row[1] if len(row) > 1 else "").replace(",", "")) if len(row) > 1 and row[1] else 0.0
+            except (ValueError, TypeError):
+                qty = 0.0
+            if qty <= 0:
+                continue
+            unit = row[2] if len(row) > 2 and row[2] else None
+            rows.append((item, qty, unit))
+    return rows
+
+
+@router.post("/{inquiry_id}/inventory-upload")
+async def upload_inventory_movement_file(
+    inquiry_id: uuid.UUID,
+    movement_type: str = Query(...),
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if movement_type not in INVENTORY_FILE_COLUMNS:
+        raise HTTPException(status_code=400, detail="movement_type must be one of: received, returned, transferred, wastage")
+    if current_user.role.name not in ("admin", "operations_manager", "warehouse"):
+        raise HTTPException(status_code=403, detail="Not authorized")
+    inquiry = await get_inquiry_or_404(db, inquiry_id)
+
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    if ext not in (".xlsx", ".csv"):
+        raise HTTPException(status_code=400, detail="Only .xlsx or .csv files are supported")
+    content = await file.read()
+    if len(content) > settings.MAX_UPLOAD_SIZE:
+        raise HTTPException(status_code=400, detail="File too large (max 20MB)")
+
+    upload_dir = os.path.join(settings.UPLOAD_DIR, str(inquiry_id), "inventory", movement_type)
+    os.makedirs(upload_dir, exist_ok=True)
+    file_path = os.path.join(upload_dir, file.filename or "unnamed")
+    with open(file_path, "wb") as f:
+        f.write(content)
+
+    rows = parse_movement_file(file_path, ext)
+
+    old = await db.execute(select(InventoryMovement).where(InventoryMovement.inquiry_id == inquiry_id, InventoryMovement.movement_type == movement_type))
+    for m in old.scalars().all():
+        await db.delete(m)
+    for item, qty, unit in rows:
+        db.add(InventoryMovement(
+            inquiry_id=inquiry_id,
+            movement_type=movement_type,
+            item_name=item,
+            quantity=qty,
+            unit=unit,
+            created_by=current_user.id,
+        ))
+
+    name_col, path_col = INVENTORY_FILE_COLUMNS[movement_type]
+    setattr(inquiry, name_col, file.filename)
+    setattr(inquiry, path_col, file_path)
+    await db.commit()
+
+    return {"file_name": file.filename, "entries_created": len(rows)}
+
+
+MAX_PREVIEW_ROWS = 200
+MAX_PREVIEW_COLS = 12
+
+
+def read_file_preview(file_path: str, ext: str):
+    rows: list[list] = []
+    if ext == ".csv":
+        import csv
+        with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+            reader = csv.reader(f)
+            for raw in reader:
+                if len(rows) >= MAX_PREVIEW_ROWS:
+                    break
+                row = ["" if c is None else str(c).strip() for c in raw[:MAX_PREVIEW_COLS]]
+                if any(row):
+                    rows.append(row)
+    else:
+        from openpyxl import load_workbook
+        wb = load_workbook(file_path, data_only=True, read_only=True)
+        try:
+            ws = wb.active
+            for raw in ws.iter_rows(values_only=True):
+                if len(rows) >= MAX_PREVIEW_ROWS:
+                    break
+                row = ["" if c is None else (c if isinstance(c, (int, float)) else str(c).strip()) for c in raw[:MAX_PREVIEW_COLS]]
+                if any(row):
+                    rows.append(row)
+        finally:
+            wb.close()
+    return rows
+
+
+@router.get("/{inquiry_id}/file/{file_type}/preview")
+async def preview_inquiry_file(
+    inquiry_id: uuid.UUID,
+    file_type: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if file_type not in FILE_TYPES:
+        raise HTTPException(status_code=400, detail=f"file_type must be one of: {', '.join(FILE_TYPES)}")
+    inquiry = await get_inquiry_or_404(db, inquiry_id)
+    file_path = getattr(inquiry, f"{file_type}_file_path", None)
+    file_name = getattr(inquiry, f"{file_type}_file_name", None)
+    if not file_path or not os.path.isfile(file_path):
+        raise HTTPException(status_code=404, detail="No file uploaded")
+    ext = os.path.splitext(file_name or "")[1].lower()
+    if ext not in (".xlsx", ".csv"):
+        raise HTTPException(status_code=400, detail="Preview is available for .xlsx and .csv files only")
+    rows = read_file_preview(file_path, ext)
+    return {"file_name": file_name, "rows": rows}
 
 
 @router.get("/{inquiry_id}/file/{file_type}")
@@ -230,8 +497,8 @@ async def download_inquiry_file(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if file_type not in ("menu", "presentation"):
-        raise HTTPException(status_code=400, detail="file_type must be 'menu' or 'presentation'")
+    if file_type not in FILE_TYPES:
+        raise HTTPException(status_code=400, detail=f"file_type must be one of: {', '.join(FILE_TYPES)}")
     inquiry = await get_inquiry_or_404(db, inquiry_id)
     file_path = getattr(inquiry, f"{file_type}_file_path", None)
     file_name = getattr(inquiry, f"{file_type}_file_name", None)
@@ -303,6 +570,8 @@ async def add_follow_up(
     current_user: User = Depends(get_current_user),
 ):
     inquiry = await get_inquiry_or_404(db, inquiry_id)
+    if current_user.role.name not in FOLLOWUP_WRITE_ROLES:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
     follow_up = FollowUp(
         id=uuid.uuid4(), inquiry_id=inquiry.id,
         follow_up_date=data.follow_up_date,
@@ -312,6 +581,49 @@ async def add_follow_up(
     if inquiry.status == InquiryStatus.NEW_INQUIRY:
         inquiry.status = InquiryStatus.FOLLOWUP
     db.add(follow_up)
+    notify_result = await db.execute(
+        select(User)
+        .join(User.role)
+        .where(Role.name.in_(FOLLOWUP_NOTIFY_ROLES), User.is_active.is_(True))
+    )
+    notify_users = notify_result.scalars().all()
+    message = f"Follow-up scheduled for {inquiry.client_name} ({inquiry.event_type}) on {data.follow_up_date.strftime('%d %b %Y')}"
+    if data.remarks:
+        message += f" — {data.remarks}"
+    message = message[:500]
+    for u in notify_users:
+        db.add(Notification(
+            user_id=u.id,
+            title="New follow-up",
+            message=message,
+            type="followup",
+            entity_type="inquiry",
+            entity_id=inquiry.id,
+        ))
+    await db.commit()
+    await db.refresh(follow_up)
+    return FollowUpResponse.model_validate(follow_up)
+
+
+@router.patch("/{inquiry_id}/follow-ups/{follow_up_id}", response_model=FollowUpResponse)
+async def update_follow_up(
+    inquiry_id: uuid.UUID, follow_up_id: uuid.UUID, data: FollowUpUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(FollowUp).where(FollowUp.id == follow_up_id, FollowUp.inquiry_id == inquiry_id)
+    )
+    follow_up = result.scalar_one_or_none()
+    if not follow_up:
+        raise HTTPException(status_code=404, detail="Follow-up not found")
+    if current_user.role.name not in FOLLOWUP_WRITE_ROLES:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
+    if data.is_done and not (data.remarks or "").strip():
+        raise HTTPException(status_code=400, detail="Remark is required when marking a follow-up as done")
+    follow_up.is_done = data.is_done
+    if data.remarks is not None:
+        follow_up.remarks = data.remarks
     await db.commit()
     await db.refresh(follow_up)
     return FollowUpResponse.model_validate(follow_up)
@@ -346,6 +658,25 @@ async def add_meeting(
         created_by=current_user.id,
     )
     db.add(meeting)
+    notify_result = await db.execute(
+        select(User)
+        .join(User.role)
+        .where(Role.name == "sales_head", User.is_active.is_(True))
+    )
+    notify_users = notify_result.scalars().all()
+    message = f"Meeting scheduled for {inquiry.client_name} ({inquiry.event_type}) on {data.meeting_at.strftime('%d %b %Y, %I:%M %p')}"
+    if data.remarks:
+        message += f" — {data.remarks}"
+    message = message[:500]
+    for u in notify_users:
+        db.add(Notification(
+            user_id=u.id,
+            title="New meeting",
+            message=message,
+            type="meeting",
+            entity_type="inquiry",
+            entity_id=inquiry.id,
+        ))
     await db.commit()
     await db.refresh(meeting)
     return MeetingResponse.model_validate(meeting)
@@ -363,23 +694,125 @@ async def update_meeting_status(
     meeting = result.scalar_one_or_none()
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
+    if data.status == "completed" and not (data.remarks or "").strip():
+        raise HTTPException(status_code=400, detail="Remark is required when marking a meeting as complete")
     meeting.status = data.status
+    if data.remarks is not None:
+        meeting.remarks = data.remarks.strip()
+    if data.status == "completed":
+        inquiry = await get_inquiry_or_404(db, inquiry_id)
+        notify_result = await db.execute(
+            select(User)
+            .join(User.role)
+            .where(Role.name == "sales_head", User.is_active.is_(True))
+        )
+        notify_users = notify_result.scalars().all()
+        message = f"Meeting completed for {inquiry.client_name} ({inquiry.event_type})"
+        if meeting.remarks:
+            message += f" — {meeting.remarks}"
+        message = message[:500]
+        for u in notify_users:
+            db.add(Notification(
+                user_id=u.id,
+                title="Meeting completed",
+                message=message,
+                type="meeting",
+                entity_type="inquiry",
+                entity_id=inquiry.id,
+            ))
     await db.commit()
     await db.refresh(meeting)
     return MeetingResponse.model_validate(meeting)
 
 
+INVENTORY_MOVEMENT_WRITE_ROLES = ("admin", "operations_manager", "warehouse")
+
+
+@router.get("/{inquiry_id}/inventory-movements", response_model=list[InventoryMovementResponse])
+async def list_inventory_movements(
+    inquiry_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    await get_inquiry_or_404(db, inquiry_id)
+    result = await db.execute(
+        select(InventoryMovement)
+        .where(InventoryMovement.inquiry_id == inquiry_id)
+        .order_by(InventoryMovement.created_at.desc())
+    )
+    return [InventoryMovementResponse.model_validate(m) for m in result.scalars().all()]
+
+
+@router.post("/{inquiry_id}/inventory-movements", response_model=InventoryMovementResponse, status_code=201)
+async def add_inventory_movement(
+    inquiry_id: uuid.UUID, data: InventoryMovementCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role.name not in INVENTORY_MOVEMENT_WRITE_ROLES:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    await get_inquiry_or_404(db, inquiry_id)
+    movement = InventoryMovement(
+        inquiry_id=inquiry_id,
+        movement_type=data.movement_type,
+        item_name=data.item_name.strip(),
+        quantity=data.quantity,
+        unit=data.unit,
+        notes=data.notes,
+        created_by=current_user.id,
+    )
+    db.add(movement)
+    await db.commit()
+    await db.refresh(movement)
+    return InventoryMovementResponse.model_validate(movement)
+
+
+@router.delete("/{inquiry_id}/inventory-movements/{movement_id}")
+async def delete_inventory_movement(
+    inquiry_id: uuid.UUID, movement_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role.name not in INVENTORY_MOVEMENT_WRITE_ROLES:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    result = await db.execute(
+        select(InventoryMovement).where(
+            InventoryMovement.id == movement_id,
+            InventoryMovement.inquiry_id == inquiry_id,
+        )
+    )
+    movement = result.scalar_one_or_none()
+    if not movement:
+        raise HTTPException(status_code=404, detail="Movement entry not found")
+    await db.delete(movement)
+    await db.commit()
+    return {"message": "Movement entry deleted"}
+
+
 @router.patch("/{inquiry_id}/status")
 async def update_status(inquiry_id: uuid.UUID, new_status: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if current_user.role.name not in ("admin", "sales_head", "presentation_exec"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only admin, sales head or presentation exec can update status")
     inquiry = await get_inquiry_or_404(db, inquiry_id)
     target_status = InquiryStatus(new_status)
-    if not can_transition(inquiry.status, target_status):
-        raise HTTPException(status_code=400, detail=f"Cannot transition from '{inquiry.status.value}' to '{target_status.value}'")
-    if target_status == InquiryStatus.MENU_SENT and current_user.role.name not in ("admin", "menu_planner"):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only admin or menu planner can set Menu Sent")
     inquiry.status = target_status
     await db.flush()
     return {"message": f"Status updated to {target_status.value}"}
+
+
+@router.patch("/{inquiry_id}/presentation-not-required")
+async def update_presentation_not_required(
+    inquiry_id: uuid.UUID,
+    not_required: bool = Query(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role.name not in ("admin", "presentation_exec"):
+        raise HTTPException(status_code=403, detail="Not authorized")
+    inquiry = await get_inquiry_or_404(db, inquiry_id)
+    inquiry.presentation_not_required = not_required
+    await db.flush()
+    return {"message": "Presentation marked as not required" if not_required else "Presentation marked as required"}
 
 
 @router.patch("/{inquiry_id}/payment")

@@ -4,6 +4,7 @@ from app.models.settlement import Settlement, SettlementStatus
 from app.models.activity import ActivityLog
 from app.models.notification import Notification
 from app.models.menu import MenuTemplate
+from app.models.inventory_movement import InventoryMovement
 
 __all__ = [
     "User",
@@ -19,4 +20,5 @@ __all__ = [
     "ActivityLog",
     "Notification",
     "MenuTemplate",
+    "InventoryMovement",
 ]

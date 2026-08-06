@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings
+from pydantic import field_validator
 from typing import List
 import json
 
@@ -17,6 +18,13 @@ class Settings(BaseSettings):
         ".pdf", ".docx", ".xlsx", ".pptx", ".ppt",
         ".jpg", ".jpeg", ".png", ".webp", ".txt", ".csv",
     ]
+
+    @field_validator("DATABASE_URL", mode="after")
+    @classmethod
+    def normalize_database_url(cls, v: str) -> str:
+        if v.startswith("postgresql://"):
+            return v.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return v
 
     @property
     def cors_origins_list(self) -> List[str]:

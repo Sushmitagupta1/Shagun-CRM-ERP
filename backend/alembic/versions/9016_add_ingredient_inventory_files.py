@@ -1,0 +1,28 @@
+"""add ingredient and inventory file columns to inquiries
+
+Revision ID: 9016
+Revises: 9015
+Create Date: 2026-08-03 12:00:00.000000
+"""
+from typing import Sequence, Union
+from alembic import op
+import sqlalchemy as sa
+
+revision: str = "9016"
+down_revision: Union[str, None] = "9015"
+branch_labels: Union[str, Sequence[str], None] = None
+depends_on: Union[str, Sequence[str], None] = None
+
+
+def upgrade() -> None:
+    op.add_column("inquiries", sa.Column("ingredient_file_name", sa.String(length=255), nullable=True))
+    op.add_column("inquiries", sa.Column("ingredient_file_path", sa.String(length=512), nullable=True))
+    op.add_column("inquiries", sa.Column("inventory_file_name", sa.String(length=255), nullable=True))
+    op.add_column("inquiries", sa.Column("inventory_file_path", sa.String(length=512), nullable=True))
+
+
+def downgrade() -> None:
+    op.drop_column("inquiries", "inventory_file_path")
+    op.drop_column("inquiries", "inventory_file_name")
+    op.drop_column("inquiries", "ingredient_file_path")
+    op.drop_column("inquiries", "ingredient_file_name")

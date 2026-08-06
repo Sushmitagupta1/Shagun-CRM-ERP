@@ -2,7 +2,7 @@ import uuid
 import enum
 from datetime import date, datetime, timezone
 from decimal import Decimal
-from sqlalchemy import String, Text, Integer, Numeric, ForeignKey, Enum, Date, DateTime
+from sqlalchemy import String, Text, Integer, Numeric, ForeignKey, Enum, Date, DateTime, Boolean
 from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
 from app.models.base import UUIDMixin, TimestampMixin
@@ -51,6 +51,17 @@ class Inquiry(UUIDMixin, TimestampMixin, Base):
     menu_file_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
     presentation_file_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     presentation_file_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    presentation_not_required: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    ingredient_file_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    ingredient_file_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    inventory_file_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    inventory_file_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    returned_file_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    returned_file_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    transferred_file_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    transferred_file_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    wastage_file_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    wastage_file_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
     advance_amount: Mapped[Decimal] = mapped_column(
         Numeric(12, 2), default=Decimal("0"), nullable=False
     )
@@ -75,6 +86,7 @@ class FollowUp(UUIDMixin, TimestampMixin, Base):
     )
     follow_up_date: Mapped[date] = mapped_column(Date, nullable=False)
     remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_done: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
 
 

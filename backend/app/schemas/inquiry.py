@@ -66,6 +66,12 @@ class InquiryResponse(BaseModel):
     menu_content: str | None = None
     menu_file_name: str | None = None
     presentation_file_name: str | None = None
+    presentation_not_required: bool = False
+    ingredient_file_name: str | None = None
+    inventory_file_name: str | None = None
+    returned_file_name: str | None = None
+    transferred_file_name: str | None = None
+    wastage_file_name: str | None = None
     advance_amount: Decimal
     payment_status: PaymentStatus
     method: str | None = None
@@ -93,13 +99,20 @@ class FollowUpCreate(BaseModel):
     remarks: str | None = None
 
 
+class FollowUpUpdate(BaseModel):
+    is_done: bool
+    remarks: str | None = None
+
+
 class FollowUpResponse(BaseModel):
     id: uuid.UUID
     inquiry_id: uuid.UUID
     follow_up_date: date
     remarks: str | None
+    is_done: bool = False
     created_by: uuid.UUID
     created_at: datetime
+    updated_at: datetime
 
     class Config:
         from_attributes = True
@@ -112,6 +125,7 @@ class MeetingCreate(BaseModel):
 
 class MeetingStatusUpdate(BaseModel):
     status: Literal["scheduled", "completed"]
+    remarks: str | None = None
 
 
 class MeetingResponse(BaseModel):
@@ -122,6 +136,33 @@ class MeetingResponse(BaseModel):
     status: str
     created_by: uuid.UUID
     created_at: datetime
+    updated_at: datetime
 
     class Config:
         from_attributes = True
+
+
+class CalendarFollowUp(BaseModel):
+    id: str
+    inquiry_id: str
+    client_name: str
+    event_type: str
+    follow_up_date: str
+    remarks: str | None = None
+    is_done: bool = False
+
+
+class CalendarMeeting(BaseModel):
+    id: str
+    inquiry_id: str
+    client_name: str
+    event_type: str
+    meeting_at: str
+    remarks: str | None = None
+    status: str = "scheduled"
+
+
+class CalendarResponse(BaseModel):
+    events: list[InquiryResponse] = []
+    followups: list[CalendarFollowUp] = []
+    meetings: list[CalendarMeeting] = []

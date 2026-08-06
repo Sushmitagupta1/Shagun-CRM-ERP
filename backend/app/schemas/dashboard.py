@@ -22,11 +22,22 @@ class NextFollowUp(BaseModel):
 
 class MeetingInfo(BaseModel):
     id: str
+    inquiry_id: str | None = None
     client_name: str
     event_type: str
     meeting_at: str
     remarks: str | None = None
     status: str
+    created_by_name: str | None = None
+
+
+class TodayFollowUp(BaseModel):
+    id: str
+    inquiry_id: str
+    client_name: str
+    event_type: str
+    follow_up_date: str
+    remarks: str | None = None
 
 
 class SalesKPIs(BaseModel):
@@ -42,6 +53,8 @@ class SalesKPIs(BaseModel):
     total_sales_value: float
     conversion_rate: float
     next_follow_up: NextFollowUp | None = None
+    today_followups: list[TodayFollowUp] = []
+    meetings: list[MeetingInfo] = []
 
 
 class FinanceKPIs(BaseModel):

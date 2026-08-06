@@ -1,7 +1,8 @@
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from app.models.inquiry import Inquiry, InquiryStatus, PaymentStatus, FollowUp, Meeting
+from app.models.user import User
 
 
 async def get_admin_kpis(db: AsyncSession) -> dict:
@@ -28,12 +29,12 @@ async def get_sales_kpis(db: AsyncSession) -> dict:
     today = date.today()
     new_inquiry = (await db.execute(select(func.count(Inquiry.id)).where(Inquiry.status == InquiryStatus.NEW_INQUIRY))).scalar() or 0
     followups_today = (await db.execute(
-        select(func.count(FollowUp.id)).where(FollowUp.follow_up_date == today)
+        select(func.count(FollowUp.id)).where(FollowUp.follow_up_date == today, FollowUp.is_done.is_(False))
     )).scalar() or 0
     overdue = (await db.execute(
         select(func.count(FollowUp.id))
         .join(Inquiry, FollowUp.inquiry_id == Inquiry.id)
-        .where(FollowUp.follow_up_date < today, Inquiry.status.in_([InquiryStatus.NEW_INQUIRY, InquiryStatus.FOLLOWUP]))
+        .where(FollowUp.follow_up_date < today, FollowUp.is_done.is_(False), Inquiry.status.in_([InquiryStatus.NEW_INQUIRY, InquiryStatus.FOLLOWUP]))
     )).scalar() or 0
     advance_received = (await db.execute(select(func.count(Inquiry.id)).where(Inquiry.status == InquiryStatus.ADVANCE_RECEIVE))).scalar() or 0
     handover = (await db.execute(select(func.count(Inquiry.id)).where(Inquiry.status == InquiryStatus.OPERATION_HANDOVER))).scalar() or 0
@@ -46,7 +47,7 @@ async def get_sales_kpis(db: AsyncSession) -> dict:
     next_follow_up = await db.execute(
         select(FollowUp, Inquiry.client_name)
         .join(Inquiry, FollowUp.inquiry_id == Inquiry.id)
-        .where(FollowUp.follow_up_date >= today)
+        .where(FollowUp.follow_up_date >= today, FollowUp.is_done.is_(False))
         .order_by(FollowUp.follow_up_date.asc())
         .limit(1)
     )
@@ -60,6 +61,46 @@ async def get_sales_kpis(db: AsyncSession) -> dict:
             "remarks": fu.remarks,
         }
 
+    today_followups = (await db.execute(
+        select(FollowUp, Inquiry.client_name, Inquiry.event_type)
+        .join(Inquiry, FollowUp.inquiry_id == Inquiry.id)
+        .where(FollowUp.follow_up_date == today, FollowUp.is_done.is_(False))
+        .order_by(Inquiry.created_at.asc())
+    )).all()
+    today_followups_list = [
+        {
+            "id": str(fu.id),
+            "inquiry_id": str(fu.inquiry_id),
+            "client_name": name,
+            "event_type": event_type,
+            "follow_up_date": fu.follow_up_date.isoformat(),
+            "remarks": fu.remarks,
+        }
+        for fu, name, event_type in today_followups
+    ]
+
+    meetings_result = await db.execute(
+        select(Meeting, Inquiry.client_name, Inquiry.event_type, User.full_name)
+        .join(Inquiry, Meeting.inquiry_id == Inquiry.id)
+        .outerjoin(User, User.id == Meeting.created_by)
+        .where(Meeting.meeting_at >= datetime.combine(today, time.min) - timedelta(days=7))
+        .order_by(Meeting.meeting_at.asc())
+        .limit(10)
+    )
+    meetings_list = [
+        {
+            "id": str(m.id),
+            "inquiry_id": str(m.inquiry_id),
+            "client_name": name,
+            "event_type": event_type,
+            "meeting_at": m.meeting_at.isoformat(),
+            "remarks": m.remarks,
+            "status": m.status,
+            "created_by_name": creator,
+        }
+        for m, name, event_type, creator in meetings_result.all()
+    ]
+
     return {
         "total_inquiries": total_count, "new_inquiries": new_inquiry, "followups_today": followups_today,
         "overdue_followups": overdue, "confirmed": confirmed_count,
@@ -67,6 +108,8 @@ async def get_sales_kpis(db: AsyncSession) -> dict:
         "pending_menus": 0, "pending_payments": pending_payment,
         "total_sales_value": float(total_sales), "conversion_rate": round(conversion_rate, 1),
         "next_follow_up": next_follow_up_info,
+        "today_followups": today_followups_list,
+        "meetings": meetings_list,
     }
 
 
@@ -120,16 +163,18 @@ async def get_menu_planner_kpis(db: AsyncSession, user_id) -> dict:
 async def get_presentation_kpis(db: AsyncSession, user_id) -> dict:
     today = date.today()
     assigned = (await db.execute(select(func.count(Inquiry.id)).where(
-        Inquiry.assigned_to == user_id,
-        Inquiry.status.notin_([InquiryStatus.ADVANCE_RECEIVE, InquiryStatus.OPERATION_HANDOVER, InquiryStatus.CANCELLED])
+        Inquiry.status.notin_([InquiryStatus.ADVANCE_RECEIVE, InquiryStatus.OPERATION_HANDOVER, InquiryStatus.CANCELLED]),
+        Inquiry.presentation_not_required.is_(False),
     ))).scalar() or 0
     new_inquiry_count = (await db.execute(select(func.count(Inquiry.id)).where(
-        Inquiry.assigned_to == user_id,
-        Inquiry.status == InquiryStatus.NEW_INQUIRY
+        Inquiry.status == InquiryStatus.NEW_INQUIRY,
+        Inquiry.presentation_not_required.is_(False),
+        Inquiry.presentation_file_name.is_(None),
     ))).scalar() or 0
     pending = (await db.execute(select(func.count(Inquiry.id)).where(
-        Inquiry.assigned_to == user_id,
-        Inquiry.status.in_([InquiryStatus.NEW_INQUIRY, InquiryStatus.FOLLOWUP, InquiryStatus.MENU_SENT])
+        Inquiry.status.in_([InquiryStatus.NEW_INQUIRY, InquiryStatus.FOLLOWUP, InquiryStatus.MENU_SENT]),
+        Inquiry.presentation_not_required.is_(False),
+        Inquiry.presentation_file_name.is_(None),
     ))).scalar() or 0
     meetings_today = (await db.execute(select(func.count(Meeting.id)).where(
         func.date(Meeting.meeting_at) == today

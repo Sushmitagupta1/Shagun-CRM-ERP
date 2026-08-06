@@ -65,7 +65,7 @@ async def create_settlement(data: SettlementCreate, db: AsyncSession = Depends(g
     inquiry = inquiry_result.scalar_one_or_none()
     if inquiry is None:
         raise HTTPException(status_code=404, detail="Inquiry not found")
-    if inquiry.status != InquiryStatus.CONFIRMED:
+    if inquiry.status not in (InquiryStatus.ADVANCE_RECEIVE, InquiryStatus.OPERATION_HANDOVER):
         raise HTTPException(status_code=400, detail="Can only create settlement for confirmed events")
     existing = await db.execute(select(Settlement).where(Settlement.inquiry_id == data.inquiry_id))
     if existing.scalar_one_or_none():

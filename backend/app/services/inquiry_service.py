@@ -4,13 +4,12 @@ from app.models.inquiry import Inquiry, InquiryStatus, PaymentStatus
 from fastapi import HTTPException
 
 VALID_STATUS_TRANSITIONS = {
-    InquiryStatus.NEW: [InquiryStatus.FOLLOW_UP, InquiryStatus.CANCELLED],
-    InquiryStatus.FOLLOW_UP: [InquiryStatus.MENU_READY, InquiryStatus.NEGOTIATION, InquiryStatus.CANCELLED],
-    InquiryStatus.MENU_READY: [InquiryStatus.PRESENTATION_SENT, InquiryStatus.CANCELLED],
-    InquiryStatus.PRESENTATION_SENT: [InquiryStatus.NEGOTIATION, InquiryStatus.CANCELLED],
-    InquiryStatus.NEGOTIATION: [InquiryStatus.CONFIRMED, InquiryStatus.CANCELLED],
-    InquiryStatus.CONFIRMED: [],
-    InquiryStatus.CANCELLED: [],
+    InquiryStatus.NEW_INQUIRY: [InquiryStatus.FOLLOWUP, InquiryStatus.CLIENT_CONFIRMATION],
+    InquiryStatus.FOLLOWUP: [InquiryStatus.MENU_SENT, InquiryStatus.NEW_INQUIRY, InquiryStatus.CLIENT_CONFIRMATION],
+    InquiryStatus.MENU_SENT: [InquiryStatus.CLIENT_CONFIRMATION, InquiryStatus.FOLLOWUP],
+    InquiryStatus.CLIENT_CONFIRMATION: [InquiryStatus.ADVANCE_RECEIVE, InquiryStatus.MENU_SENT],
+    InquiryStatus.ADVANCE_RECEIVE: [InquiryStatus.OPERATION_HANDOVER, InquiryStatus.CLIENT_CONFIRMATION],
+    InquiryStatus.OPERATION_HANDOVER: [],
 }
 
 
