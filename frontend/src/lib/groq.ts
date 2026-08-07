@@ -131,7 +131,38 @@ Provide:
 5. Recommended Actions (prioritized)
 6. Quick Wins
 
-Be specific, data-driven, and actionable. Format with clear headings.`
+  Be specific, data-driven, and actionable. Format with clear headings.`
 
+  return callGroq(prompt)
+}
+
+// ── AI Menu Designer ──
+export async function generateMenuDesign(params: {
+  menuText: string
+  eventType: string
+  clientName: string
+  templateInfo: string
+}): Promise<GroqResponse> {
+  const prompt = `You are an expert menu card designer for Shagun Caterers (pure veg only).
+Design a beautiful printable menu card using the user's menu list and section labels.
+
+Client: ${params.clientName}
+Event Type: ${params.eventType}
+Template background: ${params.templateInfo || 'No template selected — use a clean white background'}
+
+USER'S MENU LIST (section labels are headings):
+${params.menuText}
+
+INSTRUCTIONS:
+- Return exactly 3 DIFFERENT design options separated by "---DESIGN---".
+- Inside each design option, separate pages with "---PAGE---".
+- Each page is a COMPLETE HTML fragment: a <style> block (scoped inline styles) followed by <body> markup. Do NOT include <html>, <head>, doctype, <script>, external images, or absolute URLs.
+- Each labeled section of the user's menu becomes its OWN page. Example: STARTERS page, MAIN COURSE page, DESSERTS page.
+- Use the user's exact section label text as the page heading.
+- The template background is set via CSS on a wrapper div, e.g. <div style="background-image:url('TEMPLATE_URL');background-size:100% 100%;background-position:center;background-repeat:no-repeat;min-height:100vh"> ... </div>. Replace TEMPLATE_URL literally with the given template URL string.
+- Give each option a distinct theme appropriate to the event (wedding: gold/maroon elegant serif; engagement: rose/gold; corporate: navy/steel clean sans-serif). Vary fonts, colors, heading treatments, and item bullet styles between the 3 options.
+- Use <h1> for the design/menu title, the section label as <h2>, and a <ul>/<li> per dish.
+- Keep all CSS inline in a <style> tag that only targets the page. Use CSS classes, not element selectors that could leak.
+- Content must fit A4 portrait (compact spacing, reasonable font sizes).`
   return callGroq(prompt)
 }
