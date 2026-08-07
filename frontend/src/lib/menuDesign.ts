@@ -18,15 +18,46 @@ export interface ParsedDesigns {
   error?: string
 }
 
+const ALLOWED_TAGS = new Set([
+  'DIV', 'SPAN', 'H1', 'H2', 'H3', 'P', 'UL', 'OL', 'LI', 'STRONG', 'B', 'EM', 'I',
+  'BR', 'HR', 'TABLE', 'THEAD', 'TBODY', 'TR', 'TH', 'TD', 'STYLE', 'SMALL', 'BLOCKQUOTE',
+])
+
+const ALLOWED_ATTRS = new Set(['class', 'id', 'style'])
+
 export function sanitizeMenuHtml(html: string): string {
-  return html
-    .replace(/<script[\s\S]*?<\/script>/gi, '')
-    .replace(/<iframe[\s\S]*?<\/iframe>/gi, '')
-    .replace(/<object[\s\S]*?<\/object>/gi, '')
-    .replace(/<embed[\s\S]*?>/gi, '')
-    .replace(/<link\b[^>]*>/gi, '')
-    .replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
-    .replace(/\bjavascript\s*:/gi, '')
+  const doc = new DOMParser().parseFromString(html, 'text/html')
+  const all = Array.from(doc.body.querySelectorAll('*'))
+  const toRemove: Element[] = []
+  for (const elem of all) {
+    if (!ALLOWED_TAGS.has(elem.tagName)) {
+      toRemove.push(elem)
+      continue
+    }
+    for (const attr of Array.from(elem.attributes)) {
+      const name = attr.name.toLowerCase()
+      if (name.startsWith('on')) {
+        elem.removeAttribute(attr.name)
+        continue
+      }
+      if (name === 'href' || name === 'src' || name === 'xlink:href' || name === 'background') {
+        const val = (attr.value || '').trim().toLowerCase()
+        if (val.startsWith('javascript:') || val.startsWith('data:text/html') || val.startsWith('data:image/svg')) {
+          elem.removeAttribute(attr.name)
+          continue
+        }
+        if ((name === 'src' || name === 'href') && (val.startsWith('http://') || val.startsWith('https://'))) {
+          elem.removeAttribute(attr.name)
+        }
+        continue
+      }
+      if (!ALLOWED_ATTRS.has(name)) {
+        elem.removeAttribute(attr.name)
+      }
+    }
+  }
+  toRemove.forEach((el) => el.remove())
+  return doc.body.innerHTML
 }
 
 export function parseMenuDesigns(raw: string): ParsedDesigns {
@@ -63,22 +94,33 @@ export async function downloadMenuDesignPdf(design: MenuDesign, fileName: string
     container.style.zIndex = '-1'
     container.innerHTML = design.pages[i].html
     document.body.appendChild(container)
+    try {
+      await document.fonts.ready
+      await new Promise((resolve) => setTimeout(resolve, 300))
 
-    await document.fonts.ready
-    await new Promise((resolve) => setTimeout(resolve, 300))
+      const canvas = await html2canvas(container, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        width: container.offsetWidth,
+        height: container.offsetHeight,
+      })
 
-    const canvas = await html2canvas(container, {
-      scale: 2,
-      useCORS: true,
-      backgroundColor: null,
-      width: container.offsetWidth,
-      height: container.offsetHeight,
-    })
-    document.body.removeChild(container)
-
-    const imgData = canvas.toDataURL('image/jpeg', 0.92)
-    if (i > 0) doc.addPage()
-    doc.addImage(imgData, 'JPEG', 0, 0, 210, 297)
+      const imgData = canvas.toDataURL('image/jpeg', 0.92)
+      if (i > 0) doc.addPage()
+      const pageW = 210
+      const pageH = 297
+      const imgW = canvas.width
+      const imgH = canvas.height
+      const scale = Math.min(pageW / imgW, pageH / imgH)
+      const w = imgW * scale
+      const h = imgH * scale
+      const x = (pageW - w) / 2
+      const y = (pageH - h) / 2
+      doc.addImage(imgData, 'JPEG', x, y, w, h)
+    } finally {
+      document.body.removeChild(container)
+    }
   }
   doc.save(fileName)
 }
