@@ -42,8 +42,14 @@ export function InquiryForm({ onStage1Submit, onStage2Submit }: InquiryFormProps
   const [stage1Loading, setStage1Loading] = useState(false)
   const [stage2Loading, setStage2Loading] = useState(false)
 
+  const today = (() => {
+    const d = new Date()
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  })()
+
   const stage1Form = useForm<Stage1Data>({
     resolver: zodResolver(stage1Schema),
+    defaultValues: { inquiry_date: today },
   })
 
   const stage2Form = useForm<Stage2Data>()

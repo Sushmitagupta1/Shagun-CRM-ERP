@@ -467,7 +467,6 @@ export default function InquiryDetail() {
               { label: 'Venue', value: inquiry.venue || '—' },
               { label: 'Pax', value: inquiry.pax ?? '—' },
               { label: 'Inquiry Date', value: formatDate(inquiry.inquiry_date) },
-              { label: 'Created', value: formatDate(inquiry.created_at) },
             ].map((f) => (
               <div key={f.label}>
                 <p className="text-xs text-gray-500">{f.label}</p>
