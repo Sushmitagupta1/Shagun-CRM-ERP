@@ -5,6 +5,7 @@ from app.models.activity import ActivityLog
 from app.models.notification import Notification
 from app.models.menu import MenuTemplate
 from app.models.inventory_movement import InventoryMovement
+from app.models.company_settings import CompanySettings
 
 __all__ = [
     "User",
@@ -21,4 +22,5 @@ __all__ = [
     "Notification",
     "MenuTemplate",
     "InventoryMovement",
+    "CompanySettings",
 ]

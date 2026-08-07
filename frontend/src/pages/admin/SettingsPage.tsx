@@ -1,9 +1,16 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import PageHeader from '@/components/common/PageHeader'
 import { useAuth } from '@/hooks/useAuth'
 import { toast } from 'sonner'
-import { Building2, Bell, Shield, User, Save, Upload, Palette } from 'lucide-react'
+import { Building2, Bell, Shield, User, Save, Upload, Palette, Loader2 } from 'lucide-react'
+import {
+  getCompanySettings,
+  updateCompanySettings,
+  uploadCompanyLogo,
+  LOGO_URL,
+  type CompanySettings,
+} from '@/api/settings'
 
 const TABS = [
   { id: 'company', label: 'Company Profile', icon: Building2 },
@@ -16,12 +23,20 @@ const TABS = [
 export default function SettingsPage() {
   const { user } = useAuth()
   const [activeTab, setActiveTab] = useState('company')
-  const [companyForm, setCompanyForm] = useState({
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [logoSrc, setLogoSrc] = useState('/shagun-logo.png')
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [companyForm, setCompanyForm] = useState<CompanySettings>({
+    id: 1,
     name: 'Shagun Caterers',
     email: 'catering@cafeuppercrust.com',
     phone: '+91 8980003121',
+    gst: '24AEOFS0061F1Z7',
     address: 'Parshwanath Business Park, 100 Feet Rd, Satellite, Prahlad Nagar',
-    gst: '27AABCS1234F1Z5',
+    logo_file_name: null,
+    logo_path: null,
   })
   const [notifForm, setNotifForm] = useState({
     emailNotifications: true,
@@ -32,8 +47,52 @@ export default function SettingsPage() {
     paymentAlerts: true,
   })
 
-  const handleSave = () => {
-    toast.success('Settings saved successfully')
+  useEffect(() => {
+    ;(async () => {
+      try {
+        const data = await getCompanySettings()
+        setCompanyForm(data)
+        setLogoSrc(data.logo_file_name ? `${LOGO_URL}?t=${Date.now()}` : '/shagun-logo.png')
+      } catch {
+        toast.error('Failed to load company settings')
+      } finally {
+        setLoading(false)
+      }
+    })()
+  }, [])
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      const data = await updateCompanySettings({
+        name: companyForm.name,
+        email: companyForm.email,
+        phone: companyForm.phone,
+        gst: companyForm.gst,
+        address: companyForm.address,
+      })
+      setCompanyForm(data)
+      toast.success('Settings saved successfully')
+    } catch {
+      toast.error('Failed to save settings')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleLogoSelect = async (file: File | undefined) => {
+    if (!file) return
+    setUploading(true)
+    try {
+      const data = await uploadCompanyLogo(file)
+      setCompanyForm(data)
+      setLogoSrc(`${LOGO_URL}?t=${Date.now()}`)
+      toast.success('Logo updated successfully')
+    } catch {
+      toast.error('Failed to upload logo')
+    } finally {
+      setUploading(false)
+    }
   }
 
   return (
@@ -44,9 +103,10 @@ export default function SettingsPage() {
         action={
           <button
             onClick={handleSave}
-            className="flex items-center gap-2 rounded-lg bg-gold px-4 py-2 text-sm font-medium text-white shadow transition-colors hover:bg-gold-hover"
+            disabled={saving}
+            className="flex items-center gap-2 rounded-lg bg-gold px-4 py-2 text-sm font-medium text-white shadow transition-colors hover:bg-gold-hover disabled:opacity-60"
           >
-            <Save size={14} />
+            {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
             Save Changes
           </button>
         }
@@ -81,55 +141,81 @@ export default function SettingsPage() {
               className="rounded-xl bg-white p-6 shadow-md space-y-4"
             >
               <h3 className="text-sm font-semibold text-slate-700">Company Information</h3>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-slate-500">Company Name</label>
-                  <input
-                    value={companyForm.name}
-                    onChange={(e) => setCompanyForm({ ...companyForm, name: e.target.value })}
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-maroon focus:outline-none focus:ring-1 focus:ring-maroon"
-                  />
+              {loading ? (
+                <div className="flex items-center justify-center py-10 text-slate-400">
+                  <Loader2 size={20} className="mr-2 animate-spin" /> Loading settings...
                 </div>
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-slate-500">Email</label>
-                  <input
-                    value={companyForm.email}
-                    onChange={(e) => setCompanyForm({ ...companyForm, email: e.target.value })}
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-maroon focus:outline-none focus:ring-1 focus:ring-maroon"
-                  />
+              ) : (
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-500">Company Name</label>
+                    <input
+                      value={companyForm.name}
+                      onChange={(e) => setCompanyForm({ ...companyForm, name: e.target.value })}
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-maroon focus:outline-none focus:ring-1 focus:ring-maroon"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-500">Email</label>
+                    <input
+                      value={companyForm.email}
+                      onChange={(e) => setCompanyForm({ ...companyForm, email: e.target.value })}
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-maroon focus:outline-none focus:ring-1 focus:ring-maroon"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-500">Phone</label>
+                    <input
+                      value={companyForm.phone}
+                      onChange={(e) => setCompanyForm({ ...companyForm, phone: e.target.value })}
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-maroon focus:outline-none focus:ring-1 focus:ring-maroon"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-500">GST Number</label>
+                    <input
+                      value={companyForm.gst}
+                      onChange={(e) => setCompanyForm({ ...companyForm, gst: e.target.value })}
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-maroon focus:outline-none focus:ring-1 focus:ring-maroon"
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="mb-1 block text-xs font-medium text-slate-500">Address</label>
+                    <input
+                      value={companyForm.address}
+                      onChange={(e) => setCompanyForm({ ...companyForm, address: e.target.value })}
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-maroon focus:outline-none focus:ring-1 focus:ring-maroon"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-slate-500">Phone</label>
-                  <input
-                    value={companyForm.phone}
-                    onChange={(e) => setCompanyForm({ ...companyForm, phone: e.target.value })}
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-maroon focus:outline-none focus:ring-1 focus:ring-maroon"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-slate-500">GST Number</label>
-                  <input
-                    value={companyForm.gst}
-                    onChange={(e) => setCompanyForm({ ...companyForm, gst: e.target.value })}
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-maroon focus:outline-none focus:ring-1 focus:ring-maroon"
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <label className="mb-1 block text-xs font-medium text-slate-500">Address</label>
-                  <input
-                    value={companyForm.address}
-                    onChange={(e) => setCompanyForm({ ...companyForm, address: e.target.value })}
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-maroon focus:outline-none focus:ring-1 focus:ring-maroon"
-                  />
-                </div>
-              </div>
+              )}
               <div>
                 <label className="mb-1 block text-xs font-medium text-slate-500">Company Logo</label>
                 <div className="flex items-center gap-4">
-                  <img src="/shagun-logo.png" alt="Logo" className="h-12 w-auto rounded-lg border border-slate-200" />
-                  <button className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50">
-                    <Upload size={14} />
-                    Change Logo
+                  <img
+                    src={logoSrc}
+                    alt="Logo"
+                    onError={(e) => {
+                      if ((e.currentTarget.src !== '/shagun-logo.png')) {
+                        e.currentTarget.src = '/shagun-logo.png'
+                      }
+                    }}
+                    className="h-12 w-auto rounded-lg border border-slate-200 object-contain bg-white"
+                  />
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/svg+xml,image/gif"
+                    className="hidden"
+                    onChange={(e) => handleLogoSelect(e.target.files?.[0])}
+                  />
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploading}
+                    className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+                  >
+                    {uploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+                    {uploading ? 'Uploading...' : 'Change Logo'}
                   </button>
                 </div>
               </div>

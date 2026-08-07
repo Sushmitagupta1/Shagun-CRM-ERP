@@ -20,6 +20,7 @@ import {
 import { useAuth } from '@/hooks/useAuth'
 import { useSidebarStore } from '@/store/sidebarStore'
 import { cn } from '@/lib/utils'
+import CompanyLogo from '@/components/common/CompanyLogo'
 
 interface NavItem {
   to: string
@@ -56,12 +57,7 @@ const sidebarContent = (
       transition={{ duration: 0.5, ease: 'easeOut' }}
       className="flex h-16 items-center px-5"
     >
-      <img
-        src="/shagun-logo.png"
-        alt="Shagun"
-        className="h-auto w-auto"
-      />
-    </motion.div>
+      <CompanyLogo className="h-auto w-auto" />    </motion.div>
 
     {/* Nav Items */}
     <nav className="mt-4 flex-1 space-y-1 px-3 overflow-y-auto">

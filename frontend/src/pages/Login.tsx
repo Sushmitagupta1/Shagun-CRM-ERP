@@ -9,6 +9,7 @@ import { Loader2, Eye, EyeOff } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useAuthStore } from '@/store/authStore'
 import { getHomeForRole } from '@/routes/ProtectedRoute'
+import CompanyLogo from '@/components/common/CompanyLogo'
 
 const loginSchema = z.object({
   username: z.string().min(1, 'Username is required'),
@@ -58,14 +59,7 @@ export default function Login() {
           transition={{ duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94] }}
           className="mb-8 text-center"
         >
-          <motion.img
-            src="/shagun-logo.png"
-            alt="Shagun Logo"
-            className="mx-auto mb-4"
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-          />
+          <CompanyLogo className="mx-auto mb-4" />
           <motion.h1
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
