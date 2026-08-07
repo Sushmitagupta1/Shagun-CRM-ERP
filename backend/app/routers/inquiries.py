@@ -519,6 +519,7 @@ async def create_inquiry(data: InquiryCreate, db: AsyncSession = Depends(get_db)
     inquiry = Inquiry(
         id=uuid.uuid4(), client_name=data.client_name, client_phone=data.client_phone,
         event_type=data.event_type, event_date=data.event_date, pax=data.pax,
+        inquiry_date=data.inquiry_date or date.today(),
         per_plate_rate=data.per_plate_rate, add_on=data.add_on,
         assigned_to=data.assigned_to, remarks=data.remarks, venue=data.venue,
         created_by=current_user.id,
@@ -547,6 +548,7 @@ async def update_inquiry(inquiry_id: uuid.UUID, data: InquiryUpdate, db: AsyncSe
     for field, value in data.model_dump(exclude_unset=True).items():
         setattr(inquiry, field, value)
     await db.flush()
+    await db.commit()
     await db.refresh(inquiry)
     return InquiryResponse.model_validate(inquiry)
 

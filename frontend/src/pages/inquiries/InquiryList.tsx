@@ -48,6 +48,7 @@ export default function InquiryList() {
     mutationFn: createInquiry,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inquiries'] })
+      setPage(1)
       toast.success('Inquiry created')
     },
     onError: (err: unknown) => {
@@ -62,6 +63,7 @@ export default function InquiryList() {
     mutationFn: ({ id, data }: { id: string; data: Record<string, unknown> }) => updateInquiry(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inquiries'] })
+      setPage(1)
       toast.success('Inquiry saved')
       setShowCreate(false)
     },
@@ -284,14 +286,14 @@ export default function InquiryList() {
                     <div className="mx-auto h-6 w-6 animate-spin rounded-full border-4 border-gold border-t-transparent" />
                   </td>
                 </tr>
-              ) : data?.items?.length === 0 ? (
+              ) : (data?.items ?? []).length === 0 ? (
                 <tr>
                   <td colSpan={12} className="px-5 py-8 text-center text-gray-400">
                     No inquiries found
                   </td>
                 </tr>
               ) : (
-                data?.items?.map((inquiry) => (
+                (data?.items ?? []).map((inquiry) => (
                   <tr
                     key={inquiry.id}
                     className="border-b border-gray-100 transition-colors hover:bg-gray-50"

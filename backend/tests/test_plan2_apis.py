@@ -1,4 +1,5 @@
 import uuid
+from datetime import date
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 from app.main import app
@@ -67,6 +68,23 @@ async def test_create_and_list_inquiry(client):
     list_resp = await client.get("/api/inquiries", headers=auth(token))
     assert list_resp.status_code == 200
     assert list_resp.json()["total"] >= 1
+
+
+async def test_create_inquiry_defaults_inquiry_date_to_today(client):
+    token = await login(client)
+    create_resp = await client.post("/api/inquiries", headers=auth(token), json={
+        "client_name": "Date Default Test",
+        "event_type": "Birthday",
+    })
+    assert create_resp.status_code == 201
+    assert create_resp.json()["inquiry_date"] == date.today().isoformat()
+
+    today = date.today().isoformat()
+    list_resp = await client.get("/api/inquiries", headers=auth(token),
+                                 params={"date_from": today, "date_to": today})
+    assert list_resp.status_code == 200
+    names = [i["client_name"] for i in list_resp.json()["items"]]
+    assert "Date Default Test" in names
 
 
 async def test_update_inquiry_status(client):

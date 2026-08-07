@@ -50,10 +50,17 @@ export function InquiryForm({ onStage1Submit, onStage2Submit }: InquiryFormProps
 
   const { formState: { errors: errors1 } } = stage1Form
 
+  const cleanPayload = (obj: Record<string, unknown>) =>
+    Object.fromEntries(
+      Object.entries(obj).filter(
+        ([, v]) => v !== '' && v !== null && !(typeof v === 'number' && Number.isNaN(v))
+      )
+    )
+
   const handleStage1Next = stage1Form.handleSubmit(async (data) => {
     setStage1Loading(true)
     try {
-      const id = await onStage1Submit(data)
+      const id = await onStage1Submit(cleanPayload(data) as Stage1Data)
       setStage1Data(data)
       setCreatedId(id)
       setStep(2)
@@ -67,7 +74,7 @@ export function InquiryForm({ onStage1Submit, onStage2Submit }: InquiryFormProps
     if (!createdId) return
     setStage2Loading(true)
     try {
-      await onStage2Submit(createdId, stage2)
+      await onStage2Submit(createdId, cleanPayload(stage2) as Stage2Data)
       setStep(1)
       setStage1Data(null)
       setCreatedId(null)
