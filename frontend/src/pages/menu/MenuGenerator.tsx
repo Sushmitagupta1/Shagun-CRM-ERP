@@ -5,11 +5,13 @@ import { getInquiry } from '@/api/inquiries'
 import { createMenuTemplate } from '@/api/menu'
 import { updateInquiry } from '@/api/inquiries'
 import { generateMenu } from '@/lib/groq'
+import { generateMenuDesign } from '@/lib/groq'
+import { parseMenuDesigns, downloadMenuDesignPdf, type MenuDesign } from '@/lib/menuDesign'
 import { getTemplateCategories, getTemplateUrl } from '@/api/templates'
 import PageHeader from '@/components/common/PageHeader'
 import { toast } from 'sonner'
 import { motion } from 'framer-motion'
-import { ArrowLeft, Sparkles, Save, Download, RotateCcw, Loader2, CheckCircle2, BookOpen, Phone, Calendar, DollarSign, MessageSquare, FileText, User, Users, Layout } from 'lucide-react'
+import { ArrowLeft, Sparkles, Save, Download, RotateCcw, Loader2, CheckCircle2, BookOpen, Phone, Calendar, DollarSign, MessageSquare, FileText, User, Users, Layout, Palette, FileDown } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
 import { INQUIRY_STATUSES, PAYMENT_STATUSES } from '@/lib/constants'
 
@@ -30,6 +32,12 @@ export default function MenuGenerator() {
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null)
   const [savingLibrary, setSavingLibrary] = useState(false)
   const [savingClient, setSavingClient] = useState(false)
+
+  // AI Menu Designer
+  const [designMenuText, setDesignMenuText] = useState('')
+  const [designing, setDesigning] = useState(false)
+  const [designs, setDesigns] = useState<MenuDesign[]>([])
+  const [downloadingPdf, setDownloadingPdf] = useState<string | null>(null)
 
   // Template selection
   const [selectedCat, setSelectedCat] = useState('')
@@ -185,6 +193,55 @@ export default function MenuGenerator() {
 
     const win = window.open('', '_blank')
     if (win) { win.document.write(html); win.document.close(); win.focus() }
+  }
+
+  const handleDesignMenu = async () => {
+    if (!designMenuText.trim()) {
+      toast.error('Paste your labeled menu first')
+      return
+    }
+    if (!selectedCat || !selectedFile) {
+      toast.error('Select a template first')
+      return
+    }
+    setDesigning(true)
+    setDesigns([])
+    const res = await generateMenuDesign({
+      menuText: designMenuText,
+      eventType: inquiry?.event_type || 'General',
+      clientName: inquiry?.client_name || 'Client',
+      templateInfo: getTemplateUrl(selectedCat, selectedFile),
+    })
+    if (res.error) {
+      toast.error('AI error: ' + res.error)
+      setDesigning(false)
+      return
+    }
+    const parsed = parseMenuDesigns(res.text)
+    if (parsed.error) {
+      toast.error(parsed.error)
+      setDesigning(false)
+      return
+    }
+    setDesigns(parsed.designs)
+    setDesigning(false)
+    toast.success(`${parsed.designs.length} designs ready`)
+  }
+
+  const handleDownloadDesignPdf = async (design: MenuDesign) => {
+    setDownloadingPdf(design.id)
+    try {
+      await downloadMenuDesignPdf(design, `${design.name.replace(/[^\w\d]+/g, '_')}.pdf`)
+      toast.success('PDF downloaded')
+    } catch {
+      toast.error('Failed to generate PDF')
+    } finally {
+      setDownloadingPdf(null)
+    }
+  }
+
+  const handleRegenerateDesign = (idx: number) => {
+    setDesigns((prev) => prev.filter((_, i) => i !== idx))
   }
 
   if (!inquiry) {
@@ -378,6 +435,58 @@ export default function MenuGenerator() {
               </div>
             </motion.div>
           ))}
+        </div>
+      )}
+
+      {/* AI Menu Designer */}
+      <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-md">
+        <div className="mb-3 flex items-center gap-2">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gold/20">
+            <Palette size={14} className="text-gold" />
+          </div>
+          <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500">AI Menu Designer — Design on Template</h3>
+        </div>
+        <label className="mb-2 block text-[11px] font-bold uppercase text-gray-500">Labeled Menu List</label>
+        <textarea value={designMenuText} onChange={(e) => setDesignMenuText(e.target.value)}
+          placeholder={'STARTERS:\nPaneer Tikka\nHara Bhara Kebab\n\nMAIN COURSE:\nDal Makhani\nShahi Paneer\n\nDESSERTS:\nGulab Jamun\nRasmalai'}
+          className="h-40 w-full rounded-lg border border-gray-200 p-3 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-gold/30" />
+        <button onClick={handleDesignMenu} disabled={designing}
+          className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-gold to-amber-600 text-sm font-bold text-white shadow-lg transition-colors hover:from-gold hover:to-amber-700 disabled:opacity-50">
+          {designing ? <><Loader2 size={16} className="animate-spin" /> Designing 3 Options...</> : <><Palette size={16} /> Design Menu Picture</>}
+        </button>
+      </div>
+
+      {/* Designer Options */}
+      {designs.length > 0 && (
+        <div className="space-y-4">
+          <p className="text-xs font-bold uppercase tracking-wider text-gray-400">{designs.length} designs · select template above to change background</p>
+          <div className="grid gap-4 lg:grid-cols-3">
+            {designs.map((design, idx) => (
+              <motion.div key={design.id} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.1 }}
+                className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-md">
+                <div className="border-b border-gray-100 px-4 py-3">
+                  <h4 className="text-sm font-bold text-gray-900">{design.name}</h4>
+                  <p className="text-[10px] text-gray-400">{design.pages.length} page{design.pages.length > 1 ? 's' : ''} · A4</p>
+                </div>
+                <div className="max-h-96 overflow-y-auto border-b border-gray-100 bg-gray-50 p-3">
+                  {design.pages.map((page, pi) => (
+                    <div key={pi} className="mb-3 overflow-hidden rounded-lg shadow-sm last:mb-0"
+                      dangerouslySetInnerHTML={{ __html: page.html }} />
+                  ))}
+                </div>
+                <div className="grid grid-cols-2 gap-2 p-3">
+                  <button onClick={() => handleDownloadDesignPdf(design)} disabled={downloadingPdf === design.id}
+                    className="flex h-8 items-center justify-center gap-1.5 rounded-lg bg-maroon text-[11px] font-medium text-white transition-colors hover:bg-maroon-dark disabled:opacity-50">
+                    {downloadingPdf === design.id ? <Loader2 size={12} className="animate-spin" /> : <FileDown size={12} />} Download PDF
+                  </button>
+                  <button onClick={() => handleRegenerateDesign(idx)}
+                    className="flex h-8 items-center justify-center gap-1.5 rounded-lg border border-gray-200 text-[11px] font-medium text-gray-600 transition-colors hover:bg-gray-50">
+                    <RotateCcw size={12} /> Regenerate
+                  </button>
+                </div>
+              </motion.div>
+            ))}
+          </div>
         </div>
       )}
     </div>
