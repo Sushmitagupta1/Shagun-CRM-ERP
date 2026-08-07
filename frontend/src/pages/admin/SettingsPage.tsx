@@ -17,10 +17,10 @@ export default function SettingsPage() {
   const { user } = useAuth()
   const [activeTab, setActiveTab] = useState('company')
   const [companyForm, setCompanyForm] = useState({
-    name: 'Shagun Catering',
-    email: 'info@shaguncatering.com',
-    phone: '+91 98765 43210',
-    address: 'Mumbai, Maharashtra',
+    name: 'Shagun Caterers',
+    email: 'catering@cafeuppercrust.com',
+    phone: '+91 8980003121',
+    address: 'Parshwanath Business Park, 100 Feet Rd, Satellite, Prahlad Nagar',
     gst: '27AABCS1234F1Z5',
   })
   const [notifForm, setNotifForm] = useState({

@@ -43,7 +43,7 @@ export async function generateMenu(params: {
   eventType: string
   customPrompt?: string
 }): Promise<GeminiResponse> {
-  const prompt = params.customPrompt || `You are a senior catering chef for Shagun Catering (pure veg only). Generate a detailed menu for:
+  const prompt = params.customPrompt || `You are a senior catering chef for Shagun Caterers (pure veg only). Generate a detailed menu for:
 Event Type: ${params.eventType || 'General'}
 Season: ${params.season || 'All'}
 Budget: ${params.budget || 'Flexible'}
@@ -69,7 +69,7 @@ export async function estimateCost(params: {
   guests: string
   eventType: string
 }): Promise<GeminiResponse> {
-  const prompt = `You are a catering cost analyst for Shagun Catering (pure veg). Estimate costs for:
+  const prompt = `You are a catering cost analyst for Shagun Caterers (pure veg). Estimate costs for:
 Menu: ${params.menu || 'Standard pure veg menu'}
 Guests: ${params.guests || '100'}
 Event Type: ${params.eventType || 'Wedding'}
@@ -95,7 +95,7 @@ export async function generateReport(params: {
   data: string
   period: string
 }): Promise<GeminiResponse> {
-  const prompt = `You are a business analyst for Shagun Catering ERP. Generate a ${params.type} report for ${params.period || 'this month'}.
+  const prompt = `You are a business analyst for Shagun Caterers ERP. Generate a ${params.type} report for ${params.period || 'this month'}.
 
 Current data: ${params.data || 'No specific data provided'}
 
@@ -117,7 +117,7 @@ export async function generateInsights(params: {
   context: string
   data: string
 }): Promise<GeminiResponse> {
-  const prompt = `You are a business intelligence analyst for Shagun Catering ERP. Analyze the following and provide actionable insights:
+  const prompt = `You are a business intelligence analyst for Shagun Caterers ERP. Analyze the following and provide actionable insights:
 
 Context: ${params.context}
 Data: ${params.data || 'Provide general business insights based on catering industry best practices'}
@@ -141,7 +141,7 @@ export async function chatMessage(params: {
   history?: Array<{ role: 'user' | 'assistant'; content: string }>
   context?: string
 }): Promise<GeminiResponse> {
-  const systemPrompt = `You are an AI assistant for Shagun Catering, a pure vegetarian catering company. 
+  const systemPrompt = `You are an AI assistant for Shagun Caterers, a pure vegetarian catering company. 
 You help with menu planning, cost estimation, event management, vendor coordination, and kitchen operations.
 Be helpful, professional, and concise. Use formatting (bold, bullet points) for clarity.
 Context: ${params.context || 'General catering assistance'}`

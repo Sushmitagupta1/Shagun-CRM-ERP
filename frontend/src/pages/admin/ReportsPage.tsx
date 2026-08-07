@@ -143,7 +143,7 @@ td{padding:7px 10px;border-bottom:1px solid #e2e8f0}
 tr:nth-child(even){background:#f8fafc}
 @media print{body{padding:15px}button{display:none}}
 </style></head><body>
-<h1>Shagun Catering — ${REPORT_TYPES.find((r) => r.id === selectedReport)?.label}</h1>
+<h1>Shagun Caterers — ${REPORT_TYPES.find((r) => r.id === selectedReport)?.label}</h1>
 <p>Generated on ${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}${dateFrom || dateTo ? ` · ${dateFrom || '…'} to ${dateTo || '…'}` : ''}</p>
 <table><thead><tr>${headers.map((h) => `<th>${h}</th>`).join('')}</tr></thead>
 <tbody>${rows.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table>

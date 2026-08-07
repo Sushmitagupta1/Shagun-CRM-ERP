@@ -109,7 +109,7 @@ export default function SalesDashboard() {
     setChatInput('')
     setIsTyping(true)
     const history = messages.map((m) => ({ role: m.role, content: m.content }))
-    const res = await chatMessage({ message: userMsg.content, history, context: 'Sales pipeline for Shagun Catering ERP' })
+    const res = await chatMessage({ message: userMsg.content, history, context: 'Sales pipeline for Shagun Caterers ERP' })
     setMessages((prev) => [...prev, { id: (Date.now() + 1).toString(), role: 'assistant', content: res.error ?? res.text }])
     setIsTyping(false)
   }

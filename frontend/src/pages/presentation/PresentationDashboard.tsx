@@ -58,7 +58,7 @@ export default function PresentationDashboard() {
     setInput('')
     setIsTyping(true)
     const history = messages.map((m) => ({ role: m.role, content: m.content }))
-    const res = await chatMessage({ message: userMsg.content, history, context: 'Presentation design and event decor for Shagun Catering' })
+    const res = await chatMessage({ message: userMsg.content, history, context: 'Presentation design and event decor for Shagun Caterers' })
     setMessages((prev) => [...prev, { id: (Date.now() + 1).toString(), role: 'assistant', content: res.error ?? res.text }])
     setIsTyping(false)
   }
