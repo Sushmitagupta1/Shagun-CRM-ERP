@@ -459,7 +459,7 @@ export default function MenuGenerator() {
       {/* Designer Options */}
       {designs.length > 0 && (
         <div className="space-y-4">
-          <p className="text-xs font-bold uppercase tracking-wider text-gray-400">{designs.length} designs · select template above to change background</p>
+          <p className="text-xs font-bold uppercase tracking-wider text-gray-400">{designs.length} designs · select a template above, then re-run Design to change background</p>
           <div className="grid gap-4 lg:grid-cols-3">
             {designs.map((design, idx) => (
               <motion.div key={design.id} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.1 }}
