@@ -1,24 +1,25 @@
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY as string
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`
+const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY as string
+const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions'
+const GROQ_MODEL = 'llama-3.3-70b-versatile'
 
-export interface GeminiResponse {
+export interface GroqResponse {
   text: string
   error?: string
 }
 
-async function callGemini(prompt: string): Promise<GeminiResponse> {
+async function callGroq(prompt: string): Promise<GroqResponse> {
   try {
-    const res = await fetch(GEMINI_URL, {
+    const res = await fetch(GROQ_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${GROQ_API_KEY}`,
+      },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.7,
-          topK: 40,
-          topP: 0.95,
-          maxOutputTokens: 2048,
-        },
+        model: GROQ_MODEL,
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.7,
+        max_tokens: 2048,
       }),
     })
 
@@ -28,7 +29,7 @@ async function callGemini(prompt: string): Promise<GeminiResponse> {
     }
 
     const data = await res.json()
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+    const text = data?.choices?.[0]?.message?.content ?? ''
     return { text }
   } catch (e: any) {
     return { text: '', error: e?.message ?? 'Network error' }
@@ -42,7 +43,7 @@ export async function generateMenu(params: {
   guests: string
   eventType: string
   customPrompt?: string
-}): Promise<GeminiResponse> {
+}): Promise<GroqResponse> {
   const prompt = params.customPrompt || `You are a senior catering chef for Shagun Caterers (pure veg only). Generate a detailed menu for:
 Event Type: ${params.eventType || 'General'}
 Season: ${params.season || 'All'}
@@ -60,7 +61,7 @@ For each item give: name, brief description, estimated cost per plate contributi
 End with total estimated cost per plate and tips for customization.
 Format with bold headings and bullet points.`
 
-  return callGemini(prompt)
+  return callGroq(prompt)
 }
 
 // ── AI Cost Estimation ──
@@ -68,7 +69,7 @@ export async function estimateCost(params: {
   menu: string
   guests: string
   eventType: string
-}): Promise<GeminiResponse> {
+}): Promise<GroqResponse> {
   const prompt = `You are a catering cost analyst for Shagun Caterers (pure veg). Estimate costs for:
 Menu: ${params.menu || 'Standard pure veg menu'}
 Guests: ${params.guests || '100'}
@@ -86,7 +87,7 @@ Provide a detailed breakdown:
 
 Format as a professional cost sheet with clear sections.`
 
-  return callGemini(prompt)
+  return callGroq(prompt)
 }
 
 // ── AI Reports ──
@@ -94,7 +95,7 @@ export async function generateReport(params: {
   type: string
   data: string
   period: string
-}): Promise<GeminiResponse> {
+}): Promise<GroqResponse> {
   const prompt = `You are a business analyst for Shagun Caterers ERP. Generate a ${params.type} report for ${params.period || 'this month'}.
 
 Current data: ${params.data || 'No specific data provided'}
@@ -109,14 +110,14 @@ Provide:
 
 Format as a professional business report with clear sections and insights.`
 
-  return callGemini(prompt)
+  return callGroq(prompt)
 }
 
 // ── AI Insights ──
 export async function generateInsights(params: {
   context: string
   data: string
-}): Promise<GeminiResponse> {
+}): Promise<GroqResponse> {
   const prompt = `You are a business intelligence analyst for Shagun Caterers ERP. Analyze the following and provide actionable insights:
 
 Context: ${params.context}
@@ -132,31 +133,5 @@ Provide:
 
 Be specific, data-driven, and actionable. Format with clear headings.`
 
-  return callGemini(prompt)
-}
-
-// ── AI Chat (general purpose) ──
-export async function chatMessage(params: {
-  message: string
-  history?: Array<{ role: 'user' | 'assistant'; content: string }>
-  context?: string
-}): Promise<GeminiResponse> {
-  const systemPrompt = `You are an AI assistant for Shagun Caterers, a pure vegetarian catering company. 
-You help with menu planning, cost estimation, event management, vendor coordination, and kitchen operations.
-Be helpful, professional, and concise. Use formatting (bold, bullet points) for clarity.
-Context: ${params.context || 'General catering assistance'}`
-
-  let fullPrompt = systemPrompt + '\n\n'
-
-  if (params.history && params.history.length > 0) {
-    fullPrompt += 'Conversation history:\n'
-    params.history.forEach((msg) => {
-      fullPrompt += `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}\n`
-    })
-    fullPrompt += '\n'
-  }
-
-  fullPrompt += `User: ${params.message}\nAssistant:`
-
-  return callGemini(fullPrompt)
+  return callGroq(prompt)
 }

@@ -41,7 +41,7 @@ New → Follow Up → Menu + Presentation (parallel) → Confirmed → Event →
 - **Warehouse** dispatches items + tracks returns
 - **Admin** sees aggregated reports
 
-### AI-Powered Tools (Google Gemini 2.0 Flash)
+### AI-Powered Tools (Groq — llama-3.3-70b)
 
 | Tool | Available On | Description |
 |------|-------------|-------------|
@@ -81,7 +81,7 @@ New → Follow Up → Menu + Presentation (parallel) → Confirmed → Event →
 | Framer Motion | 12 | Animations |
 | Sonner | 2 | Toast notifications |
 | Lucide React | — | Icons |
-| Google Gemini API | 2.0 Flash | AI features |
+| Groq API | llama-3.3-70b-versatile | AI features |
 
 ### Backend
 | Technology | Version | Purpose |
@@ -124,7 +124,7 @@ shagun-catering-erp/
 │   │   │   ├── charts/          # Reusable chart components
 │   │   │   └── ui/              # Base UI primitives
 │   │   ├── hooks/               # useAuth custom hook
-│   │   ├── lib/                 # Utilities, constants, Gemini service, notifications data
+│   │   ├── lib/                 # Utilities, constants, Groq service, notifications data
 │   │   ├── pages/               # All page components
 │   │   │   ├── admin/           # AdminDashboard, UserManagement, Finance, Reports, Settings
 │   │   │   ├── sales/           # SalesDashboard
@@ -369,7 +369,7 @@ ENVIRONMENT=development
 ### Frontend `frontend/.env`
 ```env
 VITE_API_BASE_URL=http://localhost:8000/api
-VITE_GEMINI_API_KEY=your-google-gemini-api-key
+VITE_GROQ_API_KEY=your-groq-api-key
 ```
 
 ### Frontend `frontend/.env.production`
