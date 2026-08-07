@@ -7,7 +7,7 @@ export interface GroqResponse {
   error?: string
 }
 
-async function callGroq(prompt: string): Promise<GroqResponse> {
+async function callGroq(prompt: string, maxTokens = 4096): Promise<GroqResponse> {
   try {
     const res = await fetch(GROQ_URL, {
       method: 'POST',
@@ -19,7 +19,7 @@ async function callGroq(prompt: string): Promise<GroqResponse> {
         model: GROQ_MODEL,
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.7,
-        max_tokens: 2048,
+        max_tokens: maxTokens,
       }),
     })
 
@@ -131,7 +131,7 @@ Provide:
 5. Recommended Actions (prioritized)
 6. Quick Wins
 
-  Be specific, data-driven, and actionable. Format with clear headings.`
+Be specific, data-driven, and actionable. Format with clear headings.`
 
   return callGroq(prompt)
 }
@@ -143,6 +143,9 @@ export async function generateMenuDesign(params: {
   clientName: string
   templateInfo: string
 }): Promise<GroqResponse> {
+  const backgroundGuidance = params.templateInfo
+    ? `- Set the template background via CSS on the wrapper div, e.g. <div style="background-image:url('TEMPLATE_URL');background-size:100% 100%;background-position:center;background-repeat:no-repeat;min-height:100vh"> ... </div>. Replace TEMPLATE_URL literally with the given template URL string.`
+    : `- Use a clean white or very light background on the wrapper div (no background image).`
   const prompt = `You are an expert menu card designer for Shagun Caterers (pure veg only).
 Design a beautiful printable menu card using the user's menu list and section labels.
 
@@ -156,13 +159,13 @@ ${params.menuText}
 INSTRUCTIONS:
 - Return exactly 3 DIFFERENT design options separated by "---DESIGN---".
 - Inside each design option, separate pages with "---PAGE---".
-- Each page is a COMPLETE HTML fragment: a <style> block (scoped inline styles) followed by <body> markup. Do NOT include <html>, <head>, doctype, <script>, external images, or absolute URLs.
+- Each page is a COMPLETE HTML fragment: a <style> block (scoped inline styles) followed by the page content markup wrapped in a single wrapper <div> (the full page markup). Do NOT include <html>, <head>, doctype, <script>, external images, or absolute URLs.
 - Each labeled section of the user's menu becomes its OWN page. Example: STARTERS page, MAIN COURSE page, DESSERTS page.
 - Use the user's exact section label text as the page heading.
-- The template background is set via CSS on a wrapper div, e.g. <div style="background-image:url('TEMPLATE_URL');background-size:100% 100%;background-position:center;background-repeat:no-repeat;min-height:100vh"> ... </div>. Replace TEMPLATE_URL literally with the given template URL string.
+${backgroundGuidance}
 - Give each option a distinct theme appropriate to the event (wedding: gold/maroon elegant serif; engagement: rose/gold; corporate: navy/steel clean sans-serif). Vary fonts, colors, heading treatments, and item bullet styles between the 3 options.
 - Use <h1> for the design/menu title, the section label as <h2>, and a <ul>/<li> per dish.
 - Keep all CSS inline in a <style> tag that only targets the page. Use CSS classes, not element selectors that could leak.
 - Content must fit A4 portrait (compact spacing, reasonable font sizes).`
-  return callGroq(prompt)
+  return callGroq(prompt, 8192)
 }
