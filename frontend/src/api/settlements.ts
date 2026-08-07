@@ -6,6 +6,8 @@ export async function getSettlements(params: {
   page?: number
   per_page?: number
   status?: string
+  date_from?: string
+  date_to?: string
 }): Promise<PaginatedResponse<Settlement>> {
   const response = await client.get('/settlements', { params })
   return response.data

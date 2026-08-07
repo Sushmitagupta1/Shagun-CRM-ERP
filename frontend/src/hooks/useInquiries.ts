@@ -10,6 +10,8 @@ export function useInquiries(params: {
   event_type?: string
   date_from?: string
   date_to?: string
+  event_date_from?: string
+  event_date_to?: string
   followup?: string
 }) {
   return useQuery({

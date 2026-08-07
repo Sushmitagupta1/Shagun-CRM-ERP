@@ -1,5 +1,6 @@
 import uuid
 import math
+from datetime import datetime
 from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -18,12 +19,18 @@ router = APIRouter(prefix="/api/settlements", tags=["settlements"])
 
 
 @router.get("", response_model=PaginatedResponse[SettlementResponse])
-async def list_settlements(page: int = Query(1, ge=1), per_page: int = Query(20, ge=1, le=100), status: str | None = None, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_role("admin"))):
+async def list_settlements(page: int = Query(1, ge=1), per_page: int = Query(20, ge=1, le=100), status: str | None = None, date_from: str | None = None, date_to: str | None = None, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_role("admin"))):
     query = select(Settlement, Inquiry.client_name).join(Inquiry, Settlement.inquiry_id == Inquiry.id)
     count_query = select(func.count(Settlement.id))
     if status:
         query = query.where(Settlement.status == status)
         count_query = count_query.where(Settlement.status == status)
+    if date_from:
+        query = query.where(Settlement.created_at >= datetime.fromisoformat(date_from))
+        count_query = count_query.where(Settlement.created_at >= datetime.fromisoformat(date_from))
+    if date_to:
+        query = query.where(Settlement.created_at <= datetime.fromisoformat(date_to).replace(hour=23, minute=59, second=59))
+        count_query = count_query.where(Settlement.created_at <= datetime.fromisoformat(date_to).replace(hour=23, minute=59, second=59))
     total_result = await db.execute(count_query)
     total = total_result.scalar()
     query = query.order_by(Settlement.created_at.desc()).offset((page - 1) * per_page).limit(per_page)

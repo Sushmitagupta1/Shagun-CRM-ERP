@@ -5,6 +5,8 @@ export function useSettlements(params: {
   page?: number
   per_page?: number
   status?: string
+  date_from?: string
+  date_to?: string
 }) {
   return useQuery({
     queryKey: ['settlements', params],
