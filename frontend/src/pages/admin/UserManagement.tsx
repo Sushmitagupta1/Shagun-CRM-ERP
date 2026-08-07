@@ -1,16 +1,20 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getUsers, createUser, deleteUser } from '@/api/users'
+import { getUsers, createUser, updateUser, deleteUser } from '@/api/users'
 import PageHeader from '@/components/common/PageHeader'
 import { ROLE_LABELS } from '@/lib/constants'
 import { toast } from 'sonner'
-import { Plus, Trash2, Loader2, Search } from 'lucide-react'
+import { Plus, Trash2, Pencil, Loader2, Search, X } from 'lucide-react'
+import type { User } from '@/types/auth'
+
+const EMPTY_FORM = { username: '', email: '', password: '', full_name: '', role_id: '' }
 
 export default function UserManagement() {
   const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
   const [showCreate, setShowCreate] = useState(false)
-  const [form, setForm] = useState({ email: '', password: '', full_name: '', role_id: '' })
+  const [editing, setEditing] = useState<User | null>(null)
+  const [form, setForm] = useState(EMPTY_FORM)
 
   const { data, isLoading } = useQuery({
     queryKey: ['users', search],
@@ -23,10 +27,24 @@ export default function UserManagement() {
       queryClient.invalidateQueries({ queryKey: ['users'] })
       toast.success('User created')
       setShowCreate(false)
-      setForm({ email: '', password: '', full_name: '', role_id: '' })
+      setForm(EMPTY_FORM)
     },
     onError: (err: unknown) => {
       const message = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Failed to create user'
+      toast.error(message)
+    },
+  })
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<typeof EMPTY_FORM> }) => updateUser(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] })
+      toast.success('User updated')
+      setEditing(null)
+      setForm(EMPTY_FORM)
+    },
+    onError: (err: unknown) => {
+      const message = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Failed to update user'
       toast.error(message)
     },
   })
@@ -38,6 +56,36 @@ export default function UserManagement() {
       toast.success('User deactivated')
     },
   })
+
+  const startEdit = (user: User) => {
+    setEditing(user)
+    setForm({
+      username: '',
+      email: user.email,
+      password: '',
+      full_name: user.full_name,
+      role_id: user.role.id,
+    })
+  }
+
+  const handleSave = () => {
+    if (editing) {
+      const data: Partial<typeof EMPTY_FORM> = {
+        username: form.username || undefined,
+        email: form.email,
+        full_name: form.full_name,
+        role_id: form.role_id,
+        password: form.password || undefined,
+      }
+      updateMutation.mutate({ id: editing.id, data })
+    } else {
+      if (!form.email || !form.password || !form.full_name || !form.role_id) {
+        toast.error('Email, Password, Name and Role are required')
+        return
+      }
+      createMutation.mutate(form)
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -64,11 +112,27 @@ export default function UserManagement() {
         />
       </div>
 
-      {/* Create Form */}
-      {showCreate && (
+      {/* Create/Edit Form */}
+      {(showCreate || editing) && (
         <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-md">
-          <h3 className="mb-4 text-sm font-semibold text-gray-900">New User</h3>
+          <div className="mb-4 flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-gray-900">
+              {editing ? `Edit User — ${editing.full_name}` : 'New User'}
+            </h3>
+            <button
+              onClick={() => { setEditing(null); setShowCreate(false); setForm(EMPTY_FORM) }}
+              className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+            <input
+              placeholder="Username"
+              value={form.username}
+              onChange={(e) => setForm({ ...form, username: e.target.value })}
+              className="h-10 rounded-lg border border-gray-200 px-3 text-sm"
+            />
             <input
               placeholder="Full Name"
               value={form.full_name}
@@ -82,7 +146,7 @@ export default function UserManagement() {
               className="h-10 rounded-lg border border-gray-200 px-3 text-sm"
             />
             <input
-              placeholder="Password"
+              placeholder={editing ? 'New password (optional)' : 'Password'}
               type="password"
               value={form.password}
               onChange={(e) => setForm({ ...form, password: e.target.value })}
@@ -102,11 +166,11 @@ export default function UserManagement() {
                 ))}
               </select>
               <button
-                onClick={() => createMutation.mutate(form)}
-                disabled={createMutation.isPending}
+                onClick={handleSave}
+                disabled={createMutation.isPending || updateMutation.isPending}
                 className="flex h-10 items-center gap-2 rounded-lg bg-gold px-4 text-sm font-medium text-white transition-colors hover:bg-gold-hover"
               >
-                {createMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                {createMutation.isPending || updateMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                 Save
               </button>
             </div>
@@ -168,12 +232,20 @@ export default function UserManagement() {
                     </span>
                   </td>
                   <td className="px-5 py-3.5 text-right">
-                    <button
-                      onClick={() => deleteMutation.mutate(user.id)}
-                      className="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-rose-50 hover:text-rose-600"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                    <div className="flex items-center justify-end gap-1">
+                      <button
+                        onClick={() => startEdit(user)}
+                        className="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-blue-50 hover:text-blue-600"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => deleteMutation.mutate(user.id)}
+                        className="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-rose-50 hover:text-rose-600"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))

@@ -123,7 +123,7 @@ async def get_monthly_trend(db: AsyncSession) -> list:
 
 async def get_status_distribution(db: AsyncSession) -> list:
     result = await db.execute(select(Inquiry.status, func.count(Inquiry.id).label('count')).group_by(Inquiry.status))
-    return [{"status": row.status.value, "count": row.count} for row in result.all()]
+    return [{"status": row.status.value if not isinstance(row.status, str) else row.status, "count": row.count} for row in result.all()]
 
 
 async def get_sales_funnel(db: AsyncSession) -> list:

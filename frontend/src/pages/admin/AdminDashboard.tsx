@@ -13,7 +13,7 @@ import { formatCurrency } from '@/lib/utils'
 import { INQUIRY_STATUSES } from '@/lib/constants'
 import { useAuth } from '@/hooks/useAuth'
 import { generateReport, chatMessage } from '@/lib/gemini'
-import { Loader2, FileText, Send, MessageSquare, X, Bot, User, Sparkles } from 'lucide-react'
+import { Loader2, FileText, Send, MessageSquare, X, Bot, User, Sparkles, Eye } from 'lucide-react'
 
 export default function AdminDashboard() {
   const navigate = useNavigate()
@@ -73,33 +73,19 @@ export default function AdminDashboard() {
         </button>
       </div>
 
-      {/* KPI Cards — Row 1 */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5">
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-6">
         {kpisLoading
-          ? Array.from({ length: 5 }).map((_, i) => <KPICardSkeleton key={i} />)
+          ? Array.from({ length: 6 }).map((_, i) => <KPICardSkeleton key={i} />)
           : [
               { label: 'Total Inquiries', value: kpis?.total_inquiries ?? 0, onClick: () => navigate('/inquiries') },
-              { label: 'Confirmed Bookings', value: kpis?.confirmed ?? 0, onClick: () => navigate('/inquiries') },
-              { label: 'Pending Payments', value: kpis?.pending_payments ?? 0, onClick: () => navigate('/inquiries') },
+              { label: 'Confirmed Events', value: kpis?.confirmed ?? 0, onClick: () => navigate('/inquiries') },
+              { label: 'Pending Payments', value: kpis?.pending_payments ?? 0, onClick: () => navigate('/finance') },
               { label: 'Upcoming Events', value: kpis?.upcoming_events ?? 0, onClick: () => navigate('/inquiries') },
               { label: "Today's Events", value: kpis?.today_events ?? 0, onClick: () => navigate('/inquiries') },
+              { label: 'Total Revenue', value: formatCurrency(kpis?.total_revenue ?? 0), onClick: () => navigate('/finance') },
             ].map((kpi, i) => (
               <KPICard key={kpi.label} label={kpi.label} value={kpi.value} index={i} />
-            ))}
-      </div>
-
-      {/* KPI Cards — Row 2 */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5">
-        {kpisLoading
-          ? Array.from({ length: 5 }).map((_, i) => <KPICardSkeleton key={i} />)
-          : [
-              { label: 'Pending Payments', value: kpis?.pending_payments ?? 0, onClick: () => navigate('/finance') },
-              { label: 'Total Revenue', value: formatCurrency(kpis?.total_revenue ?? 0), onClick: () => navigate('/finance') },
-              { label: 'Outstanding', value: formatCurrency(kpis?.outstanding_amount ?? 0), onClick: () => navigate('/finance') },
-              { label: 'Kitchen Pending', value: kpis?.pending_kitchen_plans ?? 0, onClick: () => navigate('/inquiries') },
-              { label: 'Warehouse Pending', value: kpis?.pending_warehouse_requests ?? 0, onClick: () => navigate('/inquiries') },
-            ].map((kpi, i) => (
-              <KPICard key={kpi.label} label={kpi.label} value={kpi.value} index={i + 5} />
             ))}
       </div>
 
@@ -149,7 +135,7 @@ export default function AdminDashboard() {
         </motion.div>
       </div>
 
-      {/* Recent Inquiries Table */}
+      {/* New Inquiry Table */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -157,7 +143,7 @@ export default function AdminDashboard() {
         className="rounded-xl border border-gray-100 bg-white shadow-md"
       >
         <div className="border-b border-gray-100 px-5 py-4">
-          <h3 className="text-sm font-semibold text-gray-900">Recent Inquiries</h3>
+          <h3 className="text-sm font-semibold text-gray-900">New Inquiry</h3>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -175,18 +161,21 @@ export default function AdminDashboard() {
                 <th className="px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
                   Status
                 </th>
+                <th className="px-5 py-3 text-right text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                  Actions
+                </th>
               </tr>
             </thead>
             <tbody>
               {inquiriesLoading ? (
                 <tr>
-                  <td colSpan={4} className="px-5 py-8 text-center">
+                  <td colSpan={5} className="px-5 py-8 text-center">
                     <div className="mx-auto h-6 w-6 animate-spin rounded-full border-4 border-gold border-t-transparent" />
                   </td>
                 </tr>
               ) : inquiriesData?.items?.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-5 py-8 text-center text-gray-400">
+                  <td colSpan={5} className="px-5 py-8 text-center text-gray-400">
                     No inquiries yet
                   </td>
                 </tr>
@@ -215,6 +204,14 @@ export default function AdminDashboard() {
                           label={statusConfig?.label ?? inquiry.status}
                           color={statusConfig?.color ?? 'bg-gray-100 text-gray-800'}
                         />
+                      </td>
+                      <td className="px-5 py-3.5 text-right">
+                        <button
+                          onClick={() => navigate(`/inquiries/${inquiry.id}`)}
+                          className="flex items-center gap-1 text-xs font-medium text-maroon hover:underline"
+                        >
+                          <Eye className="h-3.5 w-3.5" /> View
+                        </button>
                       </td>
                     </motion.tr>
                   )
