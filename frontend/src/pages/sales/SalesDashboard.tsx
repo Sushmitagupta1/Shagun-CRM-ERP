@@ -304,11 +304,12 @@ export default function SalesDashboard() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.8 }}
           className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-md"
+          style={{ height: 260, display: 'flex', flexDirection: 'column' }}
         >
-          <div className="border-b border-gray-100 px-5 py-3">
+          <div className="shrink-0 border-b border-gray-100 px-5 py-3">
             <h3 className="text-sm font-semibold text-gray-900">Recent Inquiries</h3>
           </div>
-          <div className="max-h-[65vh] overflow-y-auto">
+          <div className="flex-1 overflow-y-auto">
             <table className="w-full">
               <thead className="sticky top-0 z-10">
                 <tr className="border-b border-gray-200 bg-gray-50">
