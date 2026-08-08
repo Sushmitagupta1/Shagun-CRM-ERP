@@ -144,8 +144,8 @@ export async function generateMenuDesign(params: {
   templateInfo: string
 }): Promise<GroqResponse> {
   const backgroundGuidance = params.templateInfo
-    ? `- Set the template background via CSS on the wrapper div, e.g. <div style="background-image:url('TEMPLATE_URL');background-size:100% 100%;background-position:center;background-repeat:no-repeat;min-height:100vh"> ... </div>. Replace TEMPLATE_URL literally with the given template URL string.`
-    : `- Use a clean white or very light background on the wrapper div (no background image).`
+    ? `- Set the template background via CSS on the wrapper div, e.g. <div style="display:flex;align-items:center;justify-content:center;background-image:url('TEMPLATE_URL');background-size:100% 100%;background-position:center;background-repeat:no-repeat;min-height:100vh;padding:40px"> ... </div>. Replace TEMPLATE_URL literally with the given template URL string. The wrapper MUST be display:flex with align-items:center and justify-content:center so the content sits in the MIDDLE of the border.`
+    : `- Use a clean white or very light background on the wrapper div (no background image), with the same flex centering so the content sits in the middle of the page.`
   const prompt = `You are an expert menu card designer for Shagun Caterers (pure veg only).
 Design a beautiful printable menu card using the user's menu list and section labels.
 
@@ -164,9 +164,12 @@ INSTRUCTIONS:
 - Each labeled section of the user's menu becomes its OWN page. Example: STARTERS page, MAIN COURSE page, DESSERTS page.
 - Use the user's exact section label text as the page heading.
 ${backgroundGuidance}
+- CENTER THE MENU: the inner content card must be positioned in the middle of the page/border. On the wrapper div use display:flex, align-items:center, justify-content:center, min-height:100vh. Inside it, wrap the actual menu in a single centered card (text-align:center) with padding, and put the card content vertically and horizontally centered. Nothing should touch the edges of the border; keep comfortable margins all around.
+- USE GOOD FONTS: pick elegant, refined font stacks that render everywhere (no external font files). Headings: 'Playfair Display', Georgia, serif or 'Great Vibes', 'Brush Script MT', cursive for decorative titles. Body: 'Lato', 'Montserrat', 'Segoe UI', Arial, sans-serif. Do NOT rely on fonts that need downloading.
+- SMALL REFINED FONTS: keep sizes small and elegant. Design title <h1> 20-24px, section headings <h2> 12-14px, dish names 11-12px, descriptions 9-10px, spacing compact so the whole card fits nicely inside the border with the middle placement.
 - Give each option a distinct theme appropriate to the event (wedding: gold/maroon elegant serif; engagement: rose/gold; corporate: navy/steel clean sans-serif). Vary fonts, colors, heading treatments, and item bullet styles between the 3 options.
 - Use <h1> for the design/menu title, the section label as <h2>, and a <ul>/<li> per dish.
 - Keep all CSS inline in a <style> tag that only targets the page. Use CSS classes, not element selectors that could leak.
-- Content must fit A4 portrait (compact spacing, reasonable font sizes).`
+- Content must fit A4 portrait (compact spacing, small refined font sizes).`
   return callGroq(prompt, 8192)
 }
