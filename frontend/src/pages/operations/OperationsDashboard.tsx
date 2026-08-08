@@ -126,12 +126,12 @@ export default function OperationsDashboard() {
           <div className="border-b border-gray-100 px-5 py-3">
             <h3 className="text-sm font-bold text-gray-900">Upcoming Events</h3>
           </div>
-          <div className="overflow-y-auto" style={{ height: 226 }}>
+          <div className="max-h-[65vh] overflow-y-auto">
             <table className="w-full">
-              <thead>
+              <thead className="sticky top-0 z-10">
                 <tr className="border-b border-gray-200 bg-gray-50">
                   {['Client Name', 'Number', 'Event Type', 'Function Date', 'Pax', 'Remark', 'Actions'].map((h) => (
-                    <th key={h + Math.random()} className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-gray-500">{h}</th>
+                    <th key={h + Math.random()} className="bg-gray-50 px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-gray-500">{h}</th>
                   ))}
                 </tr>
               </thead>

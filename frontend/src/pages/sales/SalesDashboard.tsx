@@ -304,18 +304,17 @@ export default function SalesDashboard() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.8 }}
           className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-md"
-          style={{ height: 260 }}
         >
           <div className="border-b border-gray-100 px-5 py-3">
             <h3 className="text-sm font-semibold text-gray-900">Recent Inquiries</h3>
           </div>
-          <div className="overflow-y-auto" style={{ height: 226 }}>
+          <div className="max-h-[65vh] overflow-y-auto">
             <table className="w-full">
-              <thead>
+              <thead className="sticky top-0 z-10">
                 <tr className="border-b border-gray-200 bg-gray-50">
-                  <th className="px-4 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-gray-500">Client</th>
-                  <th className="px-4 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-gray-500">Event</th>
-                  <th className="px-4 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-gray-500">Status</th>
+                  <th className="bg-gray-50 px-4 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-gray-500">Client</th>
+                  <th className="bg-gray-50 px-4 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-gray-500">Event</th>
+                  <th className="bg-gray-50 px-4 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-gray-500">Status</th>
                 </tr>
               </thead>
               <tbody>

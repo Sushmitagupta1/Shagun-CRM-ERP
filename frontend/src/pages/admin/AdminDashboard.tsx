@@ -118,23 +118,23 @@ export default function AdminDashboard() {
         <div className="border-b border-gray-100 px-5 py-4">
           <h3 className="text-sm font-semibold text-gray-900">New Inquiry</h3>
         </div>
-        <div className="overflow-x-auto">
+        <div className="max-h-[65vh] overflow-auto">
           <table className="w-full">
-            <thead>
+            <thead className="sticky top-0 z-10">
               <tr className="border-b border-gray-200 bg-gray-50">
-                <th className="px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
                   Client
                 </th>
-                <th className="px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
                   Event
                 </th>
-                <th className="px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
                   Date
                 </th>
-                <th className="px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
                   Status
                 </th>
-                <th className="px-5 py-3 text-right text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                <th className="bg-gray-50 px-5 py-3 text-right text-[11px] font-bold uppercase tracking-wider text-gray-500">
                   Actions
                 </th>
               </tr>

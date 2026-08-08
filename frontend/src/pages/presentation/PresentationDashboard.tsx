@@ -169,10 +169,10 @@ export default function PresentationDashboard() {
           </div>
           <div className="overflow-y-auto" style={{ maxHeight: 280 }}>
             <table className="w-full">
-              <thead>
+              <thead className="sticky top-0 z-10">
                 <tr className="border-b border-gray-200 bg-gray-50">
                   {['Client', 'Event', 'Date', 'Pax', 'Status', ''].map((h) => (
-                    <th key={h + Math.random()} className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-gray-500">{h}</th>
+                    <th key={h + Math.random()} className="bg-gray-50 px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-gray-500">{h}</th>
                   ))}
                 </tr>
               </thead>
