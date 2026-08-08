@@ -38,7 +38,7 @@ async def serve_template(category: str, file: str):
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="File not found")
     media_type, _ = mimetypes.guess_type(file_path)
-    return FileResponse(file_path, media_type=media_type, headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
+    return FileResponse(file_path, media_type=media_type, headers={"Cache-Control": "public, max-age=86400"})
 
 
 @app.get("/api/health")

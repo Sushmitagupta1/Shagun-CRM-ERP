@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { getInquiry } from '@/api/inquiries'
 import { generateMenuDesign, loadImageAsDataUrl } from '@/lib/groq'
 import { parseMenuDesigns, downloadMenuDesignPdf, type MenuDesign } from '@/lib/menuDesign'
-import { getTemplateCategories, getTemplateUrl } from '@/api/templates'
+import { getTemplateCategories, getTemplateUrl, getTemplateThumbUrl } from '@/api/templates'
 import PageHeader from '@/components/common/PageHeader'
 import { toast } from 'sonner'
 import { motion } from 'framer-motion'
@@ -208,7 +208,7 @@ export default function MenuGenerator() {
                   return (
                     <button key={f} onClick={() => setSelectedFile(f)}
                       className={`overflow-hidden rounded-lg border-2 transition-all ${isSelected ? 'border-gold ring-2 ring-gold/30' : 'border-gray-200 hover:border-gray-300'}`}>
-                      <img src={getTemplateUrl(cat.name, f)} alt={f} className="h-20 w-full object-cover" />
+                      <img src={getTemplateThumbUrl(cat.name, f)} alt={f} loading="lazy" decoding="async" className="h-20 w-full object-cover" />
                       <p className="truncate px-1 py-1 text-[9px] text-gray-500">{f}</p>
                     </button>
                   )
