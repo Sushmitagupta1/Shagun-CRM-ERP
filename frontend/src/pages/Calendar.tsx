@@ -202,8 +202,8 @@ export default function CalendarPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.2 }}
-          className="flex rounded-xl border border-gray-100 bg-white shadow-md"
-          style={{ height: 260, flexDirection: 'column' }}
+          className="flex h-full rounded-xl border border-gray-100 bg-white shadow-md"
+          style={{ flexDirection: 'column' }}
         >
           <div className="shrink-0 border-b border-gray-100 px-5 py-4">
             <h3 className="text-sm font-semibold text-gray-900">
