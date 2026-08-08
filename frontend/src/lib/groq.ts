@@ -1,6 +1,7 @@
 const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY as string
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions'
 const GROQ_MODEL = 'llama-3.3-70b-versatile'
+const GROQ_VISION_MODEL = 'llama-3.2-90b-vision-preview'
 
 export interface GroqResponse {
   text: string
@@ -33,6 +34,71 @@ async function callGroq(prompt: string, maxTokens = 4096): Promise<GroqResponse>
     return { text }
   } catch (e: any) {
     return { text: '', error: e?.message ?? 'Network error' }
+  }
+}
+
+// Vision-capable call: sends the template image along with the prompt so the
+// model can see the actual template and design accordingly.
+async function callGroqVision(prompt: string, imageDataUrl: string, maxTokens = 8192): Promise<GroqResponse> {
+  try {
+    const res = await fetch(GROQ_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${GROQ_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: GROQ_VISION_MODEL,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: prompt },
+              { type: 'image_url', image_url: { url: imageDataUrl } },
+            ],
+          },
+        ],
+        temperature: 0.7,
+        max_tokens: maxTokens,
+      }),
+    })
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      return { text: '', error: err?.error?.message ?? `API error ${res.status}` }
+    }
+
+    const data = await res.json()
+    const text = data?.choices?.[0]?.message?.content ?? ''
+    return { text }
+  } catch (e: any) {
+    return { text: '', error: e?.message ?? 'Network error' }
+  }
+}
+
+// Fetches a template image (same-origin) and returns a resized JPEG data URL
+// suitable for sending to the vision model. Returns null if it can't load.
+export async function loadImageAsDataUrl(url: string, maxDim = 1024): Promise<string | null> {
+  try {
+    const blob = await fetch(url).then((r) => (r.ok ? r.blob() : null))
+    if (!blob) return null
+    const objectUrl = URL.createObjectURL(blob)
+    const img = new Image()
+    img.src = objectUrl
+    await img.decode()
+    URL.revokeObjectURL(objectUrl)
+    const scale = Math.min(1, maxDim / Math.max(img.naturalWidth, img.naturalHeight))
+    const w = Math.max(1, Math.round(img.naturalWidth * scale))
+    const h = Math.max(1, Math.round(img.naturalHeight * scale))
+    const canvas = document.createElement('canvas')
+    canvas.width = w
+    canvas.height = h
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return null
+    ctx.drawImage(img, 0, 0, w, h)
+    return canvas.toDataURL('image/jpeg', 0.85)
+  } catch {
+    return null
   }
 }
 
@@ -142,7 +208,11 @@ export async function generateMenuDesign(params: {
   eventType: string
   clientName: string
   templateInfo: string
+  templateImage?: string | null
 }): Promise<GroqResponse> {
+  const templateImageNote = params.templateImage
+    ? `\n- I am attaching the actual template picture. Study the attached template image carefully and design the menu to match its border, frame, colors, and style. Place the menu content in the middle of the border shown in the picture, keeping comfortable margin from the border edges. Use fonts and colors that complement the template picture.`
+    : ''
   const backgroundGuidance = params.templateInfo
     ? `- Set the template background via CSS on the wrapper div, e.g. <div style="display:flex;align-items:center;justify-content:center;background-image:url('TEMPLATE_URL');background-size:100% 100%;background-position:center;background-repeat:no-repeat;min-height:100vh;padding:40px"> ... </div>. Replace TEMPLATE_URL literally with the given template URL string. The wrapper MUST be display:flex with align-items:center and justify-content:center so the content sits in the MIDDLE of the border.`
     : `- Use a clean white or very light background on the wrapper div (no background image), with the same flex centering so the content sits in the middle of the page.`
@@ -170,6 +240,9 @@ ${backgroundGuidance}
 - Give each option a distinct theme appropriate to the event (wedding: gold/maroon elegant serif; engagement: rose/gold; corporate: navy/steel clean sans-serif). Vary fonts, colors, heading treatments, and item bullet styles between the 3 options.
 - Use <h1> for the design/menu title, the section label as <h2>, and a <ul>/<li> per dish.
 - Keep all CSS inline in a <style> tag that only targets the page. Use CSS classes, not element selectors that could leak.
-- Content must fit A4 portrait (compact spacing, small refined font sizes).`
-  return callGroq(prompt, 8192)
+- Content must fit A4 portrait (compact spacing, small refined font sizes).
+${templateImageNote}`
+  return params.templateImage
+    ? callGroqVision(prompt, params.templateImage, 8192)
+    : callGroq(prompt, 8192)
 }

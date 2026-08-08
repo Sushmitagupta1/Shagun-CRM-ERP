@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { getInquiry } from '@/api/inquiries'
-import { generateMenuDesign } from '@/lib/groq'
+import { generateMenuDesign, loadImageAsDataUrl } from '@/lib/groq'
 import { parseMenuDesigns, downloadMenuDesignPdf, type MenuDesign } from '@/lib/menuDesign'
 import { getTemplateCategories, getTemplateUrl } from '@/api/templates'
 import PageHeader from '@/components/common/PageHeader'
@@ -48,11 +48,13 @@ export default function MenuGenerator() {
     }
     setDesigning(true)
     setDesigns([])
+    const templateImage = await loadImageAsDataUrl(getTemplateUrl(selectedCat, selectedFile))
     const res = await generateMenuDesign({
       menuText: designMenuText,
       eventType: inquiry?.event_type || 'General',
       clientName: inquiry?.client_name || 'Client',
       templateInfo: getTemplateUrl(selectedCat, selectedFile),
+      templateImage,
     })
     if (res.error) {
       toast.error('AI error: ' + res.error)
