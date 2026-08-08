@@ -198,24 +198,29 @@ async def export_inquiries_excel(
     result = await db.execute(query)
     inquiries = result.scalars().all()
 
+    next_follow_up_map: dict = {}
+    if inquiries:
+        ids = [i.id for i in inquiries]
+        fu_result = await db.execute(
+            select(FollowUp.inquiry_id, func.min(FollowUp.follow_up_date))
+            .where(FollowUp.inquiry_id.in_(ids), FollowUp.is_done.is_(False))
+            .group_by(FollowUp.inquiry_id)
+        )
+        next_follow_up_map = dict(fu_result.all())
+
     wb = Workbook()
     ws = wb.active
     ws.title = "Inquiries"
-    ws.append(["Client Name", "Phone", "Event Type", "Pax", "Per Plate Rate", "Add On",
-               "Total Amount", "Inquiry Date", "Event Date", "Status", "Payment Status",
-               "Advance Amount", "Remarks"])
+    ws.append(["Event Date", "Client Name", "Phone", "Event Type", "Pax", "Venue",
+               "Inquiry Date", "Follow-up Date", "Status"])
 
     for i in inquiries:
-        total = (float(i.per_plate_rate or 0) * (i.pax or 0)) + float(i.add_on or 0)
         ws.append([
-            i.client_name, i.client_phone, i.event_type, i.pax,
-            float(i.per_plate_rate or 0), float(i.add_on or 0),
-            total,
-            i.inquiry_date.isoformat() if i.inquiry_date else "",
             i.event_date.isoformat() if i.event_date else "",
+            i.client_name, i.client_phone, i.event_type, i.pax, i.venue or "",
+            i.inquiry_date.isoformat() if i.inquiry_date else "",
+            next_follow_up_map.get(i.id).isoformat() if next_follow_up_map.get(i.id) else "",
             i.status.value if hasattr(i.status, 'value') else i.status,
-            i.payment_status.value if hasattr(i.payment_status, 'value') else i.payment_status,
-            float(i.advance_amount), i.remarks or "",
         ])
 
     buffer = BytesIO()
