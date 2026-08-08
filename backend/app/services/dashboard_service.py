@@ -135,6 +135,33 @@ async def get_sales_kpis(db: AsyncSession) -> dict:
         for fu, name, event_type in upcoming_followups_result
     ]
 
+    confirmed_statuses = [InquiryStatus.ADVANCE_RECEIVE, InquiryStatus.OPERATION_HANDOVER]
+    confirmed_result = await db.execute(
+        select(Inquiry).where(Inquiry.status.in_(confirmed_statuses)).order_by(Inquiry.event_date.asc()).limit(100)
+    )
+    confirmed_inquiries = confirmed_result.scalars().all()
+    final_slot_ids: set = set()
+    if confirmed_inquiries:
+        ids = [i.id for i in confirmed_inquiries]
+        slot_result = await db.execute(
+            select(MenuSlot.inquiry_id).where(MenuSlot.inquiry_id.in_(ids), MenuSlot.is_final.is_(True))
+        )
+        final_slot_ids = {row[0] for row in slot_result.all()}
+    pending_menu_inquiries = [
+        i for i in confirmed_inquiries
+        if i.menu_file_name is None and i.id not in final_slot_ids
+    ]
+    pending_menus_list = [
+        {
+            "id": str(i.id),
+            "client_name": i.client_name,
+            "event_type": i.event_type,
+            "event_date": i.event_date.isoformat() if i.event_date else None,
+            "status": i.status.value if hasattr(i.status, "value") else i.status,
+        }
+        for i in pending_menu_inquiries
+    ]
+
     meetings_result = await db.execute(
         select(Meeting, Inquiry.client_name, Inquiry.event_type, User.full_name)
         .join(Inquiry, Meeting.inquiry_id == Inquiry.id)
@@ -165,6 +192,7 @@ async def get_sales_kpis(db: AsyncSession) -> dict:
         "total_sales_value": float(total_sales), "conversion_rate": round(conversion_rate, 1),
         "next_follow_up": next_follow_up_info,
         "upcoming_followups_list": upcoming_followups_list,
+        "pending_menus_list": pending_menus_list,
         "meetings": meetings_list,
     }
 

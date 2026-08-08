@@ -48,6 +48,7 @@ export interface SalesKPIs {
   conversion_rate: number
   next_follow_up: { client_name: string; follow_up_date: string; remarks: string | null } | null
   upcoming_followups_list: TodayFollowUp[]
+  pending_menus_list: PendingMenu[]
   meetings: MeetingInfo[]
 }
 

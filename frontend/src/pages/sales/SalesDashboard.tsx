@@ -22,6 +22,8 @@ import {
   TrendingUp,
   Loader2,
   X,
+  UtensilsCrossed,
+  Wallet,
 } from 'lucide-react'
 
 function getUpcomingReminders(inquiries: { id: string; client_name: string; birthday_date: string | null; anniversary_date: string | null }[]) {
@@ -117,9 +119,9 @@ export default function SalesDashboard() {
           { label: 'Total Inquiries', value: kpis?.total_inquiries ?? 0, icon: Plus, accent: 'text-blue-600', nav: '/inquiries' },
           { label: 'Upcoming Follow-ups', value: kpis?.upcoming_followups ?? 0, icon: Calendar, accent: 'text-amber-600', nav: '/inquiries?followup=upcoming' },
           { label: 'Overdue Follow-ups', value: kpis?.overdue_followups ?? 0, icon: Clock, accent: 'text-red-600', urgent: true, nav: '/inquiries?followup=overdue' },
-          { label: 'Confirmed', value: kpis?.confirmed ?? 0, icon: CheckCircle, accent: 'text-emerald-600', nav: '/inquiries?status=advance_receive,operation_handover' },
+          { label: 'Pending Payment', value: kpis?.pending_payments ?? 0, icon: Wallet, accent: 'text-amber-600', nav: '/finance' },
           { label: 'Total Sales', value: formatCurrency(totalRevenue), icon: TrendingUp, accent: 'text-maroon', nav: '/finance' },
-          { label: 'Conversion', value: `${kpis?.conversion_rate ?? 0}%`, icon: TrendingUp, accent: 'text-purple-600', nav: '/reports' },
+          { label: 'Pending Menu', value: kpis?.pending_menus ?? 0, icon: UtensilsCrossed, accent: 'text-purple-600', nav: '/inquiries' },
         ].map((kpi, i) => (
           <motion.div
             key={kpi.label}
@@ -227,28 +229,49 @@ export default function SalesDashboard() {
           </div>
         </motion.div>
 
-        {/* Next Follow-Up Banner */}
+        {/* Menu Due Banner */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.6 }}
-          className="flex flex-col justify-between rounded-xl border border-blue-100 bg-blue-50/50 p-6 shadow-md"
+          className="flex flex-col justify-between rounded-xl border border-amber-100 bg-amber-50/50 p-6 shadow-md"
           style={{ height: 330 }}
         >
-          <div>
-            <h3 className="text-sm font-bold text-blue-900">Next Follow-Up</h3>
-            <p className="mt-1 text-xs text-blue-600">
-              {kpis?.next_follow_up
-                ? `${kpis.next_follow_up.client_name} on ${new Date(kpis.next_follow_up.follow_up_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}`
-                : 'No upcoming follow-ups'}
-            </p>
-            {kpis?.next_follow_up?.remarks && (
-              <p className="mt-1.5 text-xs text-blue-500 italic">"{kpis.next_follow_up.remarks}"</p>
-            )}
+          <div className="flex min-h-0 flex-col">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-sm font-bold text-amber-900">Menu Due</h3>
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700">
+                {(kpis?.pending_menus_list ?? []).length}
+              </span>
+            </div>
+            <div className="flex-1 space-y-2 overflow-y-auto">
+              {(kpis?.pending_menus_list ?? []).length === 0 ? (
+                <p className="py-4 text-center text-xs text-amber-600">No menus due</p>
+              ) : (
+                (kpis?.pending_menus_list ?? []).map((p) => (
+                  <button
+                    key={p.id}
+                    onClick={() => navigate(`/inquiries/${p.id}`)}
+                    className="flex w-full items-start gap-3 rounded-lg border border-amber-100 bg-white p-3 text-left transition-colors hover:border-amber-300"
+                  >
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-xs font-bold text-amber-700">
+                      <UtensilsCrossed size={14} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-xs font-bold text-gray-900">{p.client_name}</p>
+                      <p className="truncate text-[10px] text-gray-500">
+                        {p.event_type}
+                        {p.event_date ? ` · ${new Date(p.event_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}` : ''}
+                      </p>
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
           </div>
           <button
             onClick={() => navigate('/inquiries')}
-            className="flex h-9 items-center justify-center gap-2 rounded-md bg-gold text-sm font-bold text-white shadow transition-colors hover:bg-gold-hover"
+            className="mt-3 flex h-9 items-center justify-center gap-2 rounded-md bg-gold text-sm font-bold text-white shadow transition-colors hover:bg-gold-hover"
           >
             View Pipeline
           </button>

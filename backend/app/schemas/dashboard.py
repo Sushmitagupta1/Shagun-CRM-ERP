@@ -81,6 +81,7 @@ class SalesKPIs(BaseModel):
     conversion_rate: float
     next_follow_up: NextFollowUp | None = None
     upcoming_followups_list: list[TodayFollowUp] = []
+    pending_menus_list: list[PendingMenu] = []
     meetings: list[MeetingInfo] = []
 
 

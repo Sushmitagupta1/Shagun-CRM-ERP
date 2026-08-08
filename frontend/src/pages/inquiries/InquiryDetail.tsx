@@ -1124,7 +1124,7 @@ export default function InquiryDetail() {
           <div className="mt-4 border-t border-gray-100 pt-4">
             <div className="mb-3 flex items-center justify-between">
               <h4 className="text-xs font-bold uppercase tracking-wider text-gray-400">Meetings</h4>
-              {(isAdmin || isPresentationExec) && (
+              {(isAdmin || isPresentationExec || isSalesHead) && (
                 <button onClick={() => setShowAddMeeting(!showAddMeeting)}
                   className="flex h-7 items-center gap-1 rounded-lg border border-gray-200 px-2.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50">
                   <Plus size={14} /> Add Meeting
