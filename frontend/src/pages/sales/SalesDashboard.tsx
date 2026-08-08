@@ -10,7 +10,7 @@ import { formatCurrency } from '@/lib/utils'
 import { INQUIRY_STATUSES } from '@/lib/constants'
 import { useAuth } from '@/hooks/useAuth'
 import { useNavigate } from 'react-router-dom'
-import { updateInquiry } from '@/api/inquiries'
+import { updateInquiry, addMeeting } from '@/api/inquiries'
 import { toast } from 'sonner'
 import {
   Calendar,
@@ -86,6 +86,27 @@ export default function SalesDashboard() {
       setReminderDate('')
     },
     onError: () => toast.error('Failed to save reminder'),
+  })
+
+  // Add Meeting modal
+  const [showAddMeetingModal, setShowAddMeetingModal] = useState(false)
+  const [meetingClientId, setMeetingClientId] = useState('')
+  const [meetingDate, setMeetingDate] = useState('')
+  const [meetingTime, setMeetingTime] = useState('')
+  const [meetingRemarks, setMeetingRemarks] = useState('')
+  const meetingMutation = useMutation({
+    mutationFn: ({ id, meetingAt, remarks }: { id: string; meetingAt: string; remarks?: string }) =>
+      addMeeting(id, { meeting_at: meetingAt, remarks }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dashboard', 'sales'] })
+      toast.success('Meeting scheduled')
+      setShowAddMeetingModal(false)
+      setMeetingClientId('')
+      setMeetingDate('')
+      setMeetingTime('')
+      setMeetingRemarks('')
+    },
+    onError: () => toast.error('Failed to schedule meeting'),
   })
 
   if (isLoading) {
@@ -278,8 +299,11 @@ export default function SalesDashboard() {
         </motion.div>
       </div>
 
-      {/* Bottom Row — 2 Columns: Reminders | Table */}
+      {/* Bottom Row — Left stack (Reminders | Recent) | Right stack (Follow-ups | Meetings) */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+
+        {/* Left stack */}
+        <div className="space-y-4">
 
         {/* Client Reminders Widget */}
         <motion.div
@@ -290,7 +314,9 @@ export default function SalesDashboard() {
           style={{ height: 260, overflowY: 'auto' }}
         >
           <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-gray-900">Client Reminders</h3>
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-900">
+              <Cake size={15} className="text-pink-600" /> Client Reminders
+            </h3>
             {canManageReminders && (
               <button onClick={() => setShowReminderModal(true)}
                 className="flex h-7 items-center gap-1 rounded-lg border border-gray-200 px-2 text-[10px] font-medium text-gray-600 transition-colors hover:bg-gray-50">
@@ -300,8 +326,12 @@ export default function SalesDashboard() {
           </div>
           <div className="space-y-2">
             {getUpcomingReminders(inquiriesData?.items ?? []).map((reminder) => (
-              <div key={reminder.id} className="flex items-center gap-3 rounded-lg bg-gray-50 p-2.5 transition-colors hover:bg-gray-100">
-                <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
+              <button
+                key={reminder.id}
+                onClick={() => navigate('/inquiries')}
+                className="flex w-full items-center gap-3 rounded-lg border border-gray-100 bg-gray-50 p-3 text-left transition-colors hover:border-pink-200 hover:bg-pink-50"
+              >
+                <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
                   reminder.type === 'birthday' ? 'bg-pink-100' : 'bg-purple-100'
                 }`}>
                   {reminder.type === 'birthday' ? (
@@ -311,59 +341,71 @@ export default function SalesDashboard() {
                   )}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs font-bold text-gray-900">{reminder.name}</p>
-                  <p className="text-[10px] text-gray-500">
+                  <p className="truncate text-xs font-bold text-gray-900">{reminder.name}</p>
+                  <p className="truncate text-[10px] text-gray-500">
                     {reminder.type === 'birthday' ? 'Birthday' : 'Anniversary'} · {reminder.date}
                   </p>
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         </motion.div>
 
-        {/* Recent Inquiries Table */}
+        {/* Recent Inquiries Card */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.8 }}
-          className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-md"
+          className="rounded-xl border border-gray-100 bg-white p-5 shadow-md"
           style={{ height: 260, display: 'flex', flexDirection: 'column' }}
         >
-          <div className="shrink-0 border-b border-gray-100 px-5 py-3">
-            <h3 className="text-sm font-semibold text-gray-900">Recent Inquiries</h3>
+          <div className="mb-3 flex shrink-0 items-center justify-between">
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-900">
+              <Plus size={15} className="text-maroon" /> Recent Inquiries
+            </h3>
+            <button
+              onClick={() => navigate('/inquiries')}
+              className="flex h-8 items-center rounded-lg border border-gray-200 px-3 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50"
+            >
+              View all
+            </button>
           </div>
-          <div className="flex-1 overflow-y-auto">
-            <table className="w-full">
-              <thead className="sticky top-0 z-10">
-                <tr className="border-b border-gray-200 bg-gray-50">
-                  <th className="bg-gray-50 px-4 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-gray-500">Client</th>
-                  <th className="bg-gray-50 px-4 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-gray-500">Event</th>
-                  <th className="bg-gray-50 px-4 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-gray-500">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {inquiriesData?.items?.slice(0, 6).map((inq) => (
-                  <tr key={inq.id} className="border-b border-gray-50 transition-colors hover:bg-gray-50">
-                    <td className="whitespace-nowrap px-4 py-2.5 text-xs font-medium text-gray-900">{inq.client_name}</td>
-                    <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-600">{inq.event_type}</td>
-                    <td className="whitespace-nowrap px-4 py-2.5">
+          <div className="flex-1 space-y-2 overflow-y-auto">
+            {inquiriesData?.items?.slice(0, 6).map((inq) => {
+              const evDate = inq.event_date ? new Date(inq.event_date) : null
+              return (
+                <button
+                  key={inq.id}
+                  onClick={() => navigate(`/inquiries/${inq.id}`)}
+                  className="flex w-full items-start gap-3 rounded-lg border border-gray-100 bg-gray-50 p-3 text-left transition-colors hover:border-amber-200 hover:bg-amber-50"
+                >
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-100 text-xs font-bold text-amber-700">
+                    {evDate ? evDate.getDate() : '—'}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-bold text-gray-900">{inq.client_name}</p>
+                    <p className="truncate text-[10px] text-gray-500">{inq.event_type}</p>
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
                       <StatusPill
                         label={INQUIRY_STATUSES[inq.status as keyof typeof INQUIRY_STATUSES]?.label ?? inq.status}
                         color={INQUIRY_STATUSES[inq.status as keyof typeof INQUIRY_STATUSES]?.color ?? 'bg-gray-100 text-gray-800'}
                       />
                       {inq.menu_content && (
-                        <span className="ml-2 inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
+                        <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
                           Menu Ready
                         </span>
                       )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    </div>
+                  </div>
+                </button>
+              )
+            })}
           </div>
         </motion.div>
-      </div>
+        </div>
+
+        {/* Right stack */}
+        <div className="space-y-4">
 
       {/* Upcoming Follow-ups Panel */}
       <motion.div
@@ -386,7 +428,7 @@ export default function SalesDashboard() {
         </div>
         <div className="flex-1 overflow-y-auto">
         {kpis?.upcoming_followups_list?.length ? (
-          <div className="grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
             {kpis.upcoming_followups_list.map((fu) => (
               <button
                 key={fu.id}
@@ -422,16 +464,24 @@ export default function SalesDashboard() {
           <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-900">
             <Clock size={15} className="text-blue-600" /> Meetings
           </h3>
-          <button
-            onClick={() => navigate('/calendar')}
-            className="flex h-8 items-center rounded-lg border border-gray-200 px-3 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50"
-          >
-            View calendar
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowAddMeetingModal(true)}
+              className="flex h-8 items-center gap-1 rounded-lg border border-gray-200 px-3 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50"
+            >
+              <Plus size={12} /> Add Meeting
+            </button>
+            <button
+              onClick={() => navigate('/calendar')}
+              className="flex h-8 items-center rounded-lg border border-gray-200 px-3 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50"
+            >
+              View calendar
+            </button>
+          </div>
         </div>
         <div className="flex-1 overflow-y-auto">
         {kpis?.meetings?.length ? (
-          <div className="grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
             {kpis.meetings.map((mtg) => {
               const d = new Date(mtg.meeting_at)
               const done = mtg.status === 'completed'
@@ -468,6 +518,8 @@ export default function SalesDashboard() {
         )}
         </div>
       </motion.div>
+        </div>
+      </div>
 
 
       {/* Add Reminder Modal */}
@@ -528,6 +580,69 @@ export default function SalesDashboard() {
                 >
                   {reminderMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />}
                   Save Reminder
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Add Meeting Modal */}
+      <AnimatePresence>
+        {showAddMeetingModal && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm" onClick={() => setShowAddMeetingModal(false)}>
+            <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              className="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900">Schedule Meeting</h3>
+                  <p className="text-[11px] text-gray-400">Add a meeting against an inquiry</p>
+                </div>
+                <button onClick={() => setShowAddMeetingModal(false)} className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+                  <X size={16} />
+                </button>
+              </div>
+              <div className="space-y-3">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-600">Client *</label>
+                  <select value={meetingClientId} onChange={(e) => setMeetingClientId(e.target.value)}
+                    className="h-9 w-full rounded-lg border border-gray-200 px-2 text-sm">
+                    <option value="">Select client…</option>
+                    {(allInquiriesData?.items ?? []).map((inq) => (
+                      <option key={inq.id} value={inq.id}>{inq.client_name} ({inq.event_type})</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-gray-600">Date *</label>
+                    <input type="date" value={meetingDate} onChange={(e) => setMeetingDate(e.target.value)}
+                      className="h-9 w-full rounded-lg border border-gray-200 px-2 text-sm" />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-gray-600">Time *</label>
+                    <input type="time" value={meetingTime} onChange={(e) => setMeetingTime(e.target.value)}
+                      className="h-9 w-full rounded-lg border border-gray-200 px-2 text-sm" />
+                  </div>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-600">Remark</label>
+                  <input value={meetingRemarks} onChange={(e) => setMeetingRemarks(e.target.value)}
+                    placeholder="Meeting notes..."
+                    className="h-9 w-full rounded-lg border border-gray-200 px-2 text-sm" />
+                </div>
+                <button
+                  onClick={() => {
+                    if (!meetingClientId || !meetingDate || !meetingTime) return
+                    meetingMutation.mutate({ id: meetingClientId, meetingAt: `${meetingDate}T${meetingTime}`, remarks: meetingRemarks || undefined })
+                  }}
+                  disabled={!meetingClientId || !meetingDate || !meetingTime || meetingMutation.isPending}
+                  className="flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-maroon text-sm font-bold text-white transition-colors hover:bg-maroon-dark disabled:opacity-50"
+                >
+                  {meetingMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />}
+                  Save Meeting
                 </button>
               </div>
             </motion.div>
