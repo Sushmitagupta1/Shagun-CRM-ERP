@@ -158,8 +158,9 @@ ${params.menuText}
 
 INSTRUCTIONS:
 - Return exactly 3 DIFFERENT design options separated by "---DESIGN---".
-- Inside each design option, separate pages with "---PAGE---".
-- Each page is a COMPLETE HTML fragment: a <style> block (scoped inline styles) followed by the page content markup wrapped in a single wrapper <div> (the full page markup). Do NOT include <html>, <head>, doctype, <script>, external images, or absolute URLs.
+- Inside each design option, separate pages with "---PAGE---". The "---PAGE---" separator must appear BETWEEN complete pages, never inside a page's markup.
+- Each page is a COMPLETE, SELF-CONTAINED HTML fragment: a <style> block (scoped inline styles) followed by the page markup wrapped in a single wrapper <div> that is opened AND closed on that same page. Do NOT share one wrapper <div> across multiple pages. Do NOT include <html>, <head>, doctype, <script>, external images, or absolute URLs.
+- Do NOT add text outside the page markup (no "DESIGN 1:", no "PAGE 1:" headings).
 - Each labeled section of the user's menu becomes its OWN page. Example: STARTERS page, MAIN COURSE page, DESSERTS page.
 - Use the user's exact section label text as the page heading.
 ${backgroundGuidance}

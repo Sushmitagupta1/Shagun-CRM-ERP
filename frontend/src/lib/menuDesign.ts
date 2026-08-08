@@ -67,12 +67,11 @@ export function parseMenuDesigns(raw: string): ParsedDesigns {
     return { designs: [], error: 'AI returned no designs. Try again.' }
   }
   const designs: MenuDesign[] = designBlocks.map((block, i) => {
-    const pages = block.split('---PAGE---').map((p) => p.trim()).filter(Boolean)
-    const pageHtml = pages.length > 0 ? pages : [block]
-    const nameMatch = pageHtml[0].match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)
+    const nameMatch = block.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)
     const name = nameMatch
       ? nameMatch[1].replace(/<[^>]+>/g, '').trim() || `Design Option ${i + 1}`
       : `Design Option ${i + 1}`
+    const pageHtml = splitPages(block)
     return {
       id: `design_${i}`,
       name,
@@ -81,6 +80,37 @@ export function parseMenuDesigns(raw: string): ParsedDesigns {
     }
   })
   return { designs }
+}
+
+function splitPages(block: string): string[] {
+  const styleMatch = block.match(/<style>[\s\S]*?<\/style>/i)
+  const designStyle = styleMatch ? styleMatch[0] : null
+  const bgMatch = block.match(/url\(['"]([^'"]+)['"]\)/i)
+  const designBg = bgMatch ? bgMatch[1] : ''
+  const body = block.replace(/^###[^\n]*/, '').trim()
+  const parts = body.split('---PAGE---').map((p) => p.trim()).filter(Boolean)
+  const pages = parts.length > 0 ? parts : [body]
+  return pages.map((page) => normalizePage(page, designStyle, designBg))
+}
+
+function normalizePage(page: string, designStyle: string | null, designBg: string): string {
+  let html = page.replace(/^###[^\n]*/, '').trim()
+  const styleMatch = html.match(/<style>[\s\S]*?<\/style>/i)
+  const style = styleMatch ? styleMatch[0] : designStyle
+  if (styleMatch) html = html.replace(/<style>[\s\S]*?<\/style>/i, '').trim()
+  const bgMatch = html.match(/url\(['"]([^'"]+)['"]\)/i)
+  const bg = bgMatch ? bgMatch[1] : designBg
+
+  if (/^<div\b/i.test(html)) {
+    return style ? `${style}\n${html}` : html
+  }
+
+  html = html.replace(/<\/div>\s*$/i, '').trim()
+  const bgStyle = bg
+    ? `style="background-image:url('${bg}');background-size:100% 100%;background-position:center;background-repeat:no-repeat;min-height:100vh"`
+    : `style="background:#fff;min-height:100vh"`
+  const baseStyle = style ?? `<style>body{margin:0}ul{list-style:none;padding:0;font-family:Georgia,serif}li{padding:6px 0}</style>`
+  return `${baseStyle}\n<div ${bgStyle} class="menu-card">\n  ${html}\n</div>`
 }
 
 export async function downloadMenuDesignPdf(design: MenuDesign, fileName: string): Promise<void> {
