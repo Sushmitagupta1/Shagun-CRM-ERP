@@ -88,11 +88,11 @@ export default function OperationsDashboard() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.4 }}
-          className="rounded-xl border border-gray-100 bg-white p-5 shadow-md"
-          style={{ minHeight: 320 }}
+          className="flex rounded-xl border border-gray-100 bg-white p-5 shadow-md"
+          style={{ height: 260, flexDirection: 'column' }}
         >
-          <h3 className="mb-4 text-sm font-bold text-gray-900">Today's Schedule</h3>
-          <div className="space-y-3">
+          <h3 className="mb-4 shrink-0 text-sm font-bold text-gray-900">Today's Schedule</h3>
+          <div className="flex-1 space-y-3 overflow-y-auto">
             {todayEvents.map((evt, i) => (
               <motion.div
                 key={evt.id}
@@ -120,13 +120,13 @@ export default function OperationsDashboard() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.7 }}
-          className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-md"
-          style={{ minHeight: 260 }}
+          className="flex overflow-hidden rounded-xl border border-gray-100 bg-white shadow-md"
+          style={{ height: 260, flexDirection: 'column' }}
         >
-          <div className="border-b border-gray-100 px-5 py-3">
+          <div className="shrink-0 border-b border-gray-100 px-5 py-3">
             <h3 className="text-sm font-bold text-gray-900">Upcoming Events</h3>
           </div>
-          <div className="max-h-[65vh] overflow-y-auto">
+          <div className="flex-1 overflow-y-auto">
             <table className="w-full">
               <thead className="sticky top-0 z-10">
                 <tr className="border-b border-gray-200 bg-gray-50">

@@ -77,9 +77,10 @@ export default function WarehouseDashboard() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
         {/* Dispatch Table */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.2 }}
-          className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-md lg:col-span-8">
+          className="flex overflow-hidden rounded-xl border border-gray-100 bg-white shadow-md lg:col-span-8"
+          style={{ height: 260, flexDirection: 'column' }}>
           {/* Tabs */}
-          <div className="flex border-b border-gray-100">
+          <div className="flex shrink-0 border-b border-gray-100">
             {(['pending', 'dispatched'] as const).map((tab) => (
               <button key={tab} onClick={() => setActiveTab(tab)}
                 className={`flex-1 px-4 py-3 text-xs font-semibold capitalize transition-colors ${
@@ -89,7 +90,7 @@ export default function WarehouseDashboard() {
               </button>
             ))}
           </div>
-          <div className="overflow-y-auto" style={{ maxHeight: 320 }}>
+          <div className="flex-1 overflow-y-auto">
             <table className="w-full">
               <thead className="sticky top-0 z-10">
                 <tr className="border-b border-gray-200 bg-gray-50">

@@ -73,9 +73,10 @@ export default function PresentationDashboard() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.2 }}
-          className="rounded-xl border border-gray-100 bg-white shadow-md"
+          className="flex rounded-xl border border-gray-100 bg-white shadow-md"
+          style={{ height: 260, flexDirection: 'column' }}
         >
-          <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3.5">
+          <div className="flex shrink-0 items-center justify-between border-b border-gray-100 px-5 py-3.5">
             <h3 className="flex items-center gap-2 text-sm font-bold text-gray-900">
               <Clock size={14} className="text-amber-500" /> Upcoming Meetings
             </h3>
@@ -83,7 +84,8 @@ export default function PresentationDashboard() {
               {meetings.filter((m) => m.status === 'scheduled').length} pending
             </span>
           </div>
-          <div className="space-y-0">
+          <div className="flex-1 overflow-y-auto">
+            <div className="space-y-0">
             {meetings.length === 0 && (
               <p className="px-5 py-6 text-center text-xs text-gray-400">No meetings scheduled.</p>
             )}
@@ -149,6 +151,7 @@ export default function PresentationDashboard() {
                 })}
               </>
             )}
+            </div>
           </div>
         </motion.div>
 
@@ -162,12 +165,13 @@ export default function PresentationDashboard() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.5 }}
-          className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-md"
+          className="flex overflow-hidden rounded-xl border border-gray-100 bg-white shadow-md"
+          style={{ height: 260, flexDirection: 'column' }}
         >
-          <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3">
+          <div className="flex shrink-0 items-center justify-between border-b border-gray-100 px-5 py-3">
             <h3 className="text-sm font-bold text-gray-900">Inquiry Details</h3>
           </div>
-          <div className="overflow-y-auto" style={{ maxHeight: 280 }}>
+          <div className="flex-1 overflow-y-auto">
             <table className="w-full">
               <thead className="sticky top-0 z-10">
                 <tr className="border-b border-gray-200 bg-gray-50">

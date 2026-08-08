@@ -128,12 +128,13 @@ export default function MenuPlannerDashboard() {
       {/* Bottom Row — Menus to Prepare */}
       <div className="grid gap-4 lg:grid-cols-3">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.4 }}
-          className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-md lg:col-span-3">
-          <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3">
+          className="flex overflow-hidden rounded-xl border border-gray-100 bg-white shadow-md lg:col-span-3"
+          style={{ height: 260, flexDirection: 'column' }}>
+          <div className="flex shrink-0 items-center justify-between border-b border-gray-100 px-5 py-3">
             <h3 className="text-sm font-bold text-gray-900">Menus to Prepare</h3>
             <span className="text-[10px] text-gray-400">{assignedInquiries.length} pending</span>
           </div>
-          <div className="overflow-y-auto" style={{ maxHeight: 360 }}>
+          <div className="flex-1 overflow-y-auto">
             <table className="w-full">
               <thead className="sticky top-0 z-10">
                 <tr className="border-b border-gray-200 bg-gray-50">

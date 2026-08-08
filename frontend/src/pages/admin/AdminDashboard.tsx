@@ -114,11 +114,12 @@ export default function AdminDashboard() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, delay: 0.6 }}
         className="rounded-xl border border-gray-100 bg-white shadow-md"
+        style={{ height: 260, display: 'flex', flexDirection: 'column' }}
       >
-        <div className="border-b border-gray-100 px-5 py-4">
+        <div className="shrink-0 border-b border-gray-100 px-5 py-4">
           <h3 className="text-sm font-semibold text-gray-900">New Inquiry</h3>
         </div>
-        <div className="max-h-[65vh] overflow-auto">
+        <div className="flex-1 overflow-auto">
           <table className="w-full">
             <thead className="sticky top-0 z-10">
               <tr className="border-b border-gray-200 bg-gray-50">

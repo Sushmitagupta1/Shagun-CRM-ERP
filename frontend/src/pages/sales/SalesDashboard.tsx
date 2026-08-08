@@ -348,8 +348,9 @@ export default function SalesDashboard() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, delay: 0.85 }}
         className="rounded-xl border border-gray-100 bg-white p-5 shadow-md"
+        style={{ height: 260, display: 'flex', flexDirection: 'column' }}
       >
-        <div className="mb-3 flex items-center justify-between">
+        <div className="mb-3 flex shrink-0 items-center justify-between">
           <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-900">
             <Calendar size={15} className="text-amber-600" /> Today's Follow-ups
           </h3>
@@ -360,6 +361,7 @@ export default function SalesDashboard() {
             View all
           </button>
         </div>
+        <div className="flex-1 overflow-y-auto">
         {kpis?.today_followups?.length ? (
           <div className="grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-3">
             {kpis.today_followups.map((fu) => (
@@ -382,6 +384,7 @@ export default function SalesDashboard() {
         ) : (
           <p className="py-4 text-center text-xs text-gray-400">No follow-ups scheduled for today.</p>
         )}
+        </div>
       </motion.div>
 
       {/* Meetings Panel — scheduled & completed meetings (Vinod overview) */}
@@ -390,8 +393,9 @@ export default function SalesDashboard() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, delay: 0.9 }}
         className="rounded-xl border border-gray-100 bg-white p-5 shadow-md"
+        style={{ height: 260, display: 'flex', flexDirection: 'column' }}
       >
-        <div className="mb-3 flex items-center justify-between">
+        <div className="mb-3 flex shrink-0 items-center justify-between">
           <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-900">
             <Clock size={15} className="text-blue-600" /> Meetings
           </h3>
@@ -402,6 +406,7 @@ export default function SalesDashboard() {
             View calendar
           </button>
         </div>
+        <div className="flex-1 overflow-y-auto">
         {kpis?.meetings?.length ? (
           <div className="grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-3">
             {kpis.meetings.map((mtg) => {
@@ -438,6 +443,7 @@ export default function SalesDashboard() {
         ) : (
           <p className="py-4 text-center text-xs text-gray-400">No meetings scheduled.</p>
         )}
+        </div>
       </motion.div>
 
 
