@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import PageHeader from '@/components/common/PageHeader'
+import { useAuth } from '@/hooks/useAuth'
 import { getCalendarData, getInquiries } from '@/api/inquiries'
 import type { Inquiry } from '@/types/inquiry'
 import { INQUIRY_STATUSES } from '@/lib/constants'
@@ -26,6 +27,8 @@ const toDateStr = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).pa
 export default function CalendarPage() {
   const today = new Date()
   const navigate = useNavigate()
+  const { user } = useAuth()
+  const isMenuPlanner = user?.role.name === 'menu_planner'
   const [currentMonth, setCurrentMonth] = useState(today.getMonth())
   const [currentYear, setCurrentYear] = useState(today.getFullYear())
   const [selectedDate, setSelectedDate] = useState<string>(toDateStr(today))
@@ -41,8 +44,8 @@ export default function CalendarPage() {
   })
 
   const events: Inquiry[] = (data?.events ?? []).filter((i) => i.status !== 'cancelled')
-  const followups = data?.followups ?? []
-  const meetings = data?.meetings ?? []
+  const followups = isMenuPlanner ? [] : (data?.followups ?? [])
+  const meetings = isMenuPlanner ? [] : (data?.meetings ?? [])
 
   const upTo = new Date(today)
   upTo.setDate(upTo.getDate() + 90)

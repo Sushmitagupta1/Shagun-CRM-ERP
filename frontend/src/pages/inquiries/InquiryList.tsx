@@ -7,10 +7,9 @@ import { createInquiry, updateInquiry, exportInquiriesExcel } from '@/api/inquir
 import PageHeader from '@/components/common/PageHeader'
 import StatusPill from '@/components/common/StatusPill'
 import { InquiryForm } from './InquiryForm'
-import { INQUIRY_STATUSES, PAYMENT_STATUSES, EVENT_TYPES } from '@/lib/constants'
+import { INQUIRY_STATUSES, EVENT_TYPES } from '@/lib/constants'
 import { useDebounce } from '@/hooks/useDebounce'
 import { toast } from 'sonner'
-import { formatCurrency } from '@/lib/utils'
 import { Plus, Search, ChevronLeft, ChevronRight, FileSpreadsheet, FileText, Eye, X } from 'lucide-react'
 
 export default function InquiryList() {
@@ -100,20 +99,18 @@ export default function InquiryList() {
     }
     const rows = data.items.map((i) => `
       <tr>
+        <td>${i.event_date ?? '—'}</td>
         <td>${i.client_name}</td>
         <td>${i.client_phone || '—'}</td>
         <td>${i.event_type}</td>
         <td>${i.pax ?? '—'}</td>
-        <td>${i.per_plate_rate ? formatCurrency(Number(i.per_plate_rate)) : '—'}</td>
-        <td>${i.add_on ? formatCurrency(i.add_on) : '—'}</td>
-        <td>${i.total_amount ? formatCurrency(i.total_amount) : '—'}</td>
+        <td>${i.venue || '—'}</td>
         <td>${i.inquiry_date ?? '—'}</td>
-        <td>${i.event_date ?? '—'}</td>
+        <td>${i.next_follow_up ?? '—'}</td>
         <td>${INQUIRY_STATUSES[i.status as keyof typeof INQUIRY_STATUSES]?.label ?? i.status}</td>
-        <td>${PAYMENT_STATUSES[i.payment_status as keyof typeof PAYMENT_STATUSES]?.label ?? i.payment_status}</td>
       </tr>
     `).join('')
-    const html = `<html><head><style>table { width:100%; border-collapse:collapse; font-family:Arial; font-size:12px; } th,td { border:1px solid #ccc; padding:6px 8px; text-align:left; } th { background:#5A0016; color:#fff; }</style></head><body><h2>Inquiries Report</h2><table><thead><tr><th>Client</th><th>Phone</th><th>Event</th><th>Pax</th><th>Rate</th><th>Add On</th><th>Total</th><th>Inquiry Date</th><th>Event Date</th><th>Status</th><th>Payment</th></tr></thead><tbody>${rows}</tbody></table></body></html>`
+    const html = `<html><head><style>table { width:100%; border-collapse:collapse; font-family:Arial; font-size:12px; } th,td { border:1px solid #ccc; padding:6px 8px; text-align:left; } th { background:#5A0016; color:#fff; }</style></head><body><h2>Inquiries Report</h2><table><thead><tr><th>Event Date</th><th>Client</th><th>Phone</th><th>Event</th><th>Pax</th><th>Venue</th><th>Inquiry Date</th><th>Follow-up Date</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></body></html>`
     const win = window.open('', '_blank')
     if (win) {
       win.document.write(html)
@@ -190,7 +187,7 @@ export default function InquiryList() {
         {followupFilter && (
           <div className="flex items-center gap-2">
             <span className="flex h-7 items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 text-xs font-bold text-amber-700">
-              {followupFilter === 'today' ? "Today's Follow-ups" : 'Overdue Follow-ups'}
+              {followupFilter === 'upcoming' ? 'Upcoming Follow-ups' : 'Overdue Follow-ups'}
               <button
                 onClick={() => { setFollowupFilter(''); setPage(1) }}
                 className="ml-1 rounded p-0.5 hover:bg-amber-100"
@@ -241,54 +238,64 @@ export default function InquiryList() {
           <table className="w-full">
             <thead className="sticky top-0 z-10">
               <tr className="border-b border-gray-200 bg-gray-50">
-                <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
-                  Client
-                </th>
-                <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
-                  Phone
-                </th>
-                <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
-                  Event
-                </th>
-                <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
-                  Pax
-                </th>
-                <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
-                  Per Plate Rate
-                </th>
-                <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
-                  Add On
-                </th>
-                <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
-                  Total Amount
-                </th>
-                <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
-                  Inquiry Date
-                </th>
-                <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
-                  Function Date
-                </th>
-                <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
-                  Status
-                </th>
-                <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
-                  Payment
-                </th>
-                <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
-                  Actions
-                </th>
+                {isMenuPlanner ? (
+                  <>
+                    <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">Function Date</th>
+                    <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">Client</th>
+                    <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">Number</th>
+                    <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">Event</th>
+                    <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">Pax</th>
+                    <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">Venue</th>
+                    <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">Inquiry Date</th>
+                    <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">Follow-up Date</th>
+                    <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">Actions</th>
+                  </>
+                ) : (
+                  <>
+                    <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                      Event Date
+                    </th>
+                    <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                      Client
+                    </th>
+                    <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                      Phone
+                    </th>
+                    <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                      Event
+                    </th>
+                    <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                      Pax
+                    </th>
+                    <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                      Venue
+                    </th>
+                    <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                      Inquiry Date
+                    </th>
+                    <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                      Follow-up Date
+                    </th>
+                    <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                      Status
+                    </th>
+                    <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                      Actions
+                    </th>
+                  </>
+                )}
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={12} className="px-5 py-8 text-center">
+                  <td colSpan={isMenuPlanner ? 9 : 10} className="px-5 py-8 text-center">
                     <div className="mx-auto h-6 w-6 animate-spin rounded-full border-4 border-gold border-t-transparent" />
                   </td>
                 </tr>
               ) : (data?.items ?? []).length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="px-5 py-8 text-center text-gray-400">
+                  <td colSpan={isMenuPlanner ? 9 : 10} className="px-5 py-8 text-center text-gray-400">
                     No inquiries found
                   </td>
                 </tr>
@@ -298,6 +305,46 @@ export default function InquiryList() {
                     key={inquiry.id}
                     className="border-b border-gray-100 transition-colors hover:bg-gray-50"
                   >
+                    {isMenuPlanner ? (
+                      <>
+                        <td className="px-5 py-3.5 text-sm text-gray-600">
+                          {inquiry.event_date ?? '—'}
+                        </td>
+                        <td className="px-5 py-3.5 text-sm font-medium text-gray-900">
+                          {inquiry.client_name}
+                        </td>
+                        <td className="px-5 py-3.5 text-sm text-gray-600">
+                          {inquiry.client_phone}
+                        </td>
+                        <td className="px-5 py-3.5 text-sm text-gray-600">
+                          {inquiry.event_type}
+                        </td>
+                        <td className="px-5 py-3.5 text-sm text-gray-600">
+                          {inquiry.pax ?? '—'}
+                        </td>
+                        <td className="px-5 py-3.5 text-sm text-gray-600">
+                          {inquiry.venue ?? '—'}
+                        </td>
+                        <td className="px-5 py-3.5 text-sm text-gray-600">
+                          {inquiry.inquiry_date ?? '—'}
+                        </td>
+                        <td className="px-5 py-3.5 text-sm text-gray-600">
+                          {inquiry.next_follow_up ?? '—'}
+                        </td>
+                        <td className="px-5 py-3.5">
+                          <div className="flex items-center gap-1.5">
+                            <button onClick={() => navigate(`/inquiries/${inquiry.id}`)}
+                              className="flex h-7 items-center gap-1 rounded-lg border border-gray-200 px-2 text-[10px] font-medium text-gray-600 hover:bg-gray-50">
+                              <Eye size={12} /> View
+                            </button>
+                          </div>
+                        </td>
+                      </>
+                    ) : (
+                      <>
+                    <td className="px-5 py-3.5 text-sm text-gray-600">
+                      {inquiry.event_date ?? '—'}
+                    </td>
                     <td className="px-5 py-3.5 text-sm font-medium text-gray-900">
                       {inquiry.client_name}
                     </td>
@@ -311,19 +358,13 @@ export default function InquiryList() {
                       {inquiry.pax ?? '—'}
                     </td>
                     <td className="px-5 py-3.5 text-sm text-gray-600">
-                      {inquiry.per_plate_rate ? formatCurrency(Number(inquiry.per_plate_rate)) : '—'}
-                    </td>
-                    <td className="px-5 py-3.5 text-sm text-gray-600">
-                      {inquiry.add_on ? formatCurrency(inquiry.add_on) : '—'}
-                    </td>
-                    <td className="px-5 py-3.5 text-sm text-gray-600">
-                      {inquiry.total_amount ? formatCurrency(inquiry.total_amount) : '—'}
+                      {inquiry.venue ?? '—'}
                     </td>
                     <td className="px-5 py-3.5 text-sm text-gray-600">
                       {inquiry.inquiry_date ?? '—'}
                     </td>
                     <td className="px-5 py-3.5 text-sm text-gray-600">
-                      {inquiry.event_date ?? '—'}
+                      {inquiry.next_follow_up ?? '—'}
                     </td>
                     <td className="px-5 py-3.5">
                       <StatusPill
@@ -343,20 +384,6 @@ export default function InquiryList() {
                       )}
                     </td>
                     <td className="px-5 py-3.5">
-                      <StatusPill
-                        label={
-                          PAYMENT_STATUSES[
-                            inquiry.payment_status as keyof typeof PAYMENT_STATUSES
-                          ]?.label ?? inquiry.payment_status
-                        }
-                        color={
-                          PAYMENT_STATUSES[
-                            inquiry.payment_status as keyof typeof PAYMENT_STATUSES
-                          ]?.color ?? 'bg-gray-100 text-gray-800'
-                        }
-                      />
-                    </td>
-                    <td className="px-5 py-3.5">
                       <div className="flex items-center gap-1.5">
                         <button onClick={() => navigate(`/inquiries/${inquiry.id}`)}
                           className="flex h-7 items-center gap-1 rounded-lg border border-gray-200 px-2 text-[10px] font-medium text-gray-600 hover:bg-gray-50">
@@ -364,6 +391,8 @@ export default function InquiryList() {
                         </button>
                       </div>
                     </td>
+                      </>
+                    )}
                   </tr>
                 ))
               )}

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getInquiry, updateInquiryStatus, setPresentationNotRequired, exportSingleInquiryExcel, updateInquiry, getFollowUps, addFollowUp, updateFollowUpDone, uploadInquiryFile, downloadInquiryFile, getMeetings, addMeeting, updateMeetingStatus } from '@/api/inquiries'
+import { getInquiry, updateInquiryStatus, setPresentationNotRequired, exportSingleInquiryExcel, updateInquiry, getFollowUps, addFollowUp, updateFollowUpDone, uploadInquiryFile, downloadInquiryFile, getMeetings, addMeeting, updateMeetingStatus, getMenuVersions, getMenuSlots, createMenuSlot, uploadMenuSlotFile, setFinalMenuSlot, deleteMenuSlot, downloadMenuSlotFile } from '@/api/inquiries'
 import PageHeader from '@/components/common/PageHeader'
 import StatusPill from '@/components/common/StatusPill'
 import { INQUIRY_STATUSES, PAYMENT_STATUSES } from '@/lib/constants'
@@ -35,6 +35,7 @@ import {
   Edit3,
   Download,
   Play,
+  BadgeCheck,
 } from 'lucide-react'
 
 const PROGRESS_STEPS = [
@@ -132,6 +133,77 @@ export default function InquiryDetail() {
     enabled: !!id,
   })
 
+  const { data: menuVersions = [] } = useQuery({
+    queryKey: ['menu-versions', id],
+    queryFn: () => getMenuVersions(id!),
+    enabled: !!id,
+  })
+
+  const { data: menuSlots = [], refetch: refetchMenuSlots } = useQuery({
+    queryKey: ['menu-slots', id],
+    queryFn: () => getMenuSlots(id!),
+    enabled: !!id,
+  })
+
+  const canManageMenuSlots = isAdmin || isMenuPlanner
+
+  const [uploadingSlotId, setUploadingSlotId] = useState<string | null>(null)
+
+  const createSlotMutation = useMutation({
+    mutationFn: () => createMenuSlot(id!),
+    onSuccess: () => {
+      refetchMenuSlots()
+      toast.success('Menu slot added')
+    },
+    onError: (err: unknown) => {
+      const message = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Failed to add slot'
+      toast.error(message)
+    },
+  })
+
+  const uploadSlotMutation = useMutation({
+    mutationFn: ({ slotId, file }: { slotId: string; file: File }) => uploadMenuSlotFile(id!, slotId, file),
+    onSuccess: () => {
+      refetchMenuSlots()
+      toast.success('Menu uploaded')
+    },
+    onError: (err: unknown) => {
+      const message = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Upload failed'
+      toast.error(message)
+    },
+    onSettled: () => setUploadingSlotId(null),
+  })
+
+  const setFinalMutation = useMutation({
+    mutationFn: (slotId: string) => setFinalMenuSlot(id!, slotId),
+    onSuccess: () => {
+      refetchMenuSlots()
+      refetch()
+      queryClient.invalidateQueries({ queryKey: ['dashboard', 'admin'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard', 'menu-planner'] })
+      toast.success('Final menu confirmed')
+    },
+    onError: (err: unknown) => {
+      const message = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Failed to confirm'
+      toast.error(message)
+    },
+  })
+
+  const deleteSlotMutation = useMutation({
+    mutationFn: (slotId: string) => deleteMenuSlot(id!, slotId),
+    onSuccess: () => {
+      refetchMenuSlots()
+      toast.success('Slot deleted')
+    },
+    onError: () => toast.error('Failed to delete slot'),
+  })
+
+  const handleSlotUpload = (slotId: string, file?: File) => {
+    if (!file) return
+    setUploadingSlotId(slotId)
+    uploadSlotMutation.mutate({ slotId, file })
+  }
+
   const addMeetingMutation = useMutation({
     mutationFn: (data: { meeting_at: string; remarks?: string }) => addMeeting(id!, data),
     onSuccess: () => {
@@ -228,6 +300,7 @@ export default function InquiryDetail() {
   const [showPresentationUpload, setShowPresentationUpload] = useState(false)
   const [showIngredientUpload, setShowIngredientUpload] = useState(false)
   const [viewMenu, setViewMenu] = useState(false)
+  const [viewMenuVersion, setViewMenuVersion] = useState<number | null>(null)
 
   const callRecordingFile = inquiry?.call_recording_file_name || null
   const [showCallRecordingUpload, setShowCallRecordingUpload] = useState(false)
@@ -467,6 +540,8 @@ export default function InquiryDetail() {
               { label: 'Venue', value: inquiry.venue || '—' },
               { label: 'Pax', value: inquiry.pax ?? '—' },
               { label: 'Inquiry Date', value: formatDate(inquiry.inquiry_date) },
+              { label: 'Session', value: inquiry.session || '—' },
+              { label: 'Source', value: inquiry.source || '—' },
             ].map((f) => (
               <div key={f.label}>
                 <p className="text-xs text-gray-500">{f.label}</p>
@@ -477,7 +552,7 @@ export default function InquiryDetail() {
               <p className="text-xs text-gray-500">Remarks</p>
               <p className="text-sm font-medium text-gray-900">{inquiry.remarks ?? '—'}</p>
             </div>
-            {followUps.length > 0 && (
+            {!isMenuPlanner && followUps.length > 0 && (
               <div className="col-span-2">
                 <p className="mb-1.5 text-xs text-gray-500">Follow-up History</p>
                 <div className="space-y-1.5">
@@ -658,7 +733,8 @@ export default function InquiryDetail() {
               </div>
             )}
 
-            {/* Follow-ups Section */}
+            {/* Follow-ups Section (hidden for menu_planner) */}
+            {!isMenuPlanner && (
             <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-md">
               <div className="mb-3 flex items-center justify-between">
                 <h3 className="flex items-center gap-2 text-sm font-bold text-gray-900">
@@ -766,6 +842,7 @@ export default function InquiryDetail() {
                 </div>
               )}
             </div>
+            )}
           </div>
         </div>
         )}
@@ -840,10 +917,10 @@ export default function InquiryDetail() {
                 <div className="flex items-center gap-2">
                   <FileText size={14} className="text-emerald-500" />
                   <span className="text-sm font-medium text-gray-900">{menuFile || 'Menu.txt'}</span>
-                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Uploaded</span>
+                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Final Menu</span>
                 </div>
               ) : (
-                <p className="text-sm text-gray-400">No menu uploaded yet</p>
+                <p className="text-sm text-gray-400">No final menu confirmed yet</p>
               )}
             </div>
             <div className="flex gap-2">
@@ -879,6 +956,97 @@ export default function InquiryDetail() {
               </motion.div>
             )}
           </AnimatePresence>
+          {isMenuPlanner && menuVersions.length > 0 && (
+            <div className="mt-4">
+              <p className="mb-2 text-xs font-bold uppercase tracking-wider text-gray-400">Menu Versions History</p>
+              <div className="space-y-2">
+                {menuVersions.map((v) => (
+                  <div key={v.id} className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-gray-50/60 p-3">
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-gray-900">Version {v.version}
+                        <span className="ml-2 text-[10px] font-medium text-gray-400">
+                          {v.created_at ? new Date(v.created_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''}
+                        </span>
+                      </p>
+                      <p className="mt-0.5 truncate text-[11px] text-gray-500">
+                        {v.designs?.length ?? 0} design{v.designs?.length !== 1 ? 's' : ''}
+                        {v.template_category && ` · ${v.template_category}${v.template_file ? ` / ${v.template_file}` : ''}`}
+                      </p>
+                    </div>
+                    <button onClick={() => setViewMenuVersion(v.version)}
+                      className="flex h-7 shrink-0 items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 text-[10px] font-medium text-gray-600 hover:bg-gray-50">
+                      <Eye size={11} /> View
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {canManageMenuSlots && (
+            <div className="mt-4 border-t border-gray-100 pt-4">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs font-bold uppercase tracking-wider text-gray-400">Menu Slots</p>
+                <button
+                  onClick={() => createSlotMutation.mutate()}
+                  disabled={createSlotMutation.isPending || menuSlots.length >= 7}
+                  className="flex h-7 items-center gap-1 rounded-lg border border-gray-200 px-2.5 text-[10px] font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  <Plus size={12} /> Add Slot
+                </button>
+              </div>
+              <p className="mb-2 text-[11px] text-gray-400">Add a slot, upload a draft, and use Confirm Final when the menu is decided.</p>
+              {menuSlots.length === 0 ? (
+                <p className="py-3 text-center text-xs text-gray-400">No menu slots yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  {[...menuSlots].sort((a, b) => a.slot_number - b.slot_number).map((slot) => (
+                    <div key={slot.id} className={`rounded-lg border p-3 ${slot.is_final ? 'border-emerald-200 bg-emerald-50/50' : 'border-gray-200 bg-gray-50/60'}`}>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${slot.is_final ? 'bg-emerald-500 text-white' : 'bg-gray-200 text-gray-600'}`}>
+                          {slot.slot_number}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-bold text-gray-900">
+                            Menu {slot.slot_number}
+                            {slot.is_final && (
+                              <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Final</span>
+                            )}
+                          </p>
+                          <p className="truncate text-[11px] text-gray-500">{slot.file_name ?? 'No file uploaded yet'}</p>
+                        </div>
+                        {slot.file_name && (
+                          <button onClick={() => downloadMenuSlotFile(id!, slot.id, slot.file_name)}
+                            className="flex h-7 items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 text-[10px] font-medium text-gray-600 hover:bg-gray-50">
+                            <Download size={11} /> Download
+                          </button>
+                        )}
+                        {!slot.is_final && (
+                          <>
+                            {slot.file_name && (
+                              <button onClick={() => setFinalMutation.mutate(slot.id)} disabled={setFinalMutation.isPending}
+                                className="flex h-7 items-center gap-1 rounded-lg bg-emerald-600 px-2.5 text-[10px] font-bold text-white hover:bg-emerald-700 disabled:opacity-50">
+                                <BadgeCheck size={11} /> Confirm Final
+                              </button>
+                            )}
+                            <label className="flex h-7 cursor-pointer items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 text-[10px] font-medium text-gray-600 hover:bg-gray-50">
+                              {uploadingSlotId === slot.id ? <Loader2 size={11} className="animate-spin" /> : <Upload size={11} />}
+                              {uploadingSlotId === slot.id ? 'Uploading...' : slot.file_name ? 'Replace' : 'Upload'}
+                              <input type="file" className="hidden"
+                                onChange={(e) => { handleSlotUpload(slot.id, e.target.files?.[0]); e.target.value = '' }} />
+                            </label>
+                            <button onClick={() => deleteSlotMutation.mutate(slot.id)} disabled={deleteSlotMutation.isPending}
+                              className="flex h-7 items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 text-[10px] font-medium text-gray-500 hover:bg-red-50 hover:text-red-600">
+                              <Trash2 size={11} /> Delete
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </WorkflowSection>
       )}
 
@@ -952,6 +1120,7 @@ export default function InquiryDetail() {
             )}
           </AnimatePresence>
 
+          {!isMenuPlanner && (
           <div className="mt-4 border-t border-gray-100 pt-4">
             <div className="mb-3 flex items-center justify-between">
               <h4 className="text-xs font-bold uppercase tracking-wider text-gray-400">Meetings</h4>
@@ -1073,6 +1242,7 @@ export default function InquiryDetail() {
               </div>
             )}
           </div>
+          )}
         </WorkflowSection>
       )}
 
@@ -1465,6 +1635,35 @@ export default function InquiryDetail() {
           <p className="py-8 text-center text-sm text-gray-400">No menu uploaded yet</p>
         )}
       </ViewModal>
+
+      {viewMenuVersion !== null && (() => {
+        const v = menuVersions.find((x) => x.version === viewMenuVersion)
+        if (!v) return null
+        return (
+          <ViewModal isOpen onClose={() => setViewMenuVersion(null)} title={`Menu Version ${v.version}`}>
+            {v.designs && v.designs.length > 0 ? (
+              <div className="grid max-h-[70vh] gap-4 overflow-y-auto lg:grid-cols-3">
+                {v.designs.map((d, di) => (
+                  <div key={di} className="overflow-hidden rounded-xl border border-gray-200">
+                    <div className="border-b border-gray-100 px-4 py-3">
+                      <h4 className="text-sm font-bold text-gray-900">{d.name}</h4>
+                      <p className="text-[10px] text-gray-400">{d.pages?.length ?? 0} pages</p>
+                    </div>
+                    <div className="max-h-96 overflow-y-auto bg-gray-50 p-3">
+                      {(d.pages ?? []).map((page, pi) => (
+                        <div key={pi} className="mb-3 overflow-hidden rounded-lg shadow-sm last:mb-0"
+                          dangerouslySetInnerHTML={{ __html: page.html }} />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="py-8 text-center text-sm text-gray-400">This version has no designs saved.</p>
+            )}
+          </ViewModal>
+        )
+      })()}
 
       <ViewModal isOpen={viewIngredients} onClose={() => setViewIngredients(false)} title="Ingredient List">
         {ingredients.length > 0 ? (

@@ -2,6 +2,7 @@ from datetime import date, datetime, time, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from app.models.inquiry import Inquiry, InquiryStatus, PaymentStatus, FollowUp, Meeting
+from app.models.menu_slot import MenuSlot
 from app.models.user import User
 
 
@@ -16,20 +17,74 @@ async def get_admin_kpis(db: AsyncSession) -> dict:
     pending_payment = (await db.execute(select(func.count(Inquiry.id)).where(Inquiry.status.in_([InquiryStatus.ADVANCE_RECEIVE, InquiryStatus.OPERATION_HANDOVER]), Inquiry.payment_status != PaymentStatus.PAID))).scalar() or 0
     total_revenue = (await db.execute(select(func.coalesce(func.sum(Inquiry.advance_amount), 0)))).scalar() or 0
     outstanding = (await db.execute(select(func.coalesce(func.sum(Inquiry.per_plate_rate - Inquiry.advance_amount), 0)).where(Inquiry.status.in_([InquiryStatus.ADVANCE_RECEIVE, InquiryStatus.OPERATION_HANDOVER]), Inquiry.payment_status != PaymentStatus.PAID))).scalar() or 0
+
+    confirmed_statuses = [InquiryStatus.ADVANCE_RECEIVE, InquiryStatus.OPERATION_HANDOVER]
+    payment_statuses = [InquiryStatus.CLIENT_CONFIRMATION] + confirmed_statuses
+    due_result = await db.execute(
+        select(Inquiry)
+        .where(Inquiry.status.in_(payment_statuses), Inquiry.payment_status != PaymentStatus.PAID)
+        .order_by(Inquiry.event_date.asc())
+        .limit(50)
+    )
+    due_inquiries = due_result.scalars().all()
+    payment_approvals = [
+        {
+            "id": str(i.id),
+            "client_name": i.client_name,
+            "event_type": i.event_type,
+            "event_date": i.event_date.isoformat() if i.event_date else None,
+            "status": i.status.value if hasattr(i.status, "value") else i.status,
+            "payment_status": i.payment_status.value if hasattr(i.payment_status, "value") else i.payment_status,
+            "advance_amount": float(i.advance_amount or 0),
+            "total_amount": (float(i.per_plate_rate or 0) * (i.pax or 0)) + float(i.add_on or 0) if i.per_plate_rate is not None else None,
+            "remaining_payment_date": i.remaining_payment_date.isoformat() if i.remaining_payment_date else None,
+        }
+        for i in due_inquiries
+    ]
+
+    confirmed_result = await db.execute(
+        select(Inquiry).where(Inquiry.status.in_(confirmed_statuses)).order_by(Inquiry.event_date.asc()).limit(100)
+    )
+    confirmed_inquiries = confirmed_result.scalars().all()
+    final_slot_ids: set = set()
+    if confirmed_inquiries:
+        ids = [i.id for i in confirmed_inquiries]
+        slot_result = await db.execute(
+            select(MenuSlot.inquiry_id).where(MenuSlot.inquiry_id.in_(ids), MenuSlot.is_final.is_(True))
+        )
+        final_slot_ids = {row[0] for row in slot_result.all()}
+    pending_menu_inquiries = [
+        i for i in confirmed_inquiries
+        if i.menu_file_name is None and i.id not in final_slot_ids
+    ]
+    pending_menus_list = [
+        {
+            "id": str(i.id),
+            "client_name": i.client_name,
+            "event_type": i.event_type,
+            "event_date": i.event_date.isoformat() if i.event_date else None,
+            "status": i.status.value if hasattr(i.status, "value") else i.status,
+        }
+        for i in pending_menu_inquiries
+    ]
+
     return {
         "total_inquiries": total, "confirmed": total_confirmed,
         "cancelled": 0, "upcoming_events": upcoming,
         "today_events": today_events, "pending_payments": pending_payment,
+        "pending_menus": len(pending_menu_inquiries),
         "total_revenue": float(total_revenue), "outstanding_amount": float(outstanding),
         "pending_kitchen_plans": 0, "pending_warehouse_requests": 0,
+        "payment_approvals": payment_approvals,
+        "pending_menus_list": pending_menus_list,
     }
 
 
 async def get_sales_kpis(db: AsyncSession) -> dict:
     today = date.today()
     new_inquiry = (await db.execute(select(func.count(Inquiry.id)).where(Inquiry.status == InquiryStatus.NEW_INQUIRY))).scalar() or 0
-    followups_today = (await db.execute(
-        select(func.count(FollowUp.id)).where(FollowUp.follow_up_date == today, FollowUp.is_done.is_(False))
+    upcoming_followups = (await db.execute(
+        select(func.count(FollowUp.id)).where(FollowUp.follow_up_date >= today, FollowUp.is_done.is_(False))
     )).scalar() or 0
     overdue = (await db.execute(
         select(func.count(FollowUp.id))
@@ -61,13 +116,14 @@ async def get_sales_kpis(db: AsyncSession) -> dict:
             "remarks": fu.remarks,
         }
 
-    today_followups = (await db.execute(
+    upcoming_followups_result = (await db.execute(
         select(FollowUp, Inquiry.client_name, Inquiry.event_type)
         .join(Inquiry, FollowUp.inquiry_id == Inquiry.id)
-        .where(FollowUp.follow_up_date == today, FollowUp.is_done.is_(False))
-        .order_by(Inquiry.created_at.asc())
+        .where(FollowUp.follow_up_date >= today, FollowUp.is_done.is_(False))
+        .order_by(FollowUp.follow_up_date.asc())
+        .limit(10)
     )).all()
-    today_followups_list = [
+    upcoming_followups_list = [
         {
             "id": str(fu.id),
             "inquiry_id": str(fu.inquiry_id),
@@ -76,7 +132,7 @@ async def get_sales_kpis(db: AsyncSession) -> dict:
             "follow_up_date": fu.follow_up_date.isoformat(),
             "remarks": fu.remarks,
         }
-        for fu, name, event_type in today_followups
+        for fu, name, event_type in upcoming_followups_result
     ]
 
     meetings_result = await db.execute(
@@ -102,13 +158,13 @@ async def get_sales_kpis(db: AsyncSession) -> dict:
     ]
 
     return {
-        "total_inquiries": total_count, "new_inquiries": new_inquiry, "followups_today": followups_today,
+        "total_inquiries": total_count, "new_inquiries": new_inquiry, "upcoming_followups": upcoming_followups,
         "overdue_followups": overdue, "confirmed": confirmed_count,
         "cancelled": 0, "pending_presentations": 0,
         "pending_menus": 0, "pending_payments": pending_payment,
         "total_sales_value": float(total_sales), "conversion_rate": round(conversion_rate, 1),
         "next_follow_up": next_follow_up_info,
-        "today_followups": today_followups_list,
+        "upcoming_followups_list": upcoming_followups_list,
         "meetings": meetings_list,
     }
 

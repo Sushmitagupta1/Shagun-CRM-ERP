@@ -30,6 +30,8 @@ class Inquiry(UUIDMixin, TimestampMixin, Base):
     client_name: Mapped[str] = mapped_column(String(200), nullable=False)
     client_phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
     event_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    session: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    source: Mapped[str | None] = mapped_column(String(255), nullable=True)
     event_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     inquiry_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     pax: Mapped[int | None] = mapped_column(Integer, nullable=True)

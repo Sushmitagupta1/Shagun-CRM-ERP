@@ -10,6 +10,8 @@ class InquiryCreate(BaseModel):
     client_name: str
     client_phone: str | None = None
     event_type: str
+    session: str | None = None
+    source: str | None = None
     event_date: date | None = None
     inquiry_date: date | None = None
     pax: int | None = None
@@ -32,6 +34,8 @@ class InquiryUpdate(BaseModel):
     client_name: str | None = None
     client_phone: str | None = None
     event_type: str | None = None
+    session: str | None = None
+    source: str | None = None
     event_date: date | None = None
     inquiry_date: date | None = None
     pax: int | None = None
@@ -55,6 +59,8 @@ class InquiryResponse(BaseModel):
     client_name: str
     client_phone: str | None = None
     event_type: str
+    session: str | None = None
+    source: str | None = None
     event_date: date | None
     inquiry_date: date | None
     pax: int | None
@@ -85,6 +91,7 @@ class InquiryResponse(BaseModel):
     venue: str | None = None
     call_recording_file_name: str | None = None
     total_amount: float | None = None
+    next_follow_up: date | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -141,6 +148,19 @@ class MeetingResponse(BaseModel):
     created_by: uuid.UUID
     created_at: datetime
     updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class MenuSlotResponse(BaseModel):
+    id: uuid.UUID
+    inquiry_id: uuid.UUID
+    slot_number: int
+    file_name: str | None = None
+    is_final: bool = False
+    created_by: uuid.UUID
+    created_at: datetime
 
     class Config:
         from_attributes = True

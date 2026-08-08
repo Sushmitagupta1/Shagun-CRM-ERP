@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAdminKPIs, useMonthlyTrend, useConversionRate } from '@/hooks/useDashboard'
 import { useInquiries } from '@/hooks/useInquiries'
+import { approvePayment } from '@/api/inquiries'
 import KPICard from '@/components/common/KPICard'
 import PageHeader from '@/components/common/PageHeader'
 import StatusPill from '@/components/common/StatusPill'
@@ -13,16 +15,28 @@ import { formatCurrency } from '@/lib/utils'
 import { INQUIRY_STATUSES } from '@/lib/constants'
 import { useAuth } from '@/hooks/useAuth'
 import { generateReport } from '@/lib/groq'
-import { Loader2, FileText, Send, Eye } from 'lucide-react'
+import { toast } from 'sonner'
+import { Loader2, FileText, Send, Eye, CheckCircle2, UtensilsCrossed } from 'lucide-react'
 
 export default function AdminDashboard() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const { user } = useAuth()
   const firstName = user?.full_name?.split(' ')[0] ?? 'Admin'
   const { data: kpis, isLoading: kpisLoading } = useAdminKPIs()
   const { data: trend } = useMonthlyTrend()
   const { data: conversion } = useConversionRate()
   const { data: inquiriesData, isLoading: inquiriesLoading } = useInquiries({ page: 1, per_page: 5 })
+
+  const approveMutation = useMutation({
+    mutationFn: approvePayment,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dashboard', 'admin'] })
+      queryClient.invalidateQueries({ queryKey: ['inquiries'] })
+      toast.success('Payment approved — inquiry confirmed')
+    },
+    onError: () => toast.error('Approval failed'),
+  })
 
   // AI Reports
   const [reportType, setReportType] = useState('Sales Summary')
@@ -52,8 +66,8 @@ export default function AdminDashboard() {
           ? Array.from({ length: 6 }).map((_, i) => <KPICardSkeleton key={i} />)
           : [
               { label: 'Total Inquiries', value: kpis?.total_inquiries ?? 0, onClick: () => navigate('/inquiries') },
-              { label: 'Confirmed Events', value: kpis?.confirmed ?? 0, onClick: () => navigate('/inquiries') },
               { label: 'Pending Payments', value: kpis?.pending_payments ?? 0, onClick: () => navigate('/finance') },
+              { label: 'Pending Menu', value: kpis?.pending_menus ?? 0, onClick: () => navigate('/inquiries') },
               { label: 'Upcoming Events', value: kpis?.upcoming_events ?? 0, onClick: () => navigate('/inquiries') },
               { label: "Today's Events", value: kpis?.today_events ?? 0, onClick: () => navigate('/inquiries') },
               { label: 'Total Revenue', value: formatCurrency(kpis?.total_revenue ?? 0), onClick: () => navigate('/finance') },
@@ -61,6 +75,120 @@ export default function AdminDashboard() {
               <KPICard key={kpi.label} label={kpi.label} value={kpi.value} index={i} />
             ))}
       </div>
+
+      {/* Payment Approvals */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, delay: 0.4 }}
+        className="rounded-xl border border-gray-100 bg-white shadow-md"
+      >
+        <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+          <h3 className="flex items-center gap-2 text-sm font-bold text-gray-900">
+            <CheckCircle2 size={16} className="text-emerald-600" /> Payment Approvals
+          </h3>
+          <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-bold text-emerald-700">
+            {(kpis?.payment_approvals ?? []).length} due
+          </span>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-gray-200 bg-gray-50">
+                <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">Client</th>
+                <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">Event</th>
+                <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">Event Date</th>
+                <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">Amount</th>
+                <th className="bg-gray-50 px-5 py-3 text-right text-[11px] font-bold uppercase tracking-wider text-gray-500">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(kpis?.payment_approvals ?? []).length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-5 py-8 text-center text-gray-400">No payments pending approval</td>
+                </tr>
+              ) : (
+                (kpis?.payment_approvals ?? []).map((p) => (
+                  <tr key={p.id} className="border-b border-gray-100 transition-colors hover:bg-gray-50">
+                    <td className="px-5 py-3.5 text-sm font-medium text-gray-900">{p.client_name}</td>
+                    <td className="px-5 py-3.5 text-sm text-gray-600">{p.event_type}</td>
+                    <td className="px-5 py-3.5 text-sm text-gray-600">{p.event_date ?? '—'}</td>
+                    <td className="px-5 py-3.5 text-sm text-gray-600">{formatCurrency(p.advance_amount ?? 0)}</td>
+                    <td className="px-5 py-3.5 text-right">
+                      <button
+                        onClick={() => approveMutation.mutate(p.id)}
+                        disabled={approveMutation.isPending}
+                        className="inline-flex h-7 items-center gap-1 rounded-lg bg-emerald-600 px-3 text-[10px] font-bold text-white shadow hover:bg-emerald-700 disabled:opacity-50"
+                      >
+                        <CheckCircle2 size={12} /> Approve
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </motion.div>
+
+      {/* Pending Menus */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, delay: 0.45 }}
+        className="rounded-xl border border-gray-100 bg-white shadow-md"
+      >
+        <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+          <h3 className="flex items-center gap-2 text-sm font-bold text-gray-900">
+            <UtensilsCrossed size={16} className="text-amber-600" /> Pending Menus
+          </h3>
+          <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-[10px] font-bold text-amber-700">
+            {(kpis?.pending_menus_list ?? []).length} to finalize
+          </span>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-gray-200 bg-gray-50">
+                <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">Client</th>
+                <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">Event</th>
+                <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">Event Date</th>
+                <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">Status</th>
+                <th className="bg-gray-50 px-5 py-3 text-right text-[11px] font-bold uppercase tracking-wider text-gray-500">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(kpis?.pending_menus_list ?? []).length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-5 py-8 text-center text-gray-400">No menus pending</td>
+                </tr>
+              ) : (
+                (kpis?.pending_menus_list ?? []).map((p) => (
+                  <tr key={p.id} className="border-b border-gray-100 transition-colors hover:bg-gray-50">
+                    <td className="px-5 py-3.5 text-sm font-medium text-gray-900">{p.client_name}</td>
+                    <td className="px-5 py-3.5 text-sm text-gray-600">{p.event_type}</td>
+                    <td className="px-5 py-3.5 text-sm text-gray-600">{p.event_date ?? '—'}</td>
+                    <td className="px-5 py-3.5">
+                      <StatusPill
+                        label={INQUIRY_STATUSES[p.status as keyof typeof INQUIRY_STATUSES]?.label ?? p.status}
+                        color={INQUIRY_STATUSES[p.status as keyof typeof INQUIRY_STATUSES]?.color ?? 'bg-gray-100 text-gray-800'}
+                      />
+                    </td>
+                    <td className="px-5 py-3.5 text-right">
+                      <button
+                        onClick={() => navigate(`/inquiries/${p.id}`)}
+                        className="inline-flex h-7 items-center gap-1 rounded-lg border border-gray-200 px-2.5 text-[10px] font-medium text-gray-600 hover:bg-gray-50"
+                      >
+                        <Eye size={12} /> View
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </motion.div>
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">

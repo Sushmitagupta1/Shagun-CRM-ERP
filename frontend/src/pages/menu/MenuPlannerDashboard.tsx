@@ -146,7 +146,7 @@ export default function MenuPlannerDashboard() {
               <tbody>
                 {assignedInquiries.length === 0 && <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-gray-400">No pending menus</td></tr>}
                 {assignedInquiries
-                  .sort((a, b) => (a.event_date || '').localeCompare(b.event_date || ''))
+                  .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''))
                   .slice(0, 10).map((inq, i) => (
                   <motion.tr key={inq.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 + i * 0.04 }}
                     className="border-b border-gray-50 transition-colors hover:bg-gray-50">

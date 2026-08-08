@@ -9,6 +9,8 @@ const stage1Schema = z.object({
   client_name: z.string().min(1, 'Client name is required'),
   client_phone: z.string().min(10, 'Phone must be at least 10 digits').or(z.literal('')).optional(),
   event_type: z.string().min(1, 'Event type is required'),
+  session: z.string().optional(),
+  source: z.string().optional(),
   venue: z.string().optional(),
   inquiry_date: z.string().optional(),
   event_date: z.string().optional(),
@@ -190,14 +192,24 @@ export function InquiryForm({ onStage1Submit, onStage2Submit }: InquiryFormProps
         {errors1.event_type && <p className="mt-1 text-xs text-red-500">{errors1.event_type.message}</p>}
       </div>
       <div>
+        <label className="mb-1 block text-sm font-medium text-gray-700">Session</label>
+        <input {...stage1Form.register('session')} placeholder="e.g. Morning, Evening"
+          className="h-10 w-full rounded-lg border border-gray-200 px-3 text-sm" />
+      </div>
+      <div>
+        <label className="mb-1 block text-sm font-medium text-gray-700">Source</label>
+        <input {...stage1Form.register('source')} placeholder="e.g. Referral, Instagram, Walk-in"
+          className="h-10 w-full rounded-lg border border-gray-200 px-3 text-sm" />
+      </div>
+      <div>
         <label className="mb-1 block text-sm font-medium text-gray-700">Venue</label>
         <input {...stage1Form.register('venue')} placeholder="e.g. The Grand Palace, Delhi"
           className="h-10 w-full rounded-lg border border-gray-200 px-3 text-sm" />
       </div>
       <div>
         <label className="mb-1 block text-sm font-medium text-gray-700">Inquiry Date</label>
-        <input {...stage1Form.register('inquiry_date')} type="date"
-          className="h-10 w-full rounded-lg border border-gray-200 px-3 text-sm" />
+        <input {...stage1Form.register('inquiry_date')} type="date" readOnly
+          className="h-10 w-full cursor-not-allowed rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm text-gray-500" />
       </div>
       <div>
         <label className="mb-1 block text-sm font-medium text-gray-700">Event Date</label>

@@ -14,6 +14,8 @@ export interface Inquiry {
   client_name: string
   client_phone: string | null
   event_type: string
+  session: string | null
+  source: string | null
   event_date: string | null
   inquiry_date: string | null
   pax: number | null
@@ -44,6 +46,7 @@ export interface Inquiry {
   anniversary_date: string | null
   venue: string | null
   call_recording_file_name: string | null
+  next_follow_up: string | null
   created_at: string
   updated_at: string
 }
@@ -70,10 +73,41 @@ export interface Meeting {
   updated_at: string
 }
 
+export interface MenuDesignPayload {
+  id: string
+  name: string
+  pages: { html: string; index: number }[]
+  raw: string
+}
+
+export interface MenuVersion {
+  id: string
+  inquiry_id: string
+  version: number
+  menu_text: string | null
+  designs: MenuDesignPayload[]
+  template_category: string | null
+  template_file: string | null
+  created_by: string
+  created_at: string
+}
+
+export interface MenuSlot {
+  id: string
+  inquiry_id: string
+  slot_number: number
+  file_name: string | null
+  is_final: boolean
+  created_by: string
+  created_at: string
+}
+
 export interface InquiryCreate {
   client_name: string
   client_phone?: string
   event_type: string
+  session?: string
+  source?: string
   event_date?: string
   inquiry_date?: string
   pax?: number

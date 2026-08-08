@@ -5,16 +5,39 @@ export interface AdminKPIs {
   upcoming_events: number
   today_events: number
   pending_payments: number
+  pending_menus: number
   total_revenue: number
   outstanding_amount: number
   pending_kitchen_plans: number
   pending_warehouse_requests: number
+  payment_approvals: PaymentApproval[]
+  pending_menus_list: PendingMenu[]
+}
+
+export interface PaymentApproval {
+  id: string
+  client_name: string
+  event_type: string
+  event_date: string | null
+  status: string
+  payment_status: string
+  advance_amount: number
+  total_amount: number | null
+  remaining_payment_date: string | null
+}
+
+export interface PendingMenu {
+  id: string
+  client_name: string
+  event_type: string
+  event_date: string | null
+  status: string
 }
 
 export interface SalesKPIs {
   total_inquiries: number
   new_inquiries: number
-  followups_today: number
+  upcoming_followups: number
   overdue_followups: number
   confirmed: number
   cancelled: number
@@ -24,7 +47,7 @@ export interface SalesKPIs {
   total_sales_value: number
   conversion_rate: number
   next_follow_up: { client_name: string; follow_up_date: string; remarks: string | null } | null
-  today_followups: TodayFollowUp[]
+  upcoming_followups_list: TodayFollowUp[]
   meetings: MeetingInfo[]
 }
 

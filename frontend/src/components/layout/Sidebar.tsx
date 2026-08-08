@@ -1,6 +1,6 @@
 import { NavLink, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import {
   LayoutDashboard,
   Users,
@@ -89,8 +89,14 @@ function NavItems() {
       !item.excludeRoles?.includes(user?.role.name ?? '')
   )
 
-  // Close sidebar on route change (mobile)
+  // Close sidebar on route change (mobile).
+  // Skip the first run so the drawer doesn't immediately close when it mounts.
+  const firstRender = useRef(true)
   useEffect(() => {
+    if (firstRender.current) {
+      firstRender.current = false
+      return
+    }
     close()
   }, [location.pathname, close])
 

@@ -6,6 +6,8 @@ from app.models.notification import Notification
 from app.models.menu import MenuTemplate
 from app.models.inventory_movement import InventoryMovement
 from app.models.company_settings import CompanySettings
+from app.models.menu_version import MenuVersion
+from app.models.menu_slot import MenuSlot
 
 __all__ = [
     "User",
@@ -23,4 +25,6 @@ __all__ = [
     "MenuTemplate",
     "InventoryMovement",
     "CompanySettings",
+    "MenuVersion",
+    "MenuSlot",
 ]

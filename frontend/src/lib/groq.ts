@@ -8,7 +8,33 @@ export interface GroqResponse {
   error?: string
 }
 
-async function callGroq(prompt: string, maxTokens = 4096): Promise<GroqResponse> {
+// Small delay helper for rate-limit retries.
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+// Retries up to 3 times when Groq rate-limits us (429). Waits for the
+// retry-after window so the request eventually goes through.
+async function callGroqWithRetry(prompt: string, imageDataUrl: string | null, maxTokens: number): Promise<GroqResponse> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const res = imageDataUrl ? await callGroqVisionRaw(prompt, imageDataUrl, maxTokens) : await callGroqRaw(prompt, maxTokens)
+    if (res.retryAfterMs) {
+      if (attempt < 2) {
+        await sleep(res.retryAfterMs + 1000)
+        continue
+      }
+      return { text: '', error: res.error || 'Rate limit exceeded. Try again in a minute.' }
+    }
+    return { text: res.text, error: res.error }
+  }
+  return { text: '', error: 'Rate limit exceeded. Try again in a minute.' }
+}
+
+interface RawResult {
+  text: string
+  error?: string
+  retryAfterMs?: number
+}
+
+async function callGroqRaw(prompt: string, maxTokens: number): Promise<RawResult> {
   try {
     const res = await fetch(GROQ_URL, {
       method: 'POST',
@@ -21,26 +47,39 @@ async function callGroq(prompt: string, maxTokens = 4096): Promise<GroqResponse>
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.7,
         max_tokens: maxTokens,
+        chat_template_kwargs: { enable_thinking: false },
       }),
     })
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({}))
-      return { text: '', error: err?.error?.message ?? `API error ${res.status}` }
+      const msg = err?.error?.message ?? `API error ${res.status}`
+      if (res.status === 429 || msg.includes('rate limit')) {
+        const retryMs = extractRetryMs(msg, res)
+        return { text: '', error: msg, retryAfterMs: retryMs }
+      }
+      return { text: '', error: msg }
     }
 
     const data = await res.json()
-    const text = data?.choices?.[0]?.message?.content ?? ''
-    return { text }
+    return { text: data?.choices?.[0]?.message?.content ?? '' }
   } catch (e: any) {
     return { text: '', error: e?.message ?? 'Network error' }
   }
 }
 
-// Vision-capable call: sends the template image along with the prompt so the
-// model can see the actual template and design accordingly. Keeps max_tokens
-// low so the request stays under the free tier's 8000 TPM limit.
-async function callGroqVision(prompt: string, imageDataUrl: string, maxTokens = 4500): Promise<GroqResponse> {
+function extractRetryMs(msg: string, res: Response): number {
+  const m = msg.match(/try again in ([\d.]+)s/i)
+  if (m) return Math.ceil(parseFloat(m[1]) * 1000)
+  const header = res.headers.get('retry-after')
+  if (header) {
+    const secs = parseFloat(header)
+    if (!isNaN(secs)) return Math.ceil(secs * 1000)
+  }
+  return 20000
+}
+
+async function callGroqVisionRaw(prompt: string, imageDataUrl: string, maxTokens: number): Promise<RawResult> {
   try {
     const res = await fetch(GROQ_URL, {
       method: 'POST',
@@ -61,20 +100,37 @@ async function callGroqVision(prompt: string, imageDataUrl: string, maxTokens = 
         ],
         temperature: 0.7,
         max_tokens: maxTokens,
+        chat_template_kwargs: { enable_thinking: false },
       }),
     })
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({}))
-      return { text: '', error: err?.error?.message ?? `API error ${res.status}` }
+      const msg = err?.error?.message ?? `API error ${res.status}`
+      if (res.status === 429 || msg.includes('rate limit')) {
+        const retryMs = extractRetryMs(msg, res)
+        return { text: '', error: msg, retryAfterMs: retryMs }
+      }
+      return { text: '', error: msg }
     }
 
     const data = await res.json()
-    const text = data?.choices?.[0]?.message?.content ?? ''
-    return { text }
+    return { text: data?.choices?.[0]?.message?.content ?? '' }
   } catch (e: any) {
     return { text: '', error: e?.message ?? 'Network error' }
   }
+}
+
+// Text-only call: routes through retry handling.
+async function callGroq(prompt: string, maxTokens = 4096): Promise<GroqResponse> {
+  return callGroqWithRetry(prompt, null, maxTokens)
+}
+
+// Vision-capable call: sends the template image along with the prompt so the
+// model can see the actual template and design accordingly. Keeps max_tokens
+// low so the request stays under the free tier's 8000 TPM limit.
+async function callGroqVision(prompt: string, imageDataUrl: string, maxTokens = 4500): Promise<GroqResponse> {
+  return callGroqWithRetry(prompt, imageDataUrl, maxTokens)
 }
 
 // Fetches a template image (same-origin) and returns a resized JPEG data URL

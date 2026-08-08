@@ -47,7 +47,7 @@ export default function TopNav() {
   const eventsToday = roleNotifs.filter((n) => n.type === 'event' && n.title === 'Event today').length
 
   const roleEvents = roleNotifs.filter((n) => ['event', 'meeting', 'kitchen', 'warehouse', 'vendor'].includes(n.type))
-  const roleFollowups = roleNotifs.filter((n) => ['followup', 'inquiry', 'status', 'menu'].includes(n.type))
+  const roleFollowups = roleNotifs.filter((n) => ['followup', 'inquiry', 'status', 'menu', 'menu_pending'].includes(n.type))
   const roleActivity = roleNotifs.filter((n) => ['payment', 'settlement', 'presentation', 'theme', 'user', 'setting'].includes(n.type))
 
   const today = new Date()

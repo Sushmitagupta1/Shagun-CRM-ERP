@@ -8,10 +8,33 @@ class AdminKPIs(BaseModel):
     upcoming_events: int
     today_events: int
     pending_payments: int
+    pending_menus: int
     total_revenue: float
     outstanding_amount: float
     pending_kitchen_plans: int
     pending_warehouse_requests: int
+    payment_approvals: list["PaymentApproval"] = []
+    pending_menus_list: list["PendingMenu"] = []
+
+
+class PaymentApproval(BaseModel):
+    id: str
+    client_name: str
+    event_type: str
+    event_date: str | None = None
+    status: str
+    payment_status: str
+    advance_amount: float = 0
+    total_amount: float | None = None
+    remaining_payment_date: str | None = None
+
+
+class PendingMenu(BaseModel):
+    id: str
+    client_name: str
+    event_type: str
+    event_date: str | None = None
+    status: str
 
 
 class NextFollowUp(BaseModel):
@@ -40,10 +63,14 @@ class TodayFollowUp(BaseModel):
     remarks: str | None = None
 
 
+class UpcomingFollowUp(TodayFollowUp):
+    pass
+
+
 class SalesKPIs(BaseModel):
     total_inquiries: int
     new_inquiries: int
-    followups_today: int
+    upcoming_followups: int
     overdue_followups: int
     confirmed: int
     cancelled: int
@@ -53,7 +80,7 @@ class SalesKPIs(BaseModel):
     total_sales_value: float
     conversion_rate: float
     next_follow_up: NextFollowUp | None = None
-    today_followups: list[TodayFollowUp] = []
+    upcoming_followups_list: list[TodayFollowUp] = []
     meetings: list[MeetingInfo] = []
 
 

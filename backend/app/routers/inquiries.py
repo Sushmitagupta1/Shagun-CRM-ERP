@@ -4,13 +4,14 @@ from datetime import date, datetime, time
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, or_
+from sqlalchemy import select, func, or_, update
 from app.database import get_db
 from app.models.inquiry import Inquiry, InquiryStatus, PaymentStatus, FollowUp, Meeting
 from app.models.inventory_movement import InventoryMovement
 from app.models.notification import Notification
+from app.models.menu_slot import MenuSlot
 from app.models.user import User, Role
-from app.schemas.inquiry import InquiryCreate, InquiryUpdate, InquiryResponse, FollowUpCreate, FollowUpUpdate, FollowUpResponse, MeetingCreate, MeetingStatusUpdate, MeetingResponse, CalendarResponse
+from app.schemas.inquiry import InquiryCreate, InquiryUpdate, InquiryResponse, FollowUpCreate, FollowUpUpdate, FollowUpResponse, MeetingCreate, MeetingStatusUpdate, MeetingResponse, MenuSlotResponse, CalendarResponse
 from app.schemas.inventory import InventoryMovementCreate, InventoryMovementResponse
 from app.schemas.common import PaginatedResponse
 from app.middleware.auth import get_current_user
@@ -22,7 +23,7 @@ from app.config import settings
 
 router = APIRouter(prefix="/api/inquiries", tags=["inquiries"])
 
-FOLLOWUP_NOTIFY_ROLES = ("admin", "sales_head", "menu_planner", "presentation_exec")
+FOLLOWUP_NOTIFY_ROLES = ("admin", "sales_head", "presentation_exec")
 FOLLOWUP_WRITE_ROLES = ("admin", "sales_head", "presentation_exec")
 
 
@@ -56,6 +57,10 @@ def apply_filters(query, count_query, status, assigned_to, search, event_type, d
         if followup == "today":
             subq = select(FollowUp.inquiry_id).where(
                 FollowUp.follow_up_date == today, FollowUp.is_done.is_(False)
+            )
+        elif followup == "upcoming":
+            subq = select(FollowUp.inquiry_id).where(
+                FollowUp.follow_up_date >= today, FollowUp.is_done.is_(False)
             )
         elif followup == "overdue":
             subq = (
@@ -97,8 +102,25 @@ async def list_inquiries(
     query = query.order_by(Inquiry.created_at.desc()).offset((page - 1) * per_page).limit(per_page)
     result = await db.execute(query)
     inquiries = result.scalars().all()
+
+    # Populate the next pending follow-up date for each inquiry in this page.
+    next_follow_up_map: dict = {}
+    if inquiries:
+        ids = [i.id for i in inquiries]
+        fu_result = await db.execute(
+            select(FollowUp.inquiry_id, func.min(FollowUp.follow_up_date))
+            .where(FollowUp.inquiry_id.in_(ids), FollowUp.is_done.is_(False))
+            .group_by(FollowUp.inquiry_id)
+        )
+        next_follow_up_map = dict(fu_result.all())
+    items = []
+    for i in inquiries:
+        resp = InquiryResponse.model_validate(i)
+        resp.next_follow_up = next_follow_up_map.get(i.id)
+        items.append(resp)
+
     return PaginatedResponse(
-        items=[InquiryResponse.model_validate(i) for i in inquiries],
+        items=items,
         total=total, page=page, per_page=per_page,
         total_pages=math.ceil(total / per_page) if total > 0 else 0,
     )
@@ -518,7 +540,8 @@ async def download_inquiry_file(
 async def create_inquiry(data: InquiryCreate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     inquiry = Inquiry(
         id=uuid.uuid4(), client_name=data.client_name, client_phone=data.client_phone,
-        event_type=data.event_type, event_date=data.event_date, pax=data.pax,
+        event_type=data.event_type, session=data.session, source=data.source,
+        event_date=data.event_date, pax=data.pax,
         inquiry_date=data.inquiry_date or date.today(),
         per_plate_rate=data.per_plate_rate, add_on=data.add_on,
         assigned_to=data.assigned_to, remarks=data.remarks, venue=data.venue,
@@ -833,3 +856,219 @@ async def update_payment(inquiry_id: uuid.UUID, payment_status: str, advance_amo
         inquiry.advance_amount = Decimal(str(advance_amount))
     await db.flush()
     return {"message": f"Payment status updated to {payment_status}"}
+
+
+@router.patch("/{inquiry_id}/approve-payment")
+async def approve_payment(inquiry_id: uuid.UUID, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if current_user.role.name != "admin":
+        raise HTTPException(status_code=403, detail="Only admin can approve payments")
+    inquiry = await get_inquiry_or_404(db, inquiry_id)
+    if inquiry.status not in (
+        InquiryStatus.CLIENT_CONFIRMATION,
+        InquiryStatus.ADVANCE_RECEIVE,
+        InquiryStatus.OPERATION_HANDOVER,
+    ):
+        raise HTTPException(status_code=400, detail="Payment can only be approved at confirmation stage")
+    inquiry.payment_status = PaymentStatus.PAID
+    if inquiry.advance_payment_date is None:
+        inquiry.advance_payment_date = date.today()
+    if inquiry.status == InquiryStatus.CLIENT_CONFIRMATION:
+        inquiry.status = InquiryStatus.ADVANCE_RECEIVE
+    await db.flush()
+    notify_result = await db.execute(
+        select(User)
+        .join(User.role)
+        .where(Role.name == "sales_head", User.is_active.is_(True))
+    )
+    message = f"Payment approved for {inquiry.client_name} ({inquiry.event_type}) — {inquiry.client_phone or ''}"
+    for u in notify_result.scalars().all():
+        db.add(Notification(
+            user_id=u.id,
+            title="Payment approved",
+            message=message[:500],
+            type="payment",
+            entity_type="inquiry",
+            entity_id=inquiry.id,
+        ))
+    await db.commit()
+    return {"message": "Payment approved"}
+
+
+MENU_SLOT_WRITE_ROLES = ("admin", "menu_planner")
+
+
+@router.get("/{inquiry_id}/menu-slots", response_model=list[MenuSlotResponse])
+async def list_menu_slots(
+    inquiry_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    await get_inquiry_or_404(db, inquiry_id)
+    result = await db.execute(
+        select(MenuSlot)
+        .where(MenuSlot.inquiry_id == inquiry_id)
+        .order_by(MenuSlot.slot_number.asc())
+    )
+    return [MenuSlotResponse.model_validate(s) for s in result.scalars().all()]
+
+
+@router.post("/{inquiry_id}/menu-slots", response_model=MenuSlotResponse, status_code=201)
+async def create_menu_slot(
+    inquiry_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role.name not in MENU_SLOT_WRITE_ROLES:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    await get_inquiry_or_404(db, inquiry_id)
+    max_result = await db.execute(
+        select(func.max(MenuSlot.slot_number)).where(MenuSlot.inquiry_id == inquiry_id)
+    )
+    next_number = (max_result.scalar() or 0) + 1
+    if next_number > 7:
+        raise HTTPException(status_code=400, detail="Maximum 7 menu slots allowed")
+    slot = MenuSlot(
+        inquiry_id=inquiry_id,
+        slot_number=next_number,
+        created_by=current_user.id,
+    )
+    db.add(slot)
+    await db.commit()
+    await db.refresh(slot)
+    return MenuSlotResponse.model_validate(slot)
+
+
+@router.post("/{inquiry_id}/menu-slots/{slot_id}/upload", response_model=MenuSlotResponse)
+async def upload_menu_slot_file(
+    inquiry_id: uuid.UUID,
+    slot_id: uuid.UUID,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role.name not in MENU_SLOT_WRITE_ROLES:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    await get_inquiry_or_404(db, inquiry_id)
+    result = await db.execute(
+        select(MenuSlot).where(MenuSlot.id == slot_id, MenuSlot.inquiry_id == inquiry_id)
+    )
+    slot = result.scalar_one_or_none()
+    if not slot:
+        raise HTTPException(status_code=404, detail="Menu slot not found")
+
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    if ext not in settings.ALLOWED_EXTENSIONS:
+        raise HTTPException(status_code=400, detail=f"File type '{ext}' not allowed")
+    content = await file.read()
+    if len(content) > settings.MAX_UPLOAD_SIZE:
+        raise HTTPException(status_code=400, detail=f"File too large (max {settings.MAX_UPLOAD_SIZE // (1024 * 1024)}MB)")
+
+    upload_dir = os.path.join(settings.UPLOAD_DIR, str(inquiry_id), "menu_slots")
+    os.makedirs(upload_dir, exist_ok=True)
+    file_path = os.path.join(upload_dir, f"slot{slot.slot_number}_{file.filename or 'unnamed'}")
+    with open(file_path, "wb") as f:
+        f.write(content)
+
+    if slot.file_path and slot.file_path != file_path and os.path.isfile(slot.file_path):
+        try:
+            os.remove(slot.file_path)
+        except OSError:
+            pass
+    slot.file_name = file.filename
+    slot.file_path = file_path
+    await db.commit()
+    await db.refresh(slot)
+    return MenuSlotResponse.model_validate(slot)
+
+
+@router.patch("/{inquiry_id}/menu-slots/{slot_id}/final", response_model=MenuSlotResponse)
+async def set_final_menu_slot(
+    inquiry_id: uuid.UUID,
+    slot_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role.name not in MENU_SLOT_WRITE_ROLES:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    inquiry = await get_inquiry_or_404(db, inquiry_id)
+    result = await db.execute(
+        select(MenuSlot).where(MenuSlot.id == slot_id, MenuSlot.inquiry_id == inquiry_id)
+    )
+    slot = result.scalar_one_or_none()
+    if not slot:
+        raise HTTPException(status_code=404, detail="Menu slot not found")
+    if not slot.file_name or not slot.file_path:
+        raise HTTPException(status_code=400, detail="Upload a file to this slot before marking it final")
+    await db.execute(
+        update(MenuSlot).where(MenuSlot.inquiry_id == inquiry_id).values(is_final=False)
+    )
+    slot.is_final = True
+    inquiry.menu_file_name = slot.file_name
+    inquiry.menu_file_path = slot.file_path
+    inquiry.menu_uploaded = True
+    await db.flush()
+    notify_result = await db.execute(
+        select(User)
+        .join(User.role)
+        .where(Role.name == "sales_head", User.is_active.is_(True))
+    )
+    message = f"Final menu confirmed for {inquiry.client_name} ({inquiry.event_type})"
+    for u in notify_result.scalars().all():
+        db.add(Notification(
+            user_id=u.id,
+            title="Final menu confirmed",
+            message=message[:500],
+            type="menu",
+            entity_type="inquiry",
+            entity_id=inquiry.id,
+        ))
+    await db.commit()
+    await db.refresh(slot)
+    return MenuSlotResponse.model_validate(slot)
+
+
+@router.delete("/{inquiry_id}/menu-slots/{slot_id}")
+async def delete_menu_slot(
+    inquiry_id: uuid.UUID,
+    slot_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role.name not in MENU_SLOT_WRITE_ROLES:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    result = await db.execute(
+        select(MenuSlot).where(MenuSlot.id == slot_id, MenuSlot.inquiry_id == inquiry_id)
+    )
+    slot = result.scalar_one_or_none()
+    if not slot:
+        raise HTTPException(status_code=404, detail="Menu slot not found")
+    if slot.file_path and os.path.isfile(slot.file_path):
+        try:
+            os.remove(slot.file_path)
+        except OSError:
+            pass
+    await db.delete(slot)
+    await db.commit()
+    return {"message": "Menu slot deleted"}
+
+
+@router.get("/{inquiry_id}/menu-slots/{slot_id}/download")
+async def download_menu_slot_file(
+    inquiry_id: uuid.UUID,
+    slot_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    await get_inquiry_or_404(db, inquiry_id)
+    result = await db.execute(
+        select(MenuSlot).where(MenuSlot.id == slot_id, MenuSlot.inquiry_id == inquiry_id)
+    )
+    slot = result.scalar_one_or_none()
+    if not slot or not slot.file_path or not os.path.isfile(slot.file_path):
+        raise HTTPException(status_code=404, detail="No file uploaded for this slot")
+    from fastapi.responses import FileResponse
+    return FileResponse(
+        path=slot.file_path,
+        filename=slot.file_name,
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
+    )

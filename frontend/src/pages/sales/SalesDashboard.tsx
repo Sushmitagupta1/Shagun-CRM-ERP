@@ -115,7 +115,7 @@ export default function SalesDashboard() {
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-6">
         {[
           { label: 'Total Inquiries', value: kpis?.total_inquiries ?? 0, icon: Plus, accent: 'text-blue-600', nav: '/inquiries' },
-          { label: 'Follow-ups Today', value: kpis?.followups_today ?? 0, icon: Calendar, accent: 'text-amber-600', nav: '/inquiries?followup=today' },
+          { label: 'Upcoming Follow-ups', value: kpis?.upcoming_followups ?? 0, icon: Calendar, accent: 'text-amber-600', nav: '/inquiries?followup=upcoming' },
           { label: 'Overdue Follow-ups', value: kpis?.overdue_followups ?? 0, icon: Clock, accent: 'text-red-600', urgent: true, nav: '/inquiries?followup=overdue' },
           { label: 'Confirmed', value: kpis?.confirmed ?? 0, icon: CheckCircle, accent: 'text-emerald-600', nav: '/inquiries?status=advance_receive,operation_handover' },
           { label: 'Total Sales', value: formatCurrency(totalRevenue), icon: TrendingUp, accent: 'text-maroon', nav: '/finance' },
@@ -342,7 +342,7 @@ export default function SalesDashboard() {
         </motion.div>
       </div>
 
-      {/* Today's Follow-ups Panel */}
+      {/* Upcoming Follow-ups Panel */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -352,19 +352,19 @@ export default function SalesDashboard() {
       >
         <div className="mb-3 flex shrink-0 items-center justify-between">
           <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-900">
-            <Calendar size={15} className="text-amber-600" /> Today's Follow-ups
+            <Calendar size={15} className="text-amber-600" /> Upcoming Follow-ups
           </h3>
           <button
-            onClick={() => navigate('/inquiries?followup=today')}
+            onClick={() => navigate('/inquiries?followup=upcoming')}
             className="flex h-8 items-center rounded-lg border border-gray-200 px-3 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50"
           >
             View all
           </button>
         </div>
         <div className="flex-1 overflow-y-auto">
-        {kpis?.today_followups?.length ? (
+        {kpis?.upcoming_followups_list?.length ? (
           <div className="grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-3">
-            {kpis.today_followups.map((fu) => (
+            {kpis.upcoming_followups_list.map((fu) => (
               <button
                 key={fu.id}
                 onClick={() => navigate(`/inquiries/${fu.inquiry_id}`)}
@@ -382,7 +382,7 @@ export default function SalesDashboard() {
             ))}
           </div>
         ) : (
-          <p className="py-4 text-center text-xs text-gray-400">No follow-ups scheduled for today.</p>
+          <p className="py-4 text-center text-xs text-gray-400">No upcoming follow-ups scheduled.</p>
         )}
         </div>
       </motion.div>

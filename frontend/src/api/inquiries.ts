@@ -1,6 +1,6 @@
 import client from './client'
 import type { PaginatedResponse } from '@/types/common'
-import type { Inquiry, InquiryCreate, FollowUp, Meeting } from '@/types/inquiry'
+import type { Inquiry, InquiryCreate, FollowUp, Meeting, MenuVersion, MenuSlot } from '@/types/inquiry'
 import type { InventoryMovement, InventoryMovementCreate } from '@/types/inventory'
 
 export async function getInquiries(params: {
@@ -47,6 +47,10 @@ export async function updatePayment(id: string, paymentStatus: string, advanceAm
   const params = new URLSearchParams({ payment_status: paymentStatus })
   if (advanceAmount !== undefined) params.append('advance_amount', String(advanceAmount))
   await client.patch(`/inquiries/${id}/payment?${params.toString()}`)
+}
+
+export async function approvePayment(id: string): Promise<void> {
+  await client.patch(`/inquiries/${id}/approve-payment`)
 }
 
 export async function exportInquiriesExcel(params: {
@@ -194,6 +198,19 @@ export async function deleteInventoryMovement(inquiryId: string, movementId: str
   await client.delete(`/inquiries/${inquiryId}/inventory-movements/${movementId}`)
 }
 
+export async function getMenuVersions(inquiryId: string): Promise<MenuVersion[]> {
+  const response = await client.get(`/inquiries/${inquiryId}/menu-versions`)
+  return response.data
+}
+
+export async function createMenuVersion(
+  inquiryId: string,
+  data: { menu_text: string | null; designs: { id: string; name: string; pages: { html: string; index: number }[]; raw: string }[]; template_category: string | null; template_file: string | null }
+): Promise<MenuVersion> {
+  const response = await client.post(`/inquiries/${inquiryId}/menu-versions`, data)
+  return response.data
+}
+
 export async function uploadInventoryMovementFile(
   inquiryId: string,
   movementType: 'received' | 'returned' | 'transferred' | 'wastage',
@@ -203,4 +220,42 @@ export async function uploadInventoryMovementFile(
   formData.append('file', file)
   const response = await client.post(`/inquiries/${inquiryId}/inventory-upload?movement_type=${movementType}`, formData)
   return response.data
+}
+
+export async function getMenuSlots(inquiryId: string): Promise<MenuSlot[]> {
+  const response = await client.get(`/inquiries/${inquiryId}/menu-slots`)
+  return response.data
+}
+
+export async function createMenuSlot(inquiryId: string): Promise<MenuSlot> {
+  const response = await client.post(`/inquiries/${inquiryId}/menu-slots`)
+  return response.data
+}
+
+export async function uploadMenuSlotFile(inquiryId: string, slotId: string, file: File): Promise<MenuSlot> {
+  const formData = new FormData()
+  formData.append('file', file)
+  const response = await client.post(`/inquiries/${inquiryId}/menu-slots/${slotId}/upload`, formData)
+  return response.data
+}
+
+export async function setFinalMenuSlot(inquiryId: string, slotId: string): Promise<MenuSlot> {
+  const response = await client.patch(`/inquiries/${inquiryId}/menu-slots/${slotId}/final`)
+  return response.data
+}
+
+export async function deleteMenuSlot(inquiryId: string, slotId: string): Promise<void> {
+  await client.delete(`/inquiries/${inquiryId}/menu-slots/${slotId}`)
+}
+
+export async function downloadMenuSlotFile(inquiryId: string, slotId: string, fileName?: string | null): Promise<void> {
+  const response = await client.get(`/inquiries/${inquiryId}/menu-slots/${slotId}/download`, { responseType: 'blob' })
+  const url = window.URL.createObjectURL(new Blob([response.data]))
+  const link = document.createElement('a')
+  link.href = url
+  link.setAttribute('download', fileName || `menu_slot_${slotId}`)
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  window.URL.revokeObjectURL(url)
 }

@@ -1,26 +1,31 @@
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getInquiry } from '@/api/inquiries'
 import { generateMenuDesign, loadImageAsDataUrl } from '@/lib/groq'
 import { parseMenuDesigns, downloadMenuDesignPdf, type MenuDesign } from '@/lib/menuDesign'
 import { getTemplateCategories, getTemplateUrl, getTemplateThumbUrl } from '@/api/templates'
+import { getMenuVersions, createMenuVersion } from '@/api/inquiries'
 import PageHeader from '@/components/common/PageHeader'
 import { toast } from 'sonner'
 import { motion } from 'framer-motion'
-import { ArrowLeft, Sparkles, RotateCcw, Loader2, Phone, Calendar, DollarSign, MessageSquare, FileText, User, Users, Layout, Palette, FileDown } from 'lucide-react'
+import { ArrowLeft, Sparkles, RotateCcw, Loader2, Phone, Calendar, DollarSign, MessageSquare, FileText, User, Users, Layout, Palette, FileDown, Save, History, Eye, ChevronDown, ChevronUp, X } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
 import { INQUIRY_STATUSES, PAYMENT_STATUSES } from '@/lib/constants'
 
 export default function MenuGenerator() {
   const { inquiryId } = useParams()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
 
   // AI Menu Designer
   const [designMenuText, setDesignMenuText] = useState('')
   const [designing, setDesigning] = useState(false)
   const [designs, setDesigns] = useState<MenuDesign[]>([])
   const [downloadingPdf, setDownloadingPdf] = useState<string | null>(null)
+  const [savingVersion, setSavingVersion] = useState(false)
+  const [showHistory, setShowHistory] = useState(false)
+  const [viewingVersion, setViewingVersion] = useState<number | null>(null)
 
   // Template selection
   const [selectedCat, setSelectedCat] = useState('')
@@ -35,6 +40,27 @@ export default function MenuGenerator() {
   const { data: categories } = useQuery({
     queryKey: ['template-categories'],
     queryFn: getTemplateCategories,
+  })
+
+  const { data: menuVersions = [], isLoading: versionsLoading } = useQuery({
+    queryKey: ['menu-versions', inquiryId],
+    queryFn: () => getMenuVersions(inquiryId!),
+    enabled: !!inquiryId,
+  })
+
+  const saveVersionMutation = useMutation({
+    mutationFn: () =>
+      createMenuVersion(inquiryId!, {
+        menu_text: designMenuText,
+        designs: designs,
+        template_category: selectedCat || null,
+        template_file: selectedFile || null,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['menu-versions', inquiryId] })
+      toast.success('Menu version saved')
+    },
+    onError: () => toast.error('Failed to save version'),
   })
 
   const handleDesignMenu = async () => {
@@ -86,6 +112,18 @@ export default function MenuGenerator() {
 
   const handleRegenerateDesign = (idx: number) => {
     setDesigns((prev) => prev.filter((_, i) => i !== idx))
+  }
+
+  const handleLoadVersion = (version: typeof menuVersions[number]) => {
+    if (version.menu_text) setDesignMenuText(version.menu_text)
+    if (version.designs && version.designs.length > 0) {
+      setDesigns(version.designs)
+    }
+    if (version.template_category) setSelectedCat(version.template_category)
+    if (version.template_file) setSelectedFile(version.template_file)
+    setShowHistory(false)
+    toast.success(`Loaded version ${version.version}`)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   if (!inquiry) {
@@ -235,6 +273,69 @@ export default function MenuGenerator() {
           className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-gold to-amber-600 text-sm font-bold text-white shadow-lg transition-colors hover:from-gold hover:to-amber-700 disabled:opacity-50">
           {designing ? <><Loader2 size={16} className="animate-spin" /> Designing 3 Options...</> : <><Palette size={16} /> Design Menu Picture</>}
         </button>
+
+        {/* Save Version + History */}
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => {
+              setSavingVersion(true)
+              saveVersionMutation.mutate(undefined, { onSettled: () => setSavingVersion(false) })
+            }}
+            disabled={designs.length === 0 || savingVersion || saveVersionMutation.isPending}
+            className="flex h-9 items-center gap-2 rounded-lg bg-maroon px-4 text-xs font-bold text-white transition-colors hover:bg-maroon-dark disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {savingVersion || saveVersionMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} Save Version
+          </button>
+          <button
+            onClick={() => setShowHistory((v) => !v)}
+            className="flex h-9 items-center gap-2 rounded-lg border border-gray-200 px-4 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50"
+          >
+            <History size={13} /> Menu History {menuVersions.length > 0 && <span className="rounded-full bg-gray-100 px-1.5 text-[10px] font-bold text-gray-500">{menuVersions.length}</span>}
+            {showHistory ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+          </button>
+        </div>
+
+        {/* Menu History Panel */}
+        {showHistory && (
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+            className="mt-3 rounded-lg border border-gray-100 bg-gray-50 p-3">
+            {versionsLoading ? (
+              <div className="flex justify-center py-6">
+                <Loader2 size={18} className="animate-spin text-gray-400" />
+              </div>
+            ) : menuVersions.length === 0 ? (
+              <p className="py-4 text-center text-xs text-gray-400">No saved versions yet. Design a menu and click "Save Version".</p>
+            ) : (
+              <div className="space-y-2">
+                {menuVersions.map((v) => (
+                  <div key={v.id} className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white p-3">
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-gray-900">Version {v.version}
+                        <span className="ml-2 text-[10px] font-medium text-gray-400">
+                          {v.created_at ? new Date(v.created_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}
+                        </span>
+                      </p>
+                      <p className="mt-0.5 truncate text-[11px] text-gray-500">
+                        {v.designs?.length ?? 0} design{v.designs?.length !== 1 ? 's' : ''}
+                        {v.template_category && ` · ${v.template_category}${v.template_file ? ` / ${v.template_file}` : ''}`}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 gap-1.5">
+                      <button onClick={() => setViewingVersion(v.version)}
+                        className="flex h-7 items-center gap-1 rounded-lg border border-gray-200 px-2 text-[10px] font-medium text-gray-600 hover:bg-gray-50">
+                        <Eye size={11} /> View
+                      </button>
+                      <button onClick={() => handleLoadVersion(v)}
+                        className="flex h-7 items-center gap-1 rounded-lg bg-maroon px-2 text-[10px] font-bold text-white hover:bg-maroon-dark">
+                        <RotateCcw size={11} /> Load & Edit
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </motion.div>
+        )}
       </div>
 
       {/* Designer Options */}
@@ -270,6 +371,51 @@ export default function MenuGenerator() {
           </div>
         </div>
       )}
+
+      {/* Version Viewer Modal */}
+      {viewingVersion !== null && (() => {
+        const v = menuVersions.find((x) => x.version === viewingVersion)
+        if (!v) return null
+        return (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+            className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 p-4 backdrop-blur-sm"
+            onClick={() => setViewingVersion(null)}>
+            <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }}
+              className="mt-8 w-full max-w-4xl overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl"
+              onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+                <h3 className="text-sm font-bold text-gray-900">Version {v.version}</h3>
+                <button onClick={() => setViewingVersion(null)}
+                  className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+                  <X size={16} />
+                </button>
+              </div>
+              <div className="max-h-[80vh] overflow-y-auto bg-gray-50 p-5">
+                {v.designs && v.designs.length > 0 ? (
+                  <div className="grid gap-4 lg:grid-cols-3">
+                    {v.designs.map((d, di) => (
+                      <div key={di} className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+                        <div className="border-b border-gray-100 px-4 py-3">
+                          <h4 className="text-sm font-bold text-gray-900">{d.name}</h4>
+                          <p className="text-[10px] text-gray-400">{d.pages?.length ?? 0} pages · A4</p>
+                        </div>
+                        <div className="max-h-96 overflow-y-auto bg-gray-50 p-3">
+                          {(d.pages ?? []).map((page, pi) => (
+                            <div key={pi} className="mb-3 overflow-hidden rounded-lg shadow-sm last:mb-0"
+                              dangerouslySetInnerHTML={{ __html: page.html }} />
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="py-8 text-center text-sm text-gray-400">This version has no designs saved.</p>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )
+      })()}
     </div>
   )
 }
