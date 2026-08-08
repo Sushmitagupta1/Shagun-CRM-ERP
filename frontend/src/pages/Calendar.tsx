@@ -202,9 +202,10 @@ export default function CalendarPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.2 }}
-          className="rounded-xl border border-gray-100 bg-white shadow-md"
+          className="flex rounded-xl border border-gray-100 bg-white shadow-md"
+          style={{ height: 260, flexDirection: 'column' }}
         >
-          <div className="border-b border-gray-100 px-5 py-4">
+          <div className="shrink-0 border-b border-gray-100 px-5 py-4">
             <h3 className="text-sm font-semibold text-gray-900">
               {new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', {
                 weekday: 'long',
@@ -217,7 +218,7 @@ export default function CalendarPage() {
             </p>
           </div>
 
-          <div className="space-y-3 p-4">
+          <div className="flex-1 overflow-y-auto p-4">
             {isLoading ? (
               <div className="flex justify-center py-8">
                 <div className="h-6 w-6 animate-spin rounded-full border-2 border-maroon border-t-transparent" />
@@ -332,7 +333,6 @@ export default function CalendarPage() {
                 })}
               </>
             )}
-          </div>
 
           {upcomingEvents.length > 0 && (
             <>
@@ -378,6 +378,7 @@ export default function CalendarPage() {
               </div>
             </>
           )}
+          </div>
         </motion.div>
       </div>
     </div>
