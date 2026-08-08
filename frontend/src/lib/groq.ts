@@ -38,8 +38,9 @@ async function callGroq(prompt: string, maxTokens = 4096): Promise<GroqResponse>
 }
 
 // Vision-capable call: sends the template image along with the prompt so the
-// model can see the actual template and design accordingly.
-async function callGroqVision(prompt: string, imageDataUrl: string, maxTokens = 8192): Promise<GroqResponse> {
+// model can see the actual template and design accordingly. Keeps max_tokens
+// low so the request stays under the free tier's 8000 TPM limit.
+async function callGroqVision(prompt: string, imageDataUrl: string, maxTokens = 4500): Promise<GroqResponse> {
   try {
     const res = await fetch(GROQ_URL, {
       method: 'POST',
@@ -78,7 +79,8 @@ async function callGroqVision(prompt: string, imageDataUrl: string, maxTokens = 
 
 // Fetches a template image (same-origin) and returns a resized JPEG data URL
 // suitable for sending to the vision model. Returns null if it can't load.
-export async function loadImageAsDataUrl(url: string, maxDim = 1024): Promise<string | null> {
+// Kept small (<= 512px, quality 0.7) to stay under the free tier's TPM limit.
+export async function loadImageAsDataUrl(url: string, maxDim = 384): Promise<string | null> {
   try {
     const blob = await fetch(url).then((r) => (r.ok ? r.blob() : null))
     if (!blob) return null
@@ -96,7 +98,7 @@ export async function loadImageAsDataUrl(url: string, maxDim = 1024): Promise<st
     const ctx = canvas.getContext('2d')
     if (!ctx) return null
     ctx.drawImage(img, 0, 0, w, h)
-    return canvas.toDataURL('image/jpeg', 0.85)
+    return canvas.toDataURL('image/jpeg', 0.7)
   } catch {
     return null
   }
@@ -243,6 +245,6 @@ ${backgroundGuidance}
 - Content must fit A4 portrait (compact spacing, small refined font sizes).
 ${templateImageNote}`
   return params.templateImage
-    ? callGroqVision(prompt, params.templateImage, 8192)
-    : callGroq(prompt, 8192)
+    ? callGroqVision(prompt, params.templateImage, 4500)
+    : callGroq(prompt, 4500)
 }
