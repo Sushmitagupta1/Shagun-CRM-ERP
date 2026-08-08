@@ -1,7 +1,7 @@
 const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY as string
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions'
-const GROQ_MODEL = 'llama-3.3-70b-versatile'
-const GROQ_VISION_MODEL = 'llama-3.2-90b-vision-preview'
+const GROQ_MODEL = 'qwen/qwen3.6-27b'
+const GROQ_VISION_MODEL = 'qwen/qwen3.6-27b'
 
 export interface GroqResponse {
   text: string
