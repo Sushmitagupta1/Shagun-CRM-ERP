@@ -13,7 +13,7 @@ export async function getUsers(params: {
 }
 
 export async function getRoles(): Promise<Role[]> {
-  const response = await client.get('/roles')
+  const response = await client.get('/users/roles')
   return response.data
 }
 

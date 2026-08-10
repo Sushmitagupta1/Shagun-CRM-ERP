@@ -6,7 +6,7 @@ from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from app.database import get_db
 from app.models.user import User, Role
-from app.schemas.user import UserCreate, UserUpdate, UserResponse
+from app.schemas.user import UserCreate, UserUpdate, UserResponse, RoleResponse
 from app.schemas.common import PaginatedResponse
 from app.middleware.auth import require_role
 from app.services.auth_service import hash_password
