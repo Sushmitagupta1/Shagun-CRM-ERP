@@ -1,6 +1,6 @@
 import client from './client'
 import type { PaginatedResponse } from '@/types/common'
-import type { User } from '@/types/auth'
+import type { User, Role } from '@/types/auth'
 
 export async function getUsers(params: {
   page?: number
@@ -9,6 +9,11 @@ export async function getUsers(params: {
   search?: string
 }): Promise<PaginatedResponse<User>> {
   const response = await client.get('/users', { params })
+  return response.data
+}
+
+export async function getRoles(): Promise<Role[]> {
+  const response = await client.get('/roles')
   return response.data
 }
 

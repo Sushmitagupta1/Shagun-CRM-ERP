@@ -25,6 +25,7 @@ import {
   downloadInquiryFile,
 } from '@/api/inquiries'
 import ExcelPreviewModal from '@/components/inventory/ExcelPreviewModal'
+import { getErrorMessage } from '@/lib/apiError'
 
 const MOVEMENT_ORDER: InventoryMovementType[] = ['received', 'returned', 'transferred', 'wastage']
 
@@ -82,7 +83,7 @@ export default function InventoryPanelModal({
       queryClient.invalidateQueries({ queryKey: ['inquiry-detail', id] })
       queryClient.invalidateQueries({ queryKey: ['inquiries'] })
     } catch (err) {
-      toast.error((err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Upload failed')
+      toast.error(getErrorMessage(err, 'Upload failed'))
     } finally {
       setUploadingType(null)
     }

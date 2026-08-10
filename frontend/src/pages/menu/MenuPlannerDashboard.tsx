@@ -13,6 +13,7 @@ import StatusPill from '@/components/common/StatusPill'
 import { KPICardSkeleton } from '@/components/common/Skeleton'
 import { InquiryForm } from '@/pages/inquiries/InquiryForm'
 import { INQUIRY_STATUSES } from '@/lib/constants'
+import { getErrorMessage } from '@/lib/apiError'
 import {
   Sparkles,
   Clock,
@@ -42,10 +43,7 @@ export default function MenuPlannerDashboard() {
       setShowCreate(false)
     },
     onError: (err: unknown) => {
-      const message =
-        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
-        'Failed'
-      toast.error(message)
+      toast.error(getErrorMessage(err, 'Failed'))
     },
   })
 
@@ -56,10 +54,7 @@ export default function MenuPlannerDashboard() {
       toast.success('Inquiry updated')
     },
     onError: (err: unknown) => {
-      const message =
-        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
-        'Update failed'
-      toast.error(message)
+      toast.error(getErrorMessage(err, 'Update failed'))
     },
   })
 

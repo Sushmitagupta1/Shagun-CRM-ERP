@@ -10,6 +10,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { useAuthStore } from '@/store/authStore'
 import { getHomeForRole } from '@/routes/ProtectedRoute'
 import CompanyLogo from '@/components/common/CompanyLogo'
+import { getErrorMessage } from '@/lib/apiError'
 
 const loginSchema = z.object({
   username: z.string().min(1, 'Username is required'),
@@ -40,10 +41,7 @@ export default function Login() {
       toast.success('Login successful!')
       navigate(getHomeForRole(role))
     } catch (err: unknown) {
-      const message =
-        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
-        'Login failed'
-      toast.error(message)
+      toast.error(getErrorMessage(err, 'Login failed'))
     } finally {
       setLoading(false)
     }

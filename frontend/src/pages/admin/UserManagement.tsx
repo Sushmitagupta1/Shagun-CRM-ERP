@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getUsers, createUser, updateUser, deleteUser } from '@/api/users'
+import { getUsers, getRoles, createUser, updateUser, deleteUser } from '@/api/users'
 import PageHeader from '@/components/common/PageHeader'
 import { ROLE_LABELS } from '@/lib/constants'
+import { getErrorMessage } from '@/lib/apiError'
 import { toast } from 'sonner'
 import { Plus, Trash2, Pencil, Loader2, Search, X } from 'lucide-react'
 import type { User } from '@/types/auth'
@@ -21,6 +22,11 @@ export default function UserManagement() {
     queryFn: () => getUsers({ search, per_page: 50 }),
   })
 
+  const { data: roles } = useQuery({
+    queryKey: ['roles'],
+    queryFn: getRoles,
+  })
+
   const createMutation = useMutation({
     mutationFn: createUser,
     onSuccess: () => {
@@ -30,8 +36,7 @@ export default function UserManagement() {
       setForm(EMPTY_FORM)
     },
     onError: (err: unknown) => {
-      const message = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Failed to create user'
-      toast.error(message)
+      toast.error(getErrorMessage(err, 'Failed to create user'))
     },
   })
 
@@ -44,8 +49,7 @@ export default function UserManagement() {
       setForm(EMPTY_FORM)
     },
     onError: (err: unknown) => {
-      const message = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Failed to update user'
-      toast.error(message)
+      toast.error(getErrorMessage(err, 'Failed to update user'))
     },
   })
 
@@ -159,9 +163,9 @@ export default function UserManagement() {
                 className="h-10 flex-1 rounded-lg border border-gray-200 px-3 text-sm"
               >
                 <option value="">Select Role</option>
-                {Object.entries(ROLE_LABELS).map(([key, label]) => (
-                  <option key={key} value={key}>
-                    {label}
+                {roles?.map((role) => (
+                  <option key={role.id} value={role.id}>
+                    {ROLE_LABELS[role.name] || role.name}
                   </option>
                 ))}
               </select>

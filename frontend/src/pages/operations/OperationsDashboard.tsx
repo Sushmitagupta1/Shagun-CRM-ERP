@@ -17,6 +17,7 @@ import {
   Upload,
   FileSpreadsheet,
 } from 'lucide-react'
+import { getErrorMessage } from '@/lib/apiError'
 
 const todayEvents = [
   { id: '1', name: 'Sharma Wedding Reception', time: '6:00 PM', venue: 'Grand Palace Banquet' },
@@ -43,9 +44,7 @@ export default function OperationsDashboard() {
       setInventoryNames((prev) => ({ ...prev, [inqId]: file.name }))
       toast.success(`Received: ${res.entries_created} entries added`)
     } catch (err) {
-      const message =
-        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Upload failed'
-      toast.error(message)
+      toast.error(getErrorMessage(err, 'Upload failed'))
     } finally {
       setUploadingId(null)
     }

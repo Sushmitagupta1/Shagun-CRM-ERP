@@ -6,6 +6,7 @@ import PageHeader from '@/components/common/PageHeader'
 import StatusPill from '@/components/common/StatusPill'
 import { INQUIRY_STATUSES, PAYMENT_STATUSES } from '@/lib/constants'
 import { formatCurrency, formatDate } from '@/lib/utils'
+import { getErrorMessage } from '@/lib/apiError'
 import { useAuth } from '@/hooks/useAuth'
 import { toast } from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -156,8 +157,7 @@ export default function InquiryDetail() {
       toast.success('Menu slot added')
     },
     onError: (err: unknown) => {
-      const message = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Failed to add slot'
-      toast.error(message)
+      toast.error(getErrorMessage(err, 'Failed to add slot'))
     },
   })
 
@@ -168,8 +168,7 @@ export default function InquiryDetail() {
       toast.success('Menu uploaded')
     },
     onError: (err: unknown) => {
-      const message = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Upload failed'
-      toast.error(message)
+      toast.error(getErrorMessage(err, 'Upload failed'))
     },
     onSettled: () => setUploadingSlotId(null),
   })
@@ -184,8 +183,7 @@ export default function InquiryDetail() {
       toast.success('Final menu confirmed')
     },
     onError: (err: unknown) => {
-      const message = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Failed to confirm'
-      toast.error(message)
+      toast.error(getErrorMessage(err, 'Failed to confirm'))
     },
   })
 
@@ -233,10 +231,7 @@ export default function InquiryDetail() {
       toast.success('Status updated')
     },
     onError: (err: unknown) => {
-      const message =
-        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
-        'Failed to update status'
-      toast.error(message)
+      toast.error(getErrorMessage(err, 'Failed to update status'))
     },
   })
 
@@ -247,10 +242,7 @@ export default function InquiryDetail() {
       toast.success('Inquiry updated')
     },
     onError: (err: unknown) => {
-      const message =
-        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
-        'Failed to update'
-      toast.error(message)
+      toast.error(getErrorMessage(err, 'Failed to update'))
     },
   })
 
@@ -263,10 +255,7 @@ export default function InquiryDetail() {
       toast.success(notRequired ? 'Presentation marked as not required' : 'Presentation marked as required')
     },
     onError: (err: unknown) => {
-      const message =
-        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
-        'Failed to update'
-      toast.error(message)
+      toast.error(getErrorMessage(err, 'Failed to update'))
     },
   })
 
@@ -420,9 +409,7 @@ export default function InquiryDetail() {
       if (type === 'menu') setShowMenuUpload(false)
       else setShowPresentationUpload(false)
     } catch (err) {
-      const message =
-        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Upload failed'
-      toast.error(message)
+      toast.error(getErrorMessage(err, 'Upload failed'))
     }
   }
 
@@ -434,9 +421,7 @@ export default function InquiryDetail() {
       toast.success('Ingredient list uploaded')
       setShowIngredientUpload(false)
     } catch (err) {
-      const message =
-        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Upload failed'
-      toast.error(message)
+      toast.error(getErrorMessage(err, 'Upload failed'))
     }
   }
 
@@ -449,9 +434,7 @@ export default function InquiryDetail() {
       toast.success('Call recording uploaded')
       setShowCallRecordingUpload(false)
     } catch (err) {
-      const message =
-        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Upload failed'
-      toast.error(message)
+      toast.error(getErrorMessage(err, 'Upload failed'))
     }
   }
 

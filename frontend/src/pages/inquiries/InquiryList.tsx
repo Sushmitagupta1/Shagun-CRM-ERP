@@ -8,6 +8,7 @@ import PageHeader from '@/components/common/PageHeader'
 import StatusPill from '@/components/common/StatusPill'
 import { InquiryForm } from './InquiryForm'
 import { INQUIRY_STATUSES, EVENT_TYPES } from '@/lib/constants'
+import { getErrorMessage } from '@/lib/apiError'
 import { useDebounce } from '@/hooks/useDebounce'
 import { toast } from 'sonner'
 import { Plus, Search, ChevronLeft, ChevronRight, FileSpreadsheet, FileText, Eye, X } from 'lucide-react'
@@ -51,10 +52,7 @@ export default function InquiryList() {
       toast.success('Inquiry created')
     },
     onError: (err: unknown) => {
-      const message =
-        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
-        'Failed'
-      toast.error(message)
+      toast.error(getErrorMessage(err, 'Failed'))
     },
   })
 
@@ -67,10 +65,7 @@ export default function InquiryList() {
       setShowCreate(false)
     },
     onError: (err: unknown) => {
-      const message =
-        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
-        'Update failed'
-      toast.error(message)
+      toast.error(getErrorMessage(err, 'Update failed'))
     },
   })
 

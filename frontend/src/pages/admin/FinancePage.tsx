@@ -9,6 +9,7 @@ import PageHeader from '@/components/common/PageHeader'
 import StatusPill from '@/components/common/StatusPill'
 import { formatCurrency } from '@/lib/utils'
 import { SETTLEMENT_STATUSES } from '@/lib/constants'
+import { getErrorMessage } from '@/lib/apiError'
 import { toast } from 'sonner'
 import { Download, Plus, CheckCircle } from 'lucide-react'
 
@@ -38,10 +39,7 @@ export default function FinancePage() {
       setForm({ inquiry_id: '', revenue: '', vendor_cost: '', other_expenses: '', notes: '' })
     },
     onError: (err: unknown) => {
-      const message =
-        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
-        'Failed'
-      toast.error(message)
+      toast.error(getErrorMessage(err, 'Failed'))
     },
   })
 

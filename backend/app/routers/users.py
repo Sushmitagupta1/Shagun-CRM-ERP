@@ -44,6 +44,12 @@ async def list_users(
     )
 
 
+@router.get("/roles", response_model=list[RoleResponse])
+async def list_roles(db: AsyncSession = Depends(get_db), current_user: User = Depends(require_role("admin"))):
+    result = await db.execute(select(Role).order_by(Role.name))
+    return result.scalars().all()
+
+
 @router.get("/{user_id}", response_model=UserResponse)
 async def get_user(user_id: uuid.UUID, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_role("admin"))):
     result = await db.execute(select(User).options(selectinload(User.role)).where(User.id == user_id))
