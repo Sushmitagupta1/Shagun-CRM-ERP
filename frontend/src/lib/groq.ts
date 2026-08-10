@@ -1,6 +1,6 @@
 const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY as string
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions'
-const GROQ_MODEL = 'qwen/qwen3.6-27b'
+const GROQ_MODEL = 'openai/gpt-oss-20b'
 const GROQ_VISION_MODEL = 'qwen/qwen3.6-27b'
 
 export interface GroqResponse {
@@ -10,6 +10,13 @@ export interface GroqResponse {
 
 // Small delay helper for rate-limit retries.
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+// The qwen vision model thinks out loud, wrapping its answer in a
+// <think>...</think> block. Groq no longer accepts chat_template_kwargs
+// (which previously disabled that), so strip the thinking block instead.
+function stripThinking(text: string): string {
+  return text.replace(/^\s*<think>[\s\S]*?<\/think>\s*/i, '')
+}
 
 // Retries up to 3 times when Groq rate-limits us (429). Waits for the
 // retry-after window so the request eventually goes through.
@@ -47,7 +54,6 @@ async function callGroqRaw(prompt: string, maxTokens: number): Promise<RawResult
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.7,
         max_tokens: maxTokens,
-        chat_template_kwargs: { enable_thinking: false },
       }),
     })
 
@@ -62,7 +68,7 @@ async function callGroqRaw(prompt: string, maxTokens: number): Promise<RawResult
     }
 
     const data = await res.json()
-    return { text: data?.choices?.[0]?.message?.content ?? '' }
+    return { text: stripThinking(data?.choices?.[0]?.message?.content ?? '') }
   } catch (e: any) {
     return { text: '', error: e?.message ?? 'Network error' }
   }
@@ -100,7 +106,6 @@ async function callGroqVisionRaw(prompt: string, imageDataUrl: string, maxTokens
         ],
         temperature: 0.7,
         max_tokens: maxTokens,
-        chat_template_kwargs: { enable_thinking: false },
       }),
     })
 
@@ -115,7 +120,7 @@ async function callGroqVisionRaw(prompt: string, imageDataUrl: string, maxTokens
     }
 
     const data = await res.json()
-    return { text: data?.choices?.[0]?.message?.content ?? '' }
+    return { text: stripThinking(data?.choices?.[0]?.message?.content ?? '') }
   } catch (e: any) {
     return { text: '', error: e?.message ?? 'Network error' }
   }
