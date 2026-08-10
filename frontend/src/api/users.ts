@@ -18,7 +18,8 @@ export async function getRoles(): Promise<Role[]> {
 }
 
 export async function createUser(data: {
-  email: string
+  username: string
+  email?: string
   password: string
   full_name: string
   role_id: string
@@ -28,7 +29,8 @@ export async function createUser(data: {
 }
 
 export async function updateUser(id: string, data: Partial<{
-  email: string
+  username: string
+  email?: string
   full_name: string
   role_id: string
   is_active: boolean

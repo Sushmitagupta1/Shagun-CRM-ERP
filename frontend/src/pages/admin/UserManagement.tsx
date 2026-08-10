@@ -8,7 +8,7 @@ import { toast } from 'sonner'
 import { Plus, Trash2, Pencil, Loader2, Search, X } from 'lucide-react'
 import type { User } from '@/types/auth'
 
-const EMPTY_FORM = { username: '', email: '', password: '', full_name: '', role_id: '' }
+const EMPTY_FORM = { username: '', password: '', full_name: '', role_id: '' }
 
 export default function UserManagement() {
   const queryClient = useQueryClient()
@@ -65,7 +65,6 @@ export default function UserManagement() {
     setEditing(user)
     setForm({
       username: '',
-      email: user.email,
       password: '',
       full_name: user.full_name,
       role_id: user.role.id,
@@ -76,15 +75,14 @@ export default function UserManagement() {
     if (editing) {
       const data: Partial<typeof EMPTY_FORM> = {
         username: form.username || undefined,
-        email: form.email,
         full_name: form.full_name,
         role_id: form.role_id,
         password: form.password || undefined,
       }
       updateMutation.mutate({ id: editing.id, data })
     } else {
-      if (!form.email || !form.password || !form.full_name || !form.role_id) {
-        toast.error('Email, Password, Name and Role are required')
+      if (!form.username || !form.password || !form.full_name || !form.role_id) {
+        toast.error('Username, Password, Name and Role are required')
         return
       }
       createMutation.mutate(form)
@@ -130,7 +128,7 @@ export default function UserManagement() {
               <X className="h-4 w-4" />
             </button>
           </div>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <input
               placeholder="Username"
               value={form.username}
@@ -141,12 +139,6 @@ export default function UserManagement() {
               placeholder="Full Name"
               value={form.full_name}
               onChange={(e) => setForm({ ...form, full_name: e.target.value })}
-              className="h-10 rounded-lg border border-gray-200 px-3 text-sm"
-            />
-            <input
-              placeholder="Email"
-              value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
               className="h-10 rounded-lg border border-gray-200 px-3 text-sm"
             />
             <input
@@ -191,9 +183,6 @@ export default function UserManagement() {
                 Name
               </th>
               <th className="px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
-                Email
-              </th>
-              <th className="px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
                 Role
               </th>
               <th className="px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
@@ -207,7 +196,7 @@ export default function UserManagement() {
           <tbody>
             {isLoading ? (
               <tr>
-                <td colSpan={5} className="px-5 py-8 text-center">
+                <td colSpan={4} className="px-5 py-8 text-center">
                   <Loader2 className="mx-auto h-6 w-6 animate-spin text-gold" />
                 </td>
               </tr>
@@ -220,7 +209,6 @@ export default function UserManagement() {
                   <td className="px-5 py-3.5 text-sm font-medium text-gray-900">
                     {user.full_name}
                   </td>
-                  <td className="px-5 py-3.5 text-sm text-gray-600">{user.email}</td>
                   <td className="px-5 py-3.5 text-sm text-gray-600">
                     {ROLE_LABELS[user.role?.name] || user.role?.name}
                   </td>
