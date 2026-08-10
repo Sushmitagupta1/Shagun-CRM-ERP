@@ -52,6 +52,9 @@ export default function SettingsPage() {
       try {
         const data = await getCompanySettings()
         setCompanyForm(data)
+        if (data.notifications) {
+          setNotifForm((prev) => ({ ...prev, ...data.notifications! }))
+        }
         setLogoSrc(data.logo_file_name ? `${LOGO_URL}?t=${Date.now()}` : '/shagun-logo.png')
       } catch {
         toast.error('Failed to load company settings')
@@ -70,8 +73,12 @@ export default function SettingsPage() {
         phone: companyForm.phone,
         gst: companyForm.gst,
         address: companyForm.address,
+        notifications: notifForm,
       })
       setCompanyForm(data)
+      if (data.notifications) {
+        setNotifForm((prev) => ({ ...prev, ...data.notifications! }))
+      }
       toast.success('Settings saved successfully')
     } catch {
       toast.error('Failed to save settings')

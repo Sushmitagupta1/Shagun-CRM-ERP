@@ -50,7 +50,11 @@ async def update_company_settings(
     row = await get_or_create(db)
     payload = data.model_dump(exclude_unset=True)
     for field, value in payload.items():
-        if value is not None and str(value).strip():
+        if value is None:
+            continue
+        if field == "notifications":
+            setattr(row, field, value)
+        elif str(value).strip():
             setattr(row, field, str(value).strip())
     await db.flush()
     await db.refresh(row)

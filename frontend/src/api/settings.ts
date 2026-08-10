@@ -9,6 +9,7 @@ export interface CompanySettings {
   address: string
   logo_file_name: string | null
   logo_path: string | null
+  notifications?: Record<string, boolean> | null
 }
 
 export interface CompanySettingsUpdate {
@@ -17,6 +18,7 @@ export interface CompanySettingsUpdate {
   phone?: string
   gst?: string
   address?: string
+  notifications?: Record<string, boolean>
 }
 
 export const LOGO_URL = `${client.defaults.baseURL}/settings/company/logo`

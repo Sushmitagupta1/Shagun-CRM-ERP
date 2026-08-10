@@ -10,6 +10,7 @@ class CompanySettingsResponse(BaseModel):
     address: str
     logo_file_name: str | None
     logo_path: str | None
+    notifications: dict | None = None
     class Config:
         from_attributes = True
 
@@ -20,3 +21,4 @@ class CompanySettingsUpdate(BaseModel):
     phone: str | None = None
     gst: str | None = None
     address: str | None = None
+    notifications: dict | None = None
