@@ -10,6 +10,7 @@ export interface CompanySettings {
   logo_file_name: string | null
   logo_path: string | null
   notifications?: Record<string, boolean> | null
+  session_timeout_minutes?: number | null
 }
 
 export interface CompanySettingsUpdate {
@@ -19,6 +20,7 @@ export interface CompanySettingsUpdate {
   gst?: string
   address?: string
   notifications?: Record<string, boolean>
+  session_timeout_minutes?: number
 }
 
 export const LOGO_URL = `${client.defaults.baseURL}/settings/company/logo`

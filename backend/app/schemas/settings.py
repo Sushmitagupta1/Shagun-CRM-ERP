@@ -11,6 +11,7 @@ class CompanySettingsResponse(BaseModel):
     logo_file_name: str | None
     logo_path: str | None
     notifications: dict | None = None
+    session_timeout_minutes: int | None = None
     class Config:
         from_attributes = True
 
@@ -22,3 +23,4 @@ class CompanySettingsUpdate(BaseModel):
     gst: str | None = None
     address: str | None = None
     notifications: dict | None = None
+    session_timeout_minutes: int | None = None

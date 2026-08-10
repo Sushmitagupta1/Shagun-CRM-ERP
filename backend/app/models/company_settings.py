@@ -1,4 +1,4 @@
-from sqlalchemy import JSON, String
+from sqlalchemy import JSON, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
 from app.models.base import TimestampMixin
@@ -16,3 +16,4 @@ class CompanySettings(TimestampMixin, Base):
     logo_file_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     logo_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
     notifications: Mapped[dict | None] = mapped_column(JSON, nullable=True, default=dict)
+    session_timeout_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True, default=15)

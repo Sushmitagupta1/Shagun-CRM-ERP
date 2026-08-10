@@ -54,6 +54,8 @@ async def update_company_settings(
             continue
         if field == "notifications":
             setattr(row, field, value)
+        elif field == "session_timeout_minutes":
+            setattr(row, field, int(value))
         elif str(value).strip():
             setattr(row, field, str(value).strip())
     await db.flush()

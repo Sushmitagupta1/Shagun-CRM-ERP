@@ -46,6 +46,7 @@ export default function SettingsPage() {
     eventAlerts: true,
     paymentAlerts: true,
   })
+  const [sessionTimeout, setSessionTimeout] = useState(15)
 
   useEffect(() => {
     ;(async () => {
@@ -54,6 +55,9 @@ export default function SettingsPage() {
         setCompanyForm(data)
         if (data.notifications) {
           setNotifForm((prev) => ({ ...prev, ...data.notifications! }))
+        }
+        if (data.session_timeout_minutes) {
+          setSessionTimeout(data.session_timeout_minutes)
         }
         setLogoSrc(data.logo_file_name ? `${LOGO_URL}?t=${Date.now()}` : '/shagun-logo.png')
       } catch {
@@ -74,10 +78,14 @@ export default function SettingsPage() {
         gst: companyForm.gst,
         address: companyForm.address,
         notifications: notifForm,
+        session_timeout_minutes: sessionTimeout,
       })
       setCompanyForm(data)
       if (data.notifications) {
         setNotifForm((prev) => ({ ...prev, ...data.notifications! }))
+      }
+      if (data.session_timeout_minutes) {
+        setSessionTimeout(data.session_timeout_minutes)
       }
       toast.success('Settings saved successfully')
     } catch {
@@ -306,10 +314,14 @@ export default function SettingsPage() {
                     <p className="text-sm font-medium text-slate-700">Session Timeout</p>
                     <p className="text-xs text-slate-400">Auto-logout after inactivity</p>
                   </div>
-                  <select className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm">
-                    <option>15 minutes</option>
-                    <option>30 minutes</option>
-                    <option>1 hour</option>
+                  <select
+                    value={sessionTimeout}
+                    onChange={(e) => setSessionTimeout(Number(e.target.value))}
+                    className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm"
+                  >
+                    <option value={15}>15 minutes</option>
+                    <option value={30}>30 minutes</option>
+                    <option value={60}>1 hour</option>
                   </select>
                 </div>
                 <div className="flex items-center justify-between rounded-lg border border-slate-100 p-3">
