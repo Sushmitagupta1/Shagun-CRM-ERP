@@ -64,7 +64,7 @@ export default function UserManagement() {
   const startEdit = (user: User) => {
     setEditing(user)
     setForm({
-      username: '',
+      username: user.username ?? user.full_name,
       password: '',
       full_name: user.full_name,
       role_id: user.role.id,
