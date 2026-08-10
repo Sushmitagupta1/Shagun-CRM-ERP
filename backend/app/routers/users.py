@@ -61,10 +61,13 @@ async def get_user(user_id: uuid.UUID, db: AsyncSession = Depends(get_db), curre
 
 @router.post("", response_model=UserResponse, status_code=201)
 async def create_user(data: UserCreate, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_role("admin"))):
-    existing = await db.execute(select(User).where(User.email == data.email))
-    if existing.scalar_one_or_none():
-        raise HTTPException(status_code=400, detail="Email already registered")
-    username = (data.username or data.email.split("@")[0]).strip()
+    if data.email:
+        existing = await db.execute(select(User).where(User.email == data.email))
+        if existing.scalar_one_or_none():
+            raise HTTPException(status_code=400, detail="Email already registered")
+    username = (data.username or (data.email.split("@")[0] if data.email else "")).strip()
+    if not username:
+        raise HTTPException(status_code=400, detail="Username is required when no email is set")
     existing_username = await db.execute(select(User).where(User.username == username))
     if existing_username.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Username already taken")
