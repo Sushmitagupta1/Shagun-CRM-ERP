@@ -57,7 +57,7 @@ const sidebarContent = (
       className="flex w-full justify-center"
     >
       <div className="flex w-full items-center justify-center bg-[#FDF6E9] px-3 py-3 shadow-[0_2px_10px_rgba(0,0,0,0.5)]">
-        <img src="/sidebar-logo.png" alt="Shagun" className="h-auto w-full max-w-[200px] object-contain" />
+        <img src="/sidebar-logo.png?v=2" alt="Shagun" className="h-auto w-full max-w-[200px] object-contain" />
       </div>
     </motion.div>
 
