@@ -56,8 +56,8 @@ const sidebarContent = (
       transition={{ duration: 0.5, ease: 'easeOut' }}
       className="flex w-full justify-center"
     >
-      <div className="flex items-center bg-[#FDF6E9] shadow-[0_2px_10px_rgba(0,0,0,0.5)]">
-        <img src="/sidebar-logo.png" alt="Shagun" className="h-auto w-auto max-w-[220px] drop-shadow-[0_2px_6px_rgba(0,0,0,0.35)]" />
+      <div className="flex w-full items-center justify-center bg-[#FDF6E9] px-3 py-3 shadow-[0_2px_10px_rgba(0,0,0,0.5)]">
+        <img src="/sidebar-logo.png" alt="Shagun" className="h-auto w-full max-w-[200px] object-contain" />
       </div>
     </motion.div>
 
