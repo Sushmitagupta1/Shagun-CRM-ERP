@@ -64,7 +64,7 @@ export default function MenuPlannerDashboard() {
   })
 
   return (
-    <div className="flex min-h-[calc(100vh-112px)] flex-col space-y-5">
+    <div className="space-y-5">
       <div className="flex items-center justify-between">
         <PageHeader title={`Hi, ${firstName}`} subtitle="Create menus, estimate costs, and manage AI-powered suggestions" />
       </div>
@@ -121,9 +121,10 @@ export default function MenuPlannerDashboard() {
       </AnimatePresence>
 
       {/* Bottom Row — Menus to Prepare */}
-      <div className="flex flex-1 flex-col gap-4">
+      <div>
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.4 }}
-          className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-gray-100 bg-white shadow-md">
+          className="flex flex-col overflow-hidden rounded-xl border border-gray-100 bg-white shadow-md"
+          style={{ height: 320 }}>
           <div className="flex shrink-0 items-center justify-between border-b border-gray-100 px-5 py-3">
             <h3 className="text-sm font-bold text-gray-900">Menus to Prepare</h3>
             <span className="text-[10px] text-gray-400">{assignedInquiries.length} pending</span>
