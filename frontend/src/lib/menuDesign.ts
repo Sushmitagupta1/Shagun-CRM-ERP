@@ -33,6 +33,49 @@ function stripHtml(html: string): string {
   return html.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
 }
 
+function countLis(ul: Element): number {
+  return Array.from(ul.children).filter((el) => el.tagName === 'LI').length
+}
+
+// The main dish list is the <ul> with the most <li> children (pages may
+// contain small decorative lists too).
+function mainUl(doc: Document): HTMLUListElement | null {
+  const uls = Array.from(doc.body.querySelectorAll('ul'))
+  if (uls.length === 0) return null
+  return uls.sort((a, b) => countLis(b) - countLis(a))[0] as HTMLUListElement
+}
+
+// Item text excludes leading decorative empty elements (e.g. veg-dot spans)
+// so only the actual dish name is edited.
+function liDisplayText(li: HTMLElement): string {
+  const parts: string[] = []
+  for (const node of Array.from(li.childNodes)) {
+    const txt = node.textContent || ''
+    if (node.nodeType === Node.ELEMENT_NODE && txt.trim() === '') continue
+    if (txt.trim()) parts.push(txt.trim())
+  }
+  return parts.join(' ').replace(/\s+/g, ' ').trim()
+}
+
+// Replaces only the dish text inside an <li>, keeping leading decorative
+// elements (veg dots, markers) so the rendered look stays intact.
+function editLiText(li: HTMLElement, text: string) {
+  let prefixHtml = ''
+  for (const node of Array.from(li.childNodes)) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      if ((node.textContent || '').trim() === '') continue
+      break
+    }
+    if (node.nodeType === Node.ELEMENT_NODE) {
+      const el = node as HTMLElement
+      if ((el.textContent || '').trim() !== '') break
+      prefixHtml += el.outerHTML
+    }
+  }
+  const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  li.innerHTML = prefixHtml + escaped
+}
+
 // Pulls out the section heading and item texts of each page so they can be
 // edited in a form without touching the design's styling.
 export function extractMenuEditable(design: MenuDesign): MenuEditablePage[] {
@@ -41,11 +84,12 @@ export function extractMenuEditable(design: MenuDesign): MenuEditablePage[] {
     const headings = Array.from(doc.body.querySelectorAll('h1, h2'))
     const headingEl = headings[headings.length - 1] || null
     const heading = headingEl ? stripHtml(headingEl.innerHTML) : `Page ${pi + 1}`
-    const lis = Array.from(doc.body.querySelectorAll('ul li'))
+    const ul = mainUl(doc)
+    const lis = ul ? Array.from(ul.children).filter((el) => el.tagName === 'LI') as HTMLElement[] : []
     return {
       pageIndex: pi,
       heading,
-      items: lis.map((li, i) => ({ key: `p${pi}_i${i}`, text: li.textContent?.trim() || '' })),
+      items: lis.map((li, i) => ({ key: `p${pi}_i${i}`, text: liDisplayText(li) })),
     }
   })
 }
@@ -72,18 +116,18 @@ export function applyMenuEdits(design: MenuDesign, pages: MenuEditablePage[]): M
     if (headingEl && edits.heading.trim()) headingEl.textContent = edits.heading.trim()
 
     const texts = edits.items.map((it) => it.text).filter((t) => t.trim() !== '')
-    const ul = doc.body.querySelector('ul')
+    const ul = mainUl(doc)
     if (ul) {
-      const lis = Array.from(ul.children).filter((el) => el.tagName === 'LI')
+      const lis = Array.from(ul.children).filter((el) => el.tagName === 'LI') as HTMLElement[]
       lis.forEach((li, i) => {
-        if (i < texts.length) (li as HTMLElement).textContent = texts[i]
-        else (li as HTMLElement).remove()
+        if (i < texts.length) editLiText(li, texts[i])
+        else li.remove()
       })
       if (texts.length > lis.length) {
-        const template = (lis[lis.length - 1] || doc.createElement('li')) as HTMLElement
+        const template = lis[lis.length - 1] || doc.createElement('li')
         for (let i = lis.length; i < texts.length; i++) {
           const clone = template.cloneNode(true) as HTMLElement
-          clone.textContent = texts[i]
+          editLiText(clone, texts[i])
           ul.appendChild(clone)
         }
       }

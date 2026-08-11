@@ -1,6 +1,8 @@
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY as string
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions'
-const GEMINI_MODEL = 'gemini-3.5-flash'
+// flash-lite has no hidden "thinking" tokens, so long HTML outputs are not
+// truncated by the token budget (gemini-3.5-flash truncates on this endpoint).
+const GEMINI_MODEL = 'gemini-3.1-flash-lite'
 
 export interface AIResponse {
   text: string
@@ -225,6 +227,22 @@ Be specific, data-driven, and actionable. Format with clear headings.`
 }
 
 // ── AI Menu Designer ──
+const DESIGN_THEMES = [
+  'Elegant classic: deep maroon and gold, refined serif headings ("Playfair Display", Georgia), an ornate double-line border frame, traditional celebration feel.',
+  'Modern minimal: clean white card with one strong accent color (deep teal or navy), a thin geometric frame, contemporary sans-serif headings ("Montserrat", "Segoe UI"), generous whitespace.',
+  'Romantic flourish: rose gold and blush tones, a decorative script title ("Great Vibes", "Brush Script MT"), a thin floral/swirl border, soft serif body text.',
+]
+
+// Gemini does not reliably output multiple designs in one response, so each
+// option is generated in its own call (one distinct theme per call) and the
+// results are joined with the ---DESIGN--- separator the parser expects.
+function cleanSingleDesign(text: string): string {
+  let t = text.replace(/---DESIGN---/g, '').trim()
+  const lines = t.split('\n')
+  while (lines.length > 0 && !lines[0].trim().startsWith('<')) lines.shift()
+  return lines.join('\n').trim()
+}
+
 export async function generateMenuDesign(params: {
   menuText: string
   eventType: string
@@ -235,6 +253,31 @@ export async function generateMenuDesign(params: {
   previousDesign?: string | null
 }): Promise<AIResponse> {
   const designCount = params.count || 3
+  const outputs: string[] = []
+  for (let i = 0; i < designCount; i++) {
+    const themeNote = designCount > 1
+      ? `- This is option ${i + 1} of ${designCount}. For THIS option only, apply this theme: ${DESIGN_THEMES[i % DESIGN_THEMES.length]}`
+      : ''
+    const prompt = buildMenuDesignPrompt(params, themeNote)
+    const res = params.templateImage
+      ? await callGeminiVision(prompt, params.templateImage, 8000)
+      : await callGemini(prompt, 8000)
+    if (res.error) return res
+    const cleaned = cleanSingleDesign(res.text)
+    if (!cleaned) return { text: '', error: 'AI returned an empty response. Try again.' }
+    outputs.push(cleaned)
+  }
+  return { text: outputs.join('\n\n---DESIGN---\n\n') }
+}
+
+function buildMenuDesignPrompt(params: {
+  menuText: string
+  eventType: string
+  clientName: string
+  templateInfo: string
+  templateImage?: string | null
+  previousDesign?: string | null
+}, themeNote: string): string {
   const templateImageNote = params.templateImage
     ? `\n- I am attaching the actual template picture. Study the attached template image carefully and design the menu to match its border, frame, colors, and style. Place the menu content in the middle of the border shown in the picture, keeping comfortable margin from the border edges. Use fonts and colors that complement the template picture.`
     : ''
@@ -244,7 +287,7 @@ export async function generateMenuDesign(params: {
   const backgroundGuidance = params.templateInfo
     ? `- Set the template background via CSS on the wrapper div, e.g. <div style="display:flex;align-items:center;justify-content:center;background-image:url('TEMPLATE_URL');background-size:100% 100%;background-position:center;background-repeat:no-repeat;min-height:100vh;padding:40px"> ... </div>. Replace TEMPLATE_URL literally with the given template URL string. The wrapper MUST be display:flex with align-items:center and justify-content:center so the content sits in the MIDDLE of the border.`
     : `- Use a clean white or very light background on the wrapper div (no background image), with the same flex centering so the content sits in the middle of the page.`
-  const prompt = `You are an expert menu card designer for Shagun Caterers (pure veg only).
+  return `You are an expert menu card designer for Shagun Caterers (pure veg only).
 Design a beautiful printable menu card using the user's menu list and section labels.
 
 Client: ${params.clientName}
@@ -255,23 +298,20 @@ USER'S MENU LIST (section labels are headings):
 ${params.menuText}
 
 INSTRUCTIONS:
-- Return exactly ${designCount} DIFFERENT design option${designCount !== 1 ? 's' : ''} separated by "---DESIGN---".
-- Inside each design option, separate pages with "---PAGE---". The "---PAGE---" separator must appear BETWEEN complete pages, never inside a page's markup.
+- Return exactly 1 design option. Do NOT output "---DESIGN---", "Design Option N:", "Page N:" or any other separator or label text — output only the page markup.
+- Inside the design, separate pages with "---PAGE---". The "---PAGE---" separator must appear BETWEEN complete pages, never inside a page's markup.
 - Each page is a COMPLETE, SELF-CONTAINED HTML fragment: a <style> block (scoped inline styles) followed by the page markup wrapped in a single wrapper <div> that is opened AND closed on that same page. Do NOT share one wrapper <div> across multiple pages. Do NOT include <html>, <head>, doctype, <script>, external images, or absolute URLs.
-- Do NOT add text outside the page markup (no "DESIGN 1:", no "PAGE 1:" headings).
 - Each labeled section of the user's menu becomes its OWN page. Example: STARTERS page, MAIN COURSE page, DESSERTS page.
 - Use the user's exact section label text as the page heading.
+- Use <h1> for the design/menu title, the section label as <h2>, and a <ul>/<li> per dish.
+${themeNote || `- Give the design a refined theme appropriate to the event (wedding: gold/maroon elegant serif; engagement: rose/gold; corporate: navy/steel clean sans-serif).`}
 ${backgroundGuidance}
 - CENTER THE MENU: the inner content card must be positioned in the middle of the page/border. On the wrapper div use display:flex, align-items:center, justify-content:center, min-height:100vh. Inside it, wrap the actual menu in a single centered card (text-align:center) with padding, and put the card content vertically and horizontally centered. Nothing should touch the edges of the border; keep comfortable margins all around.
 - USE GOOD FONTS: pick elegant, refined font stacks that render everywhere (no external font files). Headings: 'Playfair Display', Georgia, serif or 'Great Vibes', 'Brush Script MT', cursive for decorative titles. Body: 'Lato', 'Montserrat', 'Segoe UI', Arial, sans-serif. Do NOT rely on fonts that need downloading.
 - SMALL REFINED FONTS: keep sizes small and elegant. Design title <h1> 20-24px, section headings <h2> 12-14px, dish names 11-12px, descriptions 9-10px, spacing compact so the whole card fits nicely inside the border with the middle placement.
-- Give each option a distinct theme appropriate to the event (wedding: gold/maroon elegant serif; engagement: rose/gold; corporate: navy/steel clean sans-serif). Vary fonts, colors, heading treatments, and item bullet styles between the 3 options.
-- Use <h1> for the design/menu title, the section label as <h2>, and a <ul>/<li> per dish.
+- Use <ul>/<li> with one <li> per dish. You MAY add small decorative empty spans inside an <li> (e.g. a veg dot), but keep the dish name as the last visible text.
 - Keep all CSS inline in a <style> tag that only targets the page. Use CSS classes, not element selectors that could leak.
 - Content must fit A4 portrait (compact spacing, small refined font sizes).
 ${templateImageNote}
 ${regenerationNote}`
-  return params.templateImage
-    ? callGeminiVision(prompt, params.templateImage, 4500)
-    : callGemini(prompt, 4500)
 }
