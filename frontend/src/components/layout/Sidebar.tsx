@@ -57,7 +57,7 @@ const sidebarContent = (
       transition={{ duration: 0.5, ease: 'easeOut' }}
       className="flex h-16 items-center bg-[#FDF6E9] px-5"
     >
-      <CompanyLogo className="h-auto w-auto" />    </motion.div>
+      <CompanyLogo className="h-12 w-auto" />    </motion.div>
 
     {/* Nav Items */}
     <nav className="mt-4 flex-1 space-y-1 px-3 overflow-y-auto">
