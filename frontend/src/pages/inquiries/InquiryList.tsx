@@ -235,46 +235,46 @@ export default function InquiryList() {
               <tr className="border-b border-gray-200 bg-gray-50">
                 {isMenuPlanner ? (
                   <>
-                    <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">Function Date</th>
-                    <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">Client</th>
-                    <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">Number</th>
-                    <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">Event</th>
-                    <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">Pax</th>
-                    <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">Venue</th>
-                    <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">Inquiry Date</th>
-                    <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">Follow-up Date</th>
-                    <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">Actions</th>
+                    <th className="bg-gray-50 px-2.5 py-2.5 whitespace-nowrap text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">Function Date</th>
+                    <th className="bg-gray-50 px-2.5 py-2.5 whitespace-nowrap text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">Client</th>
+                    <th className="bg-gray-50 px-2.5 py-2.5 whitespace-nowrap text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">Number</th>
+                    <th className="bg-gray-50 px-2.5 py-2.5 whitespace-nowrap text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">Event</th>
+                    <th className="bg-gray-50 px-2.5 py-2.5 whitespace-nowrap text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">Pax</th>
+                    <th className="bg-gray-50 px-2.5 py-2.5 whitespace-nowrap text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">Venue</th>
+                    <th className="bg-gray-50 px-2.5 py-2.5 whitespace-nowrap text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">Inquiry Date</th>
+                    <th className="bg-gray-50 px-2.5 py-2.5 whitespace-nowrap text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">Follow-up Date</th>
+                    <th className="bg-gray-50 px-2.5 py-2.5 whitespace-nowrap text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">Actions</th>
                   </>
                 ) : (
                   <>
-                    <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                    <th className="bg-gray-50 px-2.5 py-2.5 whitespace-nowrap text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
                       Event Date
                     </th>
-                    <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                    <th className="bg-gray-50 px-2.5 py-2.5 whitespace-nowrap text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
                       Client
                     </th>
-                    <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                    <th className="bg-gray-50 px-2.5 py-2.5 whitespace-nowrap text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
                       Phone
                     </th>
-                    <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                    <th className="bg-gray-50 px-2.5 py-2.5 whitespace-nowrap text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
                       Event
                     </th>
-                    <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                    <th className="bg-gray-50 px-2.5 py-2.5 whitespace-nowrap text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
                       Pax
                     </th>
-                    <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                    <th className="bg-gray-50 px-2.5 py-2.5 whitespace-nowrap text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
                       Venue
                     </th>
-                    <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                    <th className="bg-gray-50 px-2.5 py-2.5 whitespace-nowrap text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
                       Inquiry Date
                     </th>
-                    <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                    <th className="bg-gray-50 px-2.5 py-2.5 whitespace-nowrap text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
                       Follow-up Date
                     </th>
-                    <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                    <th className="bg-gray-50 px-2.5 py-2.5 whitespace-nowrap text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
                       Status
                     </th>
-                    <th className="bg-gray-50 px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                    <th className="bg-gray-50 px-2.5 py-2.5 whitespace-nowrap text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
                       Actions
                     </th>
                   </>
@@ -302,31 +302,31 @@ export default function InquiryList() {
                   >
                     {isMenuPlanner ? (
                       <>
-                        <td className="px-5 py-3.5 text-sm text-gray-600">
+                        <td className="px-2.5 py-2.5 text-sm text-gray-600">
                           {inquiry.event_date ?? '—'}
                         </td>
-                        <td className="px-5 py-3.5 text-sm font-medium text-gray-900">
+                        <td className="px-2.5 py-2.5 text-sm font-medium text-gray-900">
                           {inquiry.client_name}
                         </td>
-                        <td className="px-5 py-3.5 text-sm text-gray-600">
+                        <td className="px-2.5 py-2.5 text-sm text-gray-600">
                           {inquiry.client_phone}
                         </td>
-                        <td className="px-5 py-3.5 text-sm text-gray-600">
+                        <td className="px-2.5 py-2.5 text-sm text-gray-600">
                           {inquiry.event_type}
                         </td>
-                        <td className="px-5 py-3.5 text-sm text-gray-600">
+                        <td className="px-2.5 py-2.5 text-sm text-gray-600">
                           {inquiry.pax ?? '—'}
                         </td>
-                        <td className="px-5 py-3.5 text-sm text-gray-600">
+                        <td className="px-2.5 py-2.5 text-sm text-gray-600">
                           {inquiry.venue ?? '—'}
                         </td>
-                        <td className="px-5 py-3.5 text-sm text-gray-600">
+                        <td className="px-2.5 py-2.5 text-sm text-gray-600">
                           {inquiry.inquiry_date ?? '—'}
                         </td>
-                        <td className="px-5 py-3.5 text-sm text-gray-600">
+                        <td className="px-2.5 py-2.5 text-sm text-gray-600">
                           {inquiry.next_follow_up ?? '—'}
                         </td>
-                        <td className="px-5 py-3.5">
+                        <td className="px-2.5 py-2.5">
                           <div className="flex items-center gap-1.5">
                             <button onClick={() => navigate(`/inquiries/${inquiry.id}`)}
                               className="flex h-7 items-center gap-1 rounded-lg border border-gray-200 px-2 text-[10px] font-medium text-gray-600 hover:bg-gray-50">
@@ -337,31 +337,31 @@ export default function InquiryList() {
                       </>
                     ) : (
                       <>
-                    <td className="px-5 py-3.5 text-sm text-gray-600">
+                    <td className="px-2.5 py-2.5 text-sm text-gray-600">
                       {inquiry.event_date ?? '—'}
                     </td>
-                    <td className="px-5 py-3.5 text-sm font-medium text-gray-900">
+                    <td className="px-2.5 py-2.5 text-sm font-medium text-gray-900">
                       {inquiry.client_name}
                     </td>
-                    <td className="px-5 py-3.5 text-sm text-gray-600">
+                    <td className="px-2.5 py-2.5 text-sm text-gray-600">
                       {inquiry.client_phone}
                     </td>
-                    <td className="px-5 py-3.5 text-sm text-gray-600">
+                    <td className="px-2.5 py-2.5 text-sm text-gray-600">
                       {inquiry.event_type}
                     </td>
-                    <td className="px-5 py-3.5 text-sm text-gray-600">
+                    <td className="px-2.5 py-2.5 text-sm text-gray-600">
                       {inquiry.pax ?? '—'}
                     </td>
-                    <td className="px-5 py-3.5 text-sm text-gray-600">
+                    <td className="px-2.5 py-2.5 text-sm text-gray-600">
                       {inquiry.venue ?? '—'}
                     </td>
-                    <td className="px-5 py-3.5 text-sm text-gray-600">
+                    <td className="px-2.5 py-2.5 text-sm text-gray-600">
                       {inquiry.inquiry_date ?? '—'}
                     </td>
-                    <td className="px-5 py-3.5 text-sm text-gray-600">
+                    <td className="px-2.5 py-2.5 text-sm text-gray-600">
                       {inquiry.next_follow_up ?? '—'}
                     </td>
-                    <td className="px-5 py-3.5">
+                    <td className="px-2.5 py-2.5">
                       <StatusPill
                         label={
                           INQUIRY_STATUSES[inquiry.status as keyof typeof INQUIRY_STATUSES]
@@ -378,7 +378,7 @@ export default function InquiryList() {
                         </span>
                       )}
                     </td>
-                    <td className="px-5 py-3.5">
+                    <td className="px-2.5 py-2.5">
                       <div className="flex items-center gap-1.5">
                         <button onClick={() => navigate(`/inquiries/${inquiry.id}`)}
                           className="flex h-7 items-center gap-1 rounded-lg border border-gray-200 px-2 text-[10px] font-medium text-gray-600 hover:bg-gray-50">
