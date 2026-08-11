@@ -55,7 +55,7 @@ const sidebarContent = (
       initial={{ opacity: 0, x: -20 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.5, ease: 'easeOut' }}
-      className="flex h-16 items-center bg-[#FDF6E9] px-5"
+      className="flex h-16 items-center bg-[#F5E7CC] px-5 shadow-[0_2px_10px_rgba(0,0,0,0.5)]"
     >
       <CompanyLogo className="h-14 w-auto drop-shadow-[0_2px_6px_rgba(0,0,0,0.35)]" />    </motion.div>
 
