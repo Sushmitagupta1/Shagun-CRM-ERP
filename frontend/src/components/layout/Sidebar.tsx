@@ -54,11 +54,9 @@ const sidebarContent = (
       initial={{ opacity: 0, x: -20 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.5, ease: 'easeOut' }}
-      className="flex w-full justify-center"
+      className="flex h-16 items-center bg-[#FDF6E9] px-5 shadow-[0_2px_10px_rgba(0,0,0,0.5)]"
     >
-      <div className="flex items-center bg-[#F5E7CC] shadow-[0_2px_10px_rgba(0,0,0,0.5)]">
-        <img src="/sidebar-logo.png" alt="Shagun" className="h-auto w-auto max-h-[168px] max-w-[200px] drop-shadow-[0_2px_6px_rgba(0,0,0,0.35)]" />
-      </div>
+      <img src="/sidebar-logo.png" alt="Shagun" className="h-12 w-auto drop-shadow-[0_2px_6px_rgba(0,0,0,0.35)]" />
     </motion.div>
 
     {/* Nav Items */}
