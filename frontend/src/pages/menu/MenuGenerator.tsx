@@ -3,13 +3,13 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getInquiry } from '@/api/inquiries'
 import { generateMenuDesign, loadImageAsDataUrl } from '@/lib/groq'
-import { parseMenuDesigns, downloadMenuDesignPdf, type MenuDesign } from '@/lib/menuDesign'
+import { parseMenuDesigns, downloadMenuDesignPdf, extractMenuEditable, applyMenuEdits, type MenuDesign, type MenuEditablePage } from '@/lib/menuDesign'
 import { getTemplateCategories, getTemplateUrl, getTemplateThumbUrl } from '@/api/templates'
 import { getMenuVersions, createMenuVersion } from '@/api/inquiries'
 import PageHeader from '@/components/common/PageHeader'
 import { toast } from 'sonner'
 import { motion } from 'framer-motion'
-import { ArrowLeft, Sparkles, RotateCcw, Loader2, Phone, Calendar, DollarSign, MessageSquare, FileText, User, Users, Layout, Palette, FileDown, Save, History, Eye, ChevronDown, ChevronUp, X } from 'lucide-react'
+import { ArrowLeft, Sparkles, RotateCcw, Loader2, Phone, Calendar, DollarSign, MessageSquare, FileText, User, Users, Layout, Palette, FileDown, Save, History, Eye, ChevronDown, ChevronUp, X, Pencil, Plus, Trash2 } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
 import { INQUIRY_STATUSES, PAYMENT_STATUSES } from '@/lib/constants'
 
@@ -26,6 +26,9 @@ export default function MenuGenerator() {
   const [savingVersion, setSavingVersion] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
   const [viewingVersion, setViewingVersion] = useState<number | null>(null)
+  const [regeneratingIdx, setRegeneratingIdx] = useState<number | null>(null)
+  const [editingDesignId, setEditingDesignId] = useState<string | null>(null)
+  const [editDraft, setEditDraft] = useState<MenuEditablePage[]>([])
 
   // Template selection
   const [selectedCat, setSelectedCat] = useState('')
@@ -110,8 +113,76 @@ export default function MenuGenerator() {
     }
   }
 
-  const handleRegenerateDesign = (idx: number) => {
-    setDesigns((prev) => prev.filter((_, i) => i !== idx))
+  const handleRegenerateDesign = async (idx: number) => {
+    if (regeneratingIdx !== null) return
+    const current = designs[idx]
+    if (!current) return
+    setRegeneratingIdx(idx)
+    try {
+      let templateImage: string | null = null
+      if (selectedCat && selectedFile) {
+        templateImage = await loadImageAsDataUrl(getTemplateUrl(selectedCat, selectedFile))
+      }
+      const res = await generateMenuDesign({
+        menuText: designMenuText,
+        eventType: inquiry?.event_type || 'General',
+        clientName: inquiry?.client_name || 'Client',
+        templateInfo: selectedCat && selectedFile ? getTemplateUrl(selectedCat, selectedFile) : '',
+        templateImage,
+        count: 1,
+        previousDesign: current.raw,
+      })
+      if (res.error) {
+        toast.error('AI error: ' + res.error)
+        return
+      }
+      const parsed = parseMenuDesigns(res.text)
+      if (parsed.error || parsed.designs.length === 0) {
+        toast.error(parsed.error || 'AI returned no design. Try again.')
+        return
+      }
+      const replacement = { ...parsed.designs[0], id: current.id }
+      setDesigns((prev) => prev.map((d, i) => (i === idx ? replacement : d)))
+      toast.success('Design regenerated')
+    } finally {
+      setRegeneratingIdx(null)
+    }
+  }
+
+  const handleOpenEdit = (design: MenuDesign) => {
+    setEditDraft(extractMenuEditable(design))
+    setEditingDesignId(design.id)
+  }
+
+  const handleEditHeading = (pageIndex: number, heading: string) => {
+    setEditDraft((prev) => prev.map((p) => (p.pageIndex === pageIndex ? { ...p, heading } : p)))
+  }
+
+  const handleEditItem = (pageIndex: number, itemKey: string, text: string) => {
+    setEditDraft((prev) => prev.map((p) => (p.pageIndex === pageIndex
+      ? { ...p, items: p.items.map((it) => (it.key === itemKey ? { ...it, text } : it)) }
+      : p)))
+  }
+
+  const handleAddItem = (pageIndex: number) => {
+    setEditDraft((prev) => prev.map((p) => (p.pageIndex === pageIndex
+      ? { ...p, items: [...p.items, { key: `${p.pageIndex}_new_${Date.now()}`, text: '' }] }
+      : p)))
+  }
+
+  const handleRemoveItem = (pageIndex: number, itemKey: string) => {
+    setEditDraft((prev) => prev.map((p) => (p.pageIndex === pageIndex
+      ? { ...p, items: p.items.filter((it) => it.key !== itemKey) }
+      : p)))
+  }
+
+  const handleSaveEdit = () => {
+    const design = designs.find((d) => d.id === editingDesignId)
+    if (!design) return
+    setDesigns((prev) => prev.map((d) => (d.id === editingDesignId ? applyMenuEdits(d, editDraft) : d)))
+    setEditingDesignId(null)
+    setEditDraft([])
+    toast.success('Design updated. Click "Save Version" to keep it.')
   }
 
   const handleLoadVersion = (version: typeof menuVersions[number]) => {
@@ -356,15 +427,21 @@ export default function MenuGenerator() {
                       dangerouslySetInnerHTML={{ __html: page.html }} />
                   ))}
                 </div>
-                <div className="grid grid-cols-2 gap-2 p-3">
-                  <button onClick={() => handleDownloadDesignPdf(design)} disabled={downloadingPdf === design.id}
-                    className="flex h-8 items-center justify-center gap-1.5 rounded-lg bg-maroon text-[11px] font-medium text-white transition-colors hover:bg-maroon-dark disabled:opacity-50">
-                    {downloadingPdf === design.id ? <Loader2 size={12} className="animate-spin" /> : <FileDown size={12} />} Download PDF
+                <div className="p-3">
+                  <button onClick={() => handleOpenEdit(design)}
+                    className="mb-2 flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-gold/40 bg-gold/10 text-[11px] font-medium text-amber-700 transition-colors hover:bg-gold/20">
+                    <Pencil size={12} /> Edit Items
                   </button>
-                  <button onClick={() => handleRegenerateDesign(idx)}
-                    className="flex h-8 items-center justify-center gap-1.5 rounded-lg border border-gray-200 text-[11px] font-medium text-gray-600 transition-colors hover:bg-gray-50">
-                    <RotateCcw size={12} /> Regenerate
-                  </button>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button onClick={() => handleDownloadDesignPdf(design)} disabled={downloadingPdf === design.id}
+                      className="flex h-8 items-center justify-center gap-1.5 rounded-lg bg-maroon text-[11px] font-medium text-white transition-colors hover:bg-maroon-dark disabled:opacity-50">
+                      {downloadingPdf === design.id ? <Loader2 size={12} className="animate-spin" /> : <FileDown size={12} />} Download PDF
+                    </button>
+                    <button onClick={() => handleRegenerateDesign(idx)} disabled={regeneratingIdx !== null}
+                      className="flex h-8 items-center justify-center gap-1.5 rounded-lg border border-gray-200 text-[11px] font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50">
+                      {regeneratingIdx === idx ? <Loader2 size={12} className="animate-spin" /> : <RotateCcw size={12} />} Regenerate
+                    </button>
+                  </div>
                 </div>
               </motion.div>
             ))}
@@ -411,6 +488,68 @@ export default function MenuGenerator() {
                 ) : (
                   <p className="py-8 text-center text-sm text-gray-400">This version has no designs saved.</p>
                 )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )
+      })()}
+
+      {/* Edit Design Modal */}
+      {editingDesignId !== null && (() => {
+        const design = designs.find((d) => d.id === editingDesignId)
+        if (!design) return null
+        return (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+            className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 p-4 backdrop-blur-sm"
+            onClick={() => { setEditingDesignId(null); setEditDraft([]) }}>
+            <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }}
+              className="mt-8 w-full max-w-3xl overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl"
+              onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900">Edit Menu Items</h3>
+                  <p className="text-[11px] text-gray-400">{design.name} — update headings and items, then save. Click "Save Version" afterwards to keep the change.</p>
+                </div>
+                <button onClick={() => { setEditingDesignId(null); setEditDraft([]) }}
+                  className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+                  <X size={16} />
+                </button>
+              </div>
+              <div className="max-h-[70vh] space-y-4 overflow-y-auto bg-gray-50 p-5">
+                {editDraft.map((page) => (
+                  <div key={page.pageIndex} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+                    <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-gray-400">Section Heading</label>
+                    <input value={page.heading} onChange={(e) => handleEditHeading(page.pageIndex, e.target.value)}
+                      className="mb-3 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-gold/30" />
+                    <div className="space-y-2">
+                      {page.items.map((item) => (
+                        <div key={item.key} className="flex items-center gap-2">
+                          <input value={item.text} onChange={(e) => handleEditItem(page.pageIndex, item.key, e.target.value)}
+                            placeholder="Dish name"
+                            className="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-gold/30" />
+                          <button onClick={() => handleRemoveItem(page.pageIndex, item.key)}
+                            className="shrink-0 rounded-lg border border-red-100 p-2 text-red-400 transition-colors hover:bg-red-50 hover:text-red-600">
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    <button onClick={() => handleAddItem(page.pageIndex)}
+                      className="mt-3 flex h-8 items-center gap-1.5 rounded-lg border border-dashed border-gray-300 px-3 text-[11px] font-medium text-gray-500 transition-colors hover:border-gold hover:text-amber-700">
+                      <Plus size={12} /> Add item
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div className="flex items-center justify-end gap-2 border-t border-gray-100 px-5 py-4">
+                <button onClick={() => { setEditingDesignId(null); setEditDraft([]) }}
+                  className="flex h-9 items-center rounded-lg border border-gray-200 px-4 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50">
+                  Cancel
+                </button>
+                <button onClick={handleSaveEdit}
+                  className="flex h-9 items-center gap-2 rounded-lg bg-maroon px-4 text-xs font-bold text-white transition-colors hover:bg-maroon-dark">
+                  <Save size={13} /> Save Changes
+                </button>
               </div>
             </motion.div>
           </motion.div>

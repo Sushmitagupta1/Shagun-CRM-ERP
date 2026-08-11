@@ -272,9 +272,15 @@ export async function generateMenuDesign(params: {
   clientName: string
   templateInfo: string
   templateImage?: string | null
+  count?: number
+  previousDesign?: string | null
 }): Promise<GroqResponse> {
+  const designCount = params.count || 3
   const templateImageNote = params.templateImage
     ? `\n- I am attaching the actual template picture. Study the attached template image carefully and design the menu to match its border, frame, colors, and style. Place the menu content in the middle of the border shown in the picture, keeping comfortable margin from the border edges. Use fonts and colors that complement the template picture.`
+    : ''
+  const regenerationNote = params.previousDesign
+    ? `\n- This is a REGENERATION. Keep the same menu items and section labels, but produce a clearly DIFFERENT version from the one shown below: change the color palette, fonts, heading treatment, and layout. Do not just repeat the previous design.\nPREVIOUS VERSION (for reference only):\n${params.previousDesign.slice(0, 1500)}`
     : ''
   const backgroundGuidance = params.templateInfo
     ? `- Set the template background via CSS on the wrapper div, e.g. <div style="display:flex;align-items:center;justify-content:center;background-image:url('TEMPLATE_URL');background-size:100% 100%;background-position:center;background-repeat:no-repeat;min-height:100vh;padding:40px"> ... </div>. Replace TEMPLATE_URL literally with the given template URL string. The wrapper MUST be display:flex with align-items:center and justify-content:center so the content sits in the MIDDLE of the border.`
@@ -290,7 +296,7 @@ USER'S MENU LIST (section labels are headings):
 ${params.menuText}
 
 INSTRUCTIONS:
-- Return exactly 3 DIFFERENT design options separated by "---DESIGN---".
+- Return exactly ${designCount} DIFFERENT design option${designCount !== 1 ? 's' : ''} separated by "---DESIGN---".
 - Inside each design option, separate pages with "---PAGE---". The "---PAGE---" separator must appear BETWEEN complete pages, never inside a page's markup.
 - Each page is a COMPLETE, SELF-CONTAINED HTML fragment: a <style> block (scoped inline styles) followed by the page markup wrapped in a single wrapper <div> that is opened AND closed on that same page. Do NOT share one wrapper <div> across multiple pages. Do NOT include <html>, <head>, doctype, <script>, external images, or absolute URLs.
 - Do NOT add text outside the page markup (no "DESIGN 1:", no "PAGE 1:" headings).
@@ -304,7 +310,8 @@ ${backgroundGuidance}
 - Use <h1> for the design/menu title, the section label as <h2>, and a <ul>/<li> per dish.
 - Keep all CSS inline in a <style> tag that only targets the page. Use CSS classes, not element selectors that could leak.
 - Content must fit A4 portrait (compact spacing, small refined font sizes).
-${templateImageNote}`
+${templateImageNote}
+${regenerationNote}`
   return params.templateImage
     ? callGroqVision(prompt, params.templateImage, 4500)
     : callGroq(prompt, 4500)

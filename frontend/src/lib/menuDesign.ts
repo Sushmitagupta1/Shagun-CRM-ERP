@@ -18,6 +18,91 @@ export interface ParsedDesigns {
   error?: string
 }
 
+export interface MenuEditableItem {
+  key: string
+  text: string
+}
+
+export interface MenuEditablePage {
+  pageIndex: number
+  heading: string
+  items: MenuEditableItem[]
+}
+
+function stripHtml(html: string): string {
+  return html.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
+}
+
+// Pulls out the section heading and item texts of each page so they can be
+// edited in a form without touching the design's styling.
+export function extractMenuEditable(design: MenuDesign): MenuEditablePage[] {
+  return design.pages.map((page, pi) => {
+    const doc = new DOMParser().parseFromString(page.html, 'text/html')
+    const headings = Array.from(doc.body.querySelectorAll('h1, h2'))
+    const headingEl = headings[headings.length - 1] || null
+    const heading = headingEl ? stripHtml(headingEl.innerHTML) : `Page ${pi + 1}`
+    const lis = Array.from(doc.body.querySelectorAll('ul li'))
+    return {
+      pageIndex: pi,
+      heading,
+      items: lis.map((li, i) => ({ key: `p${pi}_i${i}`, text: li.textContent?.trim() || '' })),
+    }
+  })
+}
+
+function pageStyle(html: string): string {
+  const m = html.match(/<style>[\s\S]*?<\/style>/i)
+  return m ? m[0] : ''
+}
+
+// Rebuilds each page's HTML with the edited heading and item texts, keeping
+// the original <style>, wrapper div, and <li> classes/styles intact.
+export function applyMenuEdits(design: MenuDesign, pages: MenuEditablePage[]): MenuDesign {
+  const updatedPages = design.pages.map((page, pi) => {
+    const edits = pages.find((p) => p.pageIndex === pi)
+    if (!edits) return page
+
+    const style = pageStyle(page.html)
+    const doc = new DOMParser().parseFromString(page.html, 'text/html')
+    doc.head.querySelectorAll('style').forEach((s) => s.remove())
+    doc.body.querySelectorAll('style').forEach((s) => s.remove())
+
+    const headings = Array.from(doc.body.querySelectorAll('h1, h2'))
+    const headingEl = headings[headings.length - 1] || null
+    if (headingEl && edits.heading.trim()) headingEl.textContent = edits.heading.trim()
+
+    const texts = edits.items.map((it) => it.text).filter((t) => t.trim() !== '')
+    const ul = doc.body.querySelector('ul')
+    if (ul) {
+      const lis = Array.from(ul.children).filter((el) => el.tagName === 'LI')
+      lis.forEach((li, i) => {
+        if (i < texts.length) (li as HTMLElement).textContent = texts[i]
+        else (li as HTMLElement).remove()
+      })
+      if (texts.length > lis.length) {
+        const template = (lis[lis.length - 1] || doc.createElement('li')) as HTMLElement
+        for (let i = lis.length; i < texts.length; i++) {
+          const clone = template.cloneNode(true) as HTMLElement
+          clone.textContent = texts[i]
+          ul.appendChild(clone)
+        }
+      }
+    } else if (texts.length > 0) {
+      const newUl = doc.createElement('ul')
+      texts.forEach((t) => {
+        const li = doc.createElement('li')
+        li.textContent = t
+        newUl.appendChild(li)
+      })
+      doc.body.appendChild(newUl)
+    }
+
+    const bodyHtml = doc.body.innerHTML.trim()
+    return { ...page, html: style ? `${style}\n${bodyHtml}` : bodyHtml }
+  })
+  return { ...design, pages: updatedPages }
+}
+
 const ALLOWED_TAGS = new Set([
   'DIV', 'SPAN', 'H1', 'H2', 'H3', 'P', 'UL', 'OL', 'LI', 'STRONG', 'B', 'EM', 'I',
   'BR', 'HR', 'TABLE', 'THEAD', 'TBODY', 'TR', 'TH', 'TD', 'STYLE', 'SMALL', 'BLOCKQUOTE',
