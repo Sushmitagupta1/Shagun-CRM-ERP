@@ -1,9 +1,8 @@
-const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY as string
-const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions'
-const GROQ_MODEL = 'openai/gpt-oss-20b'
-const GROQ_VISION_MODEL = 'qwen/qwen3.6-27b'
+const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY as string
+const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions'
+const GEMINI_MODEL = 'gemini-3.5-flash'
 
-export interface GroqResponse {
+export interface AIResponse {
   text: string
   error?: string
 }
@@ -11,18 +10,11 @@ export interface GroqResponse {
 // Small delay helper for rate-limit retries.
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
-// The qwen vision model thinks out loud, wrapping its answer in a
-// <think>...</think> block. Groq no longer accepts chat_template_kwargs
-// (which previously disabled that), so strip the thinking block instead.
-function stripThinking(text: string): string {
-  return text.replace(/^\s*<think>[\s\S]*?<\/think>\s*/i, '')
-}
-
-// Retries up to 3 times when Groq rate-limits us (429). Waits for the
+// Retries up to 3 times when Gemini rate-limits us (429). Waits for the
 // retry-after window so the request eventually goes through.
-async function callGroqWithRetry(prompt: string, imageDataUrl: string | null, maxTokens: number): Promise<GroqResponse> {
+async function callGeminiWithRetry(prompt: string, imageDataUrl: string | null, maxTokens: number): Promise<AIResponse> {
   for (let attempt = 0; attempt < 3; attempt++) {
-    const res = imageDataUrl ? await callGroqVisionRaw(prompt, imageDataUrl, maxTokens) : await callGroqRaw(prompt, maxTokens)
+    const res = await callGeminiRaw(prompt, imageDataUrl, maxTokens)
     if (res.retryAfterMs) {
       if (attempt < 2) {
         await sleep(res.retryAfterMs + 1000)
@@ -41,17 +33,26 @@ interface RawResult {
   retryAfterMs?: number
 }
 
-async function callGroqRaw(prompt: string, maxTokens: number): Promise<RawResult> {
+// OpenAI-compatible endpoint: accepts both plain text prompts and vision
+// prompts (template image sent as a data URL in image_url).
+async function callGeminiRaw(prompt: string, imageDataUrl: string | null, maxTokens: number): Promise<RawResult> {
+  let content: any = prompt
+  if (imageDataUrl) {
+    content = [
+      { type: 'text', text: prompt },
+      { type: 'image_url', image_url: { url: imageDataUrl } },
+    ]
+  }
   try {
-    const res = await fetch(GROQ_URL, {
+    const res = await fetch(GEMINI_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${GROQ_API_KEY}`,
+        Authorization: `Bearer ${GEMINI_API_KEY}`,
       },
       body: JSON.stringify({
-        model: GROQ_MODEL,
-        messages: [{ role: 'user', content: prompt }],
+        model: GEMINI_MODEL,
+        messages: [{ role: 'user', content }],
         temperature: 0.7,
         max_tokens: maxTokens,
       }),
@@ -60,7 +61,7 @@ async function callGroqRaw(prompt: string, maxTokens: number): Promise<RawResult
     if (!res.ok) {
       const err = await res.json().catch(() => ({}))
       const msg = err?.error?.message ?? `API error ${res.status}`
-      if (res.status === 429 || msg.includes('rate limit')) {
+      if (res.status === 429 || msg.includes('rate limit') || msg.toLowerCase().includes('resource exhausted')) {
         const retryMs = extractRetryMs(msg, res)
         return { text: '', error: msg, retryAfterMs: retryMs }
       }
@@ -68,7 +69,7 @@ async function callGroqRaw(prompt: string, maxTokens: number): Promise<RawResult
     }
 
     const data = await res.json()
-    return { text: stripThinking(data?.choices?.[0]?.message?.content ?? '') }
+    return { text: data?.choices?.[0]?.message?.content ?? '' }
   } catch (e: any) {
     return { text: '', error: e?.message ?? 'Network error' }
   }
@@ -85,62 +86,20 @@ function extractRetryMs(msg: string, res: Response): number {
   return 20000
 }
 
-async function callGroqVisionRaw(prompt: string, imageDataUrl: string, maxTokens: number): Promise<RawResult> {
-  try {
-    const res = await fetch(GROQ_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${GROQ_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: GROQ_VISION_MODEL,
-        messages: [
-          {
-            role: 'user',
-            content: [
-              { type: 'text', text: prompt },
-              { type: 'image_url', image_url: { url: imageDataUrl } },
-            ],
-          },
-        ],
-        temperature: 0.7,
-        max_tokens: maxTokens,
-      }),
-    })
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}))
-      const msg = err?.error?.message ?? `API error ${res.status}`
-      if (res.status === 429 || msg.includes('rate limit')) {
-        const retryMs = extractRetryMs(msg, res)
-        return { text: '', error: msg, retryAfterMs: retryMs }
-      }
-      return { text: '', error: msg }
-    }
-
-    const data = await res.json()
-    return { text: stripThinking(data?.choices?.[0]?.message?.content ?? '') }
-  } catch (e: any) {
-    return { text: '', error: e?.message ?? 'Network error' }
-  }
-}
-
 // Text-only call: routes through retry handling.
-async function callGroq(prompt: string, maxTokens = 4096): Promise<GroqResponse> {
-  return callGroqWithRetry(prompt, null, maxTokens)
+async function callGemini(prompt: string, maxTokens = 4096): Promise<AIResponse> {
+  return callGeminiWithRetry(prompt, null, maxTokens)
 }
 
 // Vision-capable call: sends the template image along with the prompt so the
-// model can see the actual template and design accordingly. Keeps max_tokens
-// low so the request stays under the free tier's 8000 TPM limit.
-async function callGroqVision(prompt: string, imageDataUrl: string, maxTokens = 4500): Promise<GroqResponse> {
-  return callGroqWithRetry(prompt, imageDataUrl, maxTokens)
+// model can see the actual template and design accordingly.
+async function callGeminiVision(prompt: string, imageDataUrl: string, maxTokens = 4500): Promise<AIResponse> {
+  return callGeminiWithRetry(prompt, imageDataUrl, maxTokens)
 }
 
 // Fetches a template image (same-origin) and returns a resized JPEG data URL
 // suitable for sending to the vision model. Returns null if it can't load.
-// Kept small (<= 512px, quality 0.7) to stay under the free tier's TPM limit.
+// Kept small (<= 512px, quality 0.7) to keep prompt tokens low.
 export async function loadImageAsDataUrl(url: string, maxDim = 384): Promise<string | null> {
   try {
     const blob = await fetch(url).then((r) => (r.ok ? r.blob() : null))
@@ -172,7 +131,7 @@ export async function generateMenu(params: {
   guests: string
   eventType: string
   customPrompt?: string
-}): Promise<GroqResponse> {
+}): Promise<AIResponse> {
   const prompt = params.customPrompt || `You are a senior catering chef for Shagun Caterers (pure veg only). Generate a detailed menu for:
 Event Type: ${params.eventType || 'General'}
 Season: ${params.season || 'All'}
@@ -190,7 +149,7 @@ For each item give: name, brief description, estimated cost per plate contributi
 End with total estimated cost per plate and tips for customization.
 Format with bold headings and bullet points.`
 
-  return callGroq(prompt)
+  return callGemini(prompt)
 }
 
 // ── AI Cost Estimation ──
@@ -198,7 +157,7 @@ export async function estimateCost(params: {
   menu: string
   guests: string
   eventType: string
-}): Promise<GroqResponse> {
+}): Promise<AIResponse> {
   const prompt = `You are a catering cost analyst for Shagun Caterers (pure veg). Estimate costs for:
 Menu: ${params.menu || 'Standard pure veg menu'}
 Guests: ${params.guests || '100'}
@@ -216,7 +175,7 @@ Provide a detailed breakdown:
 
 Format as a professional cost sheet with clear sections.`
 
-  return callGroq(prompt)
+  return callGemini(prompt)
 }
 
 // ── AI Reports ──
@@ -224,7 +183,7 @@ export async function generateReport(params: {
   type: string
   data: string
   period: string
-}): Promise<GroqResponse> {
+}): Promise<AIResponse> {
   const prompt = `You are a business analyst for Shagun Caterers ERP. Generate a ${params.type} report for ${params.period || 'this month'}.
 
 Current data: ${params.data || 'No specific data provided'}
@@ -239,14 +198,14 @@ Provide:
 
 Format as a professional business report with clear sections and insights.`
 
-  return callGroq(prompt)
+  return callGemini(prompt)
 }
 
 // ── AI Insights ──
 export async function generateInsights(params: {
   context: string
   data: string
-}): Promise<GroqResponse> {
+}): Promise<AIResponse> {
   const prompt = `You are a business intelligence analyst for Shagun Caterers ERP. Analyze the following and provide actionable insights:
 
 Context: ${params.context}
@@ -262,7 +221,7 @@ Provide:
 
 Be specific, data-driven, and actionable. Format with clear headings.`
 
-  return callGroq(prompt)
+  return callGemini(prompt)
 }
 
 // ── AI Menu Designer ──
@@ -274,7 +233,7 @@ export async function generateMenuDesign(params: {
   templateImage?: string | null
   count?: number
   previousDesign?: string | null
-}): Promise<GroqResponse> {
+}): Promise<AIResponse> {
   const designCount = params.count || 3
   const templateImageNote = params.templateImage
     ? `\n- I am attaching the actual template picture. Study the attached template image carefully and design the menu to match its border, frame, colors, and style. Place the menu content in the middle of the border shown in the picture, keeping comfortable margin from the border edges. Use fonts and colors that complement the template picture.`
@@ -313,6 +272,6 @@ ${backgroundGuidance}
 ${templateImageNote}
 ${regenerationNote}`
   return params.templateImage
-    ? callGroqVision(prompt, params.templateImage, 4500)
-    : callGroq(prompt, 4500)
+    ? callGeminiVision(prompt, params.templateImage, 4500)
+    : callGemini(prompt, 4500)
 }

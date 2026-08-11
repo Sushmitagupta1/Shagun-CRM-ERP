@@ -14,7 +14,7 @@ import { KPICardSkeleton } from '@/components/common/Skeleton'
 import { formatCurrency } from '@/lib/utils'
 import { INQUIRY_STATUSES } from '@/lib/constants'
 import { useAuth } from '@/hooks/useAuth'
-import { generateReport } from '@/lib/groq'
+import { generateReport } from '@/lib/ai'
 import { toast } from 'sonner'
 import { Loader2, FileText, Send, Eye, CheckCircle2, UtensilsCrossed } from 'lucide-react'
 
