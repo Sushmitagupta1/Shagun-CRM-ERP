@@ -288,10 +288,12 @@ function buildMenuDesignPrompt(params: {
     ? `- Set the template background via CSS on the wrapper div, e.g. <div style="display:flex;align-items:center;justify-content:center;background-image:url('TEMPLATE_URL');background-size:100% 100%;background-position:center;background-repeat:no-repeat;min-height:100vh;padding:40px"> ... </div>. Replace TEMPLATE_URL literally with the given template URL string. The wrapper MUST be display:flex with align-items:center and justify-content:center so the content sits in the MIDDLE of the border.`
     : `- Use a clean white or very light background on the wrapper div (no background image), with the same flex centering so the content sits in the middle of the page.`
   return `You are an expert menu card designer for Shagun Caterers (pure veg only).
-Design a beautiful printable menu card using the user's menu list and section labels.
+Design a beautiful printable menu card using ONLY the user's menu list and section labels.
 
-Client: ${params.clientName}
-Event Type: ${params.eventType}
+CONTENT RULE (very important):
+- The design must contain ONLY the section labels and dish names the user provided below.
+- Do NOT write the client's name, the event name/type, the date, the venue, a phone number, or any other text anywhere in the design - not even as a title, subtitle, footer, or decorative line.
+- The only title you may use, if a top title is needed, is the plain generic word "Menu". Do not invent any other text.
 Template background: ${params.templateInfo || 'No template selected — use a clean white background'}
 
 USER'S MENU LIST (section labels are headings):
