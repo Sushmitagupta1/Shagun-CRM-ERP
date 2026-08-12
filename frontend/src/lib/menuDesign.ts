@@ -40,6 +40,12 @@ export interface MenuFonts {
   item: string
 }
 
+export interface MenuColors {
+  title: string
+  heading: string
+  item: string
+}
+
 export const FONT_OPTIONS: { label: string; value: string }[] = [
   { label: 'Playfair Display', value: "'Playfair Display', Georgia, serif" },
   { label: 'Great Vibes', value: "'Great Vibes', 'Brush Script MT', cursive" },
@@ -89,14 +95,36 @@ function fontInRule(style: string, selector: string): string | null {
   return last
 }
 
+function colorInRule(style: string, selector: string): string | null {
+  // (?<!-) avoids matching the "color" inside background-color / border-color.
+  const re = new RegExp(selector + '\\s*\\{[^}]*?(?<!-)color\\s*:\\s*([^;}]+)', 'gi')
+  let m: RegExpExecArray | null
+  let last: string | null = null
+  while ((m = re.exec(style)) !== null) last = m[1].trim()
+  return last
+}
+
+// Best-effort detection of the current text colours for title/heading/items
+// from the page's <style> (hex, rgb, or named colours are returned as-is).
+export function detectPageColors(html: string): MenuColors {
+  const sm = html.match(/<style>([\s\S]*?)<\/style>/i)
+  const style = sm ? sm[1] : ''
+  const pick = (sel: string, alt: string): string => colorInRule(style, sel) || colorInRule(style, alt) || ''
+  return {
+    title: pick('h1', '\\.\\w[\\w-]*title[\\w-]*'),
+    heading: pick('h2', '\\.\\w[\\w-]*heading[\\w-]*') || colorInRule(style, '\\.\\w[\\w-]*section[\\w-]*') || '',
+    item: pick('ul\\s+li', '\\.\\w[\\w-]*item[\\w-]*') || colorInRule(style, 'li') || '',
+  }
+}
+
 // Best-effort detection of the current title/heading/item fonts from the
 // page's <style>. Falls back to sensible defaults when nothing is found.
 export function detectPageFonts(html: string): MenuFonts {
   const sm = html.match(/<style>([\s\S]*?)<\/style>/i)
   const style = sm ? sm[1] : ''
-  const title = fontInRule(style, 'h1') || fontInRule(style, '\\.\\w*title\\w*') || DEFAULT_FONTS.title
-  const heading = fontInRule(style, 'h2') || fontInRule(style, '\\.\\w*heading\\w*') || fontInRule(style, '\\.\\w*section\\w*') || DEFAULT_FONTS.heading
-  const item = fontInRule(style, 'ul\\s+li') || fontInRule(style, '\\.\\w*item\\w*') || fontInRule(style, 'li') || DEFAULT_FONTS.item
+  const title = fontInRule(style, 'h1') || fontInRule(style, '\\.\\w[\\w-]*title[\\w-]*') || DEFAULT_FONTS.title
+  const heading = fontInRule(style, 'h2') || fontInRule(style, '\\.\\w[\\w-]*heading[\\w-]*') || fontInRule(style, '\\.\\w[\\w-]*section[\\w-]*') || DEFAULT_FONTS.heading
+  const item = fontInRule(style, 'ul\\s+li') || fontInRule(style, '\\.\\w[\\w-]*item[\\w-]*') || fontInRule(style, 'li') || DEFAULT_FONTS.item
   return { title: matchFontOption(title), heading: matchFontOption(heading), item: matchFontOption(item) }
 }
 
@@ -108,14 +136,25 @@ const FONT_OVERRIDE_MARK = '/* user-font-overrides */'
 // (once, inside the page's <style>) makes every option actually render.
 const GOOGLE_FONT_IMPORT = `@import url('https://fonts.googleapis.com/css2?family=Playfair+Display&family=Great+Vibes&family=Dancing+Script&family=Cinzel&family=Cormorant+Garamond&family=Marcellus&family=Prata&family=EB+Garamond&family=Lato&family=Montserrat&display=swap');`
 
-// Injects !important font-family overrides at the end of the page's <style>
-// so the user's font choices win over the AI-generated rules.
-export function applyFontOverrides(html: string, fonts: MenuFonts): string {
+// Injects !important font-family/colour overrides at the end of the page's
+// <style> so the user's font and colour choices win over the AI-generated rules.
+export function applyTextOverrides(html: string, fonts?: MenuFonts, colors?: MenuColors): string {
   const sm = html.match(/<style>([\s\S]*?)<\/style>/i)
   if (!sm) return html
   let base = sm[1].replace(/\n\s*\/\* user-font-overrides \*\/[\s\S]*$/, '').replace(/\s+$/, '')
   if (!base.includes('googleapis.com')) base = `${GOOGLE_FONT_IMPORT}\n${base}`
-  const overrides = `\n${FONT_OVERRIDE_MARK}\nh1, [class*="title"] { font-family: ${fonts.title} !important; }\nh2, [class*="heading"], [class*="section"] { font-family: ${fonts.heading} !important; }\nul li, [class*="item"] { font-family: ${fonts.item} !important; }\n`
+  const rules: string[] = []
+  if (fonts) {
+    rules.push(`h1, [class*="title"] { font-family: ${fonts.title} !important; }`)
+    rules.push(`h2, [class*="heading"], [class*="section"] { font-family: ${fonts.heading} !important; }`)
+    rules.push(`ul li, [class*="item"] { font-family: ${fonts.item} !important; }`)
+  }
+  if (colors) {
+    rules.push(`h1, [class*="title"] { color: ${colors.title} !important; }`)
+    rules.push(`h2, [class*="heading"], [class*="section"] { color: ${colors.heading} !important; }`)
+    rules.push(`ul li, [class*="item"] { color: ${colors.item} !important; }`)
+  }
+  const overrides = `\n${FONT_OVERRIDE_MARK}\n${rules.join('\n')}\n`
   return html.replace(sm[0], `<style>${base}${overrides}</style>`)
 }
 
@@ -260,11 +299,11 @@ function pageStyle(html: string): string {
   return m ? m[0] : ''
 }
 
-// Rebuilds each page's HTML with the edited headings, item texts and fonts,
-// keeping the original <style>, wrapper div, and <li> styles intact.
+// Rebuilds each page's HTML with the edited headings, item texts, fonts and
+// text colours, keeping the original <style>, wrapper div, and <li> styles intact.
 // Headings that have the same text on every page are treated as shared
 // (e.g. the brand/title line) — editing one propagates to all pages.
-export function applyMenuEdits(design: MenuDesign, pages: MenuEditablePage[], opts?: { fonts?: MenuFonts }): MenuDesign {
+export function applyMenuEdits(design: MenuDesign, pages: MenuEditablePage[], opts?: { fonts?: MenuFonts; colors?: MenuColors }): MenuDesign {
   const editsByPage = new Map(pages.map((p) => [p.pageIndex, p]))
   const originalHeadings = design.pages.map((page) => pageHeadings(page.html))
 
@@ -330,7 +369,7 @@ export function applyMenuEdits(design: MenuDesign, pages: MenuEditablePage[], op
     const bodyHtml = doc.body.innerHTML.trim()
     html = style ? `${style}\n${bodyHtml}` : bodyHtml
 
-    if (opts?.fonts) html = applyFontOverrides(html, opts.fonts)
+    if (opts?.fonts || opts?.colors) html = applyTextOverrides(html, opts.fonts, opts.colors)
     return { ...page, html }
   })
   return { ...design, pages: updatedPages }

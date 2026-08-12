@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getInquiry } from '@/api/inquiries'
 import { generateMenuDesign, loadImageAsDataUrl } from '@/lib/ai'
-import { parseMenuDesigns, downloadMenuDesignPdf, extractMenuEditable, applyMenuEdits, detectPageFonts, scopeMenuHtml, FONT_OPTIONS, type MenuDesign, type MenuEditablePage, type MenuFonts } from '@/lib/menuDesign'
+import { parseMenuDesigns, downloadMenuDesignPdf, extractMenuEditable, applyMenuEdits, detectPageFonts, detectPageColors, scopeMenuHtml, FONT_OPTIONS, type MenuDesign, type MenuEditablePage, type MenuFonts, type MenuColors } from '@/lib/menuDesign'
 import { getTemplateCategories, getTemplateUrl, getTemplateThumbUrl } from '@/api/templates'
 import { getMenuVersions, createMenuVersion } from '@/api/inquiries'
 import PageHeader from '@/components/common/PageHeader'
@@ -40,6 +40,7 @@ export default function MenuGenerator() {
   const [editingDesignId, setEditingDesignId] = useState<string | null>(null)
   const [editDraft, setEditDraft] = useState<MenuEditablePage[]>([])
   const [editFonts, setEditFonts] = useState<MenuFonts>({ title: '', heading: '', item: '' })
+  const [editColors, setEditColors] = useState<MenuColors>({ title: '', heading: '', item: '' })
 
   // Template selection
   const [selectedCat, setSelectedCat] = useState('')
@@ -163,6 +164,7 @@ export default function MenuGenerator() {
   const handleOpenEdit = (design: MenuDesign) => {
     setEditDraft(extractMenuEditable(design))
     setEditFonts(detectPageFonts(design.pages[0]?.html || ''))
+    setEditColors(detectPageColors(design.pages[0]?.html || ''))
     setEditingDesignId(design.id)
   }
 
@@ -193,7 +195,7 @@ export default function MenuGenerator() {
   const handleSaveEdit = () => {
     const design = designs.find((d) => d.id === editingDesignId)
     if (!design) return
-    setDesigns((prev) => prev.map((d) => (d.id === editingDesignId ? applyMenuEdits(d, editDraft, { fonts: editFonts }) : d)))
+    setDesigns((prev) => prev.map((d) => (d.id === editingDesignId ? applyMenuEdits(d, editDraft, { fonts: editFonts, colors: editColors }) : d)))
     setEditingDesignId(null)
     setEditDraft([])
     toast.success('Design updated. Click "Save Version" to keep it.')
@@ -543,16 +545,30 @@ export default function MenuGenerator() {
                     ] as const).map(([label, key]) => (
                       <div key={key}>
                         <label className="mb-1 block text-[10px] font-medium text-gray-500">{label}</label>
-                        <select
-                          value={editFonts[key] || ''}
-                          onChange={(e) => setEditFonts((f) => ({ ...f, [key]: e.target.value }))}
-                          className="w-full rounded-lg border border-gray-200 px-2 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-gold/30"
-                          style={{ fontFamily: editFonts[key] || undefined }}
-                        >
-                          {FONT_OPTIONS.map((f) => (
-                            <option key={f.value} value={f.value} style={{ fontFamily: f.value }}>{f.label}</option>
-                          ))}
-                        </select>
+                        <div className="flex items-center gap-2">
+                          <select
+                            value={editFonts[key] || ''}
+                            onChange={(e) => setEditFonts((f) => ({ ...f, [key]: e.target.value }))}
+                            className="w-full rounded-lg border border-gray-200 px-2 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-gold/30"
+                            style={{ fontFamily: editFonts[key] || undefined }}
+                          >
+                            {FONT_OPTIONS.map((f) => (
+                              <option key={f.value} value={f.value} style={{ fontFamily: f.value }}>{f.label}</option>
+                            ))}
+                          </select>
+                          <label className="relative h-7 w-8 shrink-0 cursor-pointer overflow-hidden rounded-md border border-gray-200">
+                            <input
+                              type="color"
+                              value={editColors[key] || '#000000'}
+                              onChange={(e) => setEditColors((c) => ({ ...c, [key]: e.target.value }))}
+                              className="absolute -inset-1 h-10 w-12 cursor-pointer border-0 p-0"
+                              title={`${label} colour`}
+                            />
+                            {!editColors[key] && (
+                              <span className="pointer-events-none absolute inset-0 flex items-center justify-center text-[8px] font-bold text-gray-300">?</span>
+                            )}
+                          </label>
+                        </div>
                       </div>
                     ))}
                   </div>
