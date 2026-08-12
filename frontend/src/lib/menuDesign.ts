@@ -23,9 +23,14 @@ export interface MenuEditableItem {
   text: string
 }
 
+export interface MenuEditableHeading {
+  key: string
+  text: string
+}
+
 export interface MenuEditablePage {
   pageIndex: number
-  heading: string
+  headings: MenuEditableHeading[]
   items: MenuEditableItem[]
 }
 
@@ -97,14 +102,88 @@ export function detectPageFonts(html: string): MenuFonts {
 
 const FONT_OVERRIDE_MARK = '/* user-font-overrides */'
 
+// The selectable fonts are Google Fonts families, but the AI designs never load
+// them, so the browser silently falls back (e.g. 'Playfair Display' -> Georgia)
+// and the user's font choice appears to have no effect. Injecting this @import
+// (once, inside the page's <style>) makes every option actually render.
+const GOOGLE_FONT_IMPORT = `@import url('https://fonts.googleapis.com/css2?family=Playfair+Display&family=Great+Vibes&family=Dancing+Script&family=Cinzel&family=Cormorant+Garamond&family=Marcellus&family=Prata&family=EB+Garamond&family=Lato&family=Montserrat&display=swap');`
+
 // Injects !important font-family overrides at the end of the page's <style>
 // so the user's font choices win over the AI-generated rules.
 export function applyFontOverrides(html: string, fonts: MenuFonts): string {
   const sm = html.match(/<style>([\s\S]*?)<\/style>/i)
   if (!sm) return html
-  const base = sm[1].replace(/\n\s*\/\* user-font-overrides \*\/[\s\S]*$/, '').replace(/\s+$/, '')
+  let base = sm[1].replace(/\n\s*\/\* user-font-overrides \*\/[\s\S]*$/, '').replace(/\s+$/, '')
+  if (!base.includes('googleapis.com')) base = `${GOOGLE_FONT_IMPORT}\n${base}`
   const overrides = `\n${FONT_OVERRIDE_MARK}\nh1, [class*="title"] { font-family: ${fonts.title} !important; }\nh2, [class*="heading"], [class*="section"] { font-family: ${fonts.heading} !important; }\nul li, [class*="item"] { font-family: ${fonts.item} !important; }\n`
   return html.replace(sm[0], `<style>${base}${overrides}</style>`)
+}
+
+// Prefixes every selector in the page's <style> with the given scope attribute
+// so several design previews rendered side by side cannot style each other's
+// content (their global <style> tags would otherwise collide).
+export function scopeMenuHtml(html: string, scope: string): string {
+  const sm = html.match(/<style>([\s\S]*?)<\/style>/i)
+  if (!sm) return html
+  return html.replace(sm[0], `<style>${scopeCss(sm[1], scope)}</style>`)
+}
+
+function scopeCss(css: string, scope: string): string {
+  const attr = `[data-menu-scope="${scope}"]`
+
+  const scopeSelectors = (selectors: string): string =>
+    selectors
+      .replace(/\/\*[\s\S]*?\*\//g, ' ')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .map((sel) => (sel === ':root' || sel === ':host' ? sel : `${attr} ${sel}`))
+      .join(', ')
+
+  const takeBlock = (input: string, open: number): { inner: string; end: number } => {
+    let depth = 1
+    let i = open + 1
+    while (i < input.length && depth > 0) {
+      if (input[i] === '{') depth++
+      else if (input[i] === '}') depth--
+      i++
+    }
+    return { inner: input.slice(open + 1, i - 1), end: i }
+  }
+
+  // Standalone @import/@charset/@namespace statements have no selectors and
+  // must be preserved exactly (and only valid at the top of the stylesheet).
+  const preamble: string[] = []
+  const stripped = css.replace(/^\s*@(import|charset|namespace)\b[^;{}]*;/gm, (m) => {
+    preamble.push(m)
+    return ''
+  })
+
+  let out = ''
+  let i = 0
+  while (i < stripped.length) {
+    const brace = stripped.indexOf('{', i)
+    if (brace === -1) {
+      out += stripped.slice(i)
+      break
+    }
+    const head = stripped.slice(i, brace)
+    if (/^\s*@/.test(head)) {
+      const atName = (head.trim().match(/^(@[\w-]+)/) || [])[1] || ''
+      const { inner, end } = takeBlock(stripped, brace)
+      if (atName === '@font-face' || atName === '@keyframes' || atName === '@-webkit-keyframes') {
+        out += head + '{' + inner + '}'
+      } else {
+        out += head + '{' + scopeCss(inner, scope) + '}'
+      }
+      i = end
+    } else {
+      const { inner, end } = takeBlock(stripped, brace)
+      out += scopeSelectors(head) + '{' + inner + '}'
+      i = end
+    }
+  }
+  return (preamble.length > 0 ? preamble.join('\n') + '\n' : '') + out
 }
 
 function stripHtml(html: string): string {
@@ -154,19 +233,23 @@ function editLiText(li: HTMLElement, text: string) {
   li.innerHTML = prefixHtml + escaped
 }
 
-// Pulls out the section heading and item texts of each page so they can be
-// edited in a form without touching the design's styling.
+// All heading lines (h1/h2/h3) of a page in document order, as plain text.
+function pageHeadings(html: string): string[] {
+  const doc = new DOMParser().parseFromString(html, 'text/html')
+  return Array.from(doc.body.querySelectorAll('h1, h2, h3')).map((el) => stripHtml((el as HTMLElement).innerHTML))
+}
+
+// Pulls out the headings and item texts of each page so they can be edited in
+// a form without touching the design's styling.
 export function extractMenuEditable(design: MenuDesign): MenuEditablePage[] {
   return design.pages.map((page, pi) => {
     const doc = new DOMParser().parseFromString(page.html, 'text/html')
-    const headings = Array.from(doc.body.querySelectorAll('h1, h2'))
-    const headingEl = headings[headings.length - 1] || null
-    const heading = headingEl ? stripHtml(headingEl.innerHTML) : `Page ${pi + 1}`
+    const headingEls = Array.from(doc.body.querySelectorAll('h1, h2, h3')) as HTMLElement[]
     const ul = mainUl(doc)
     const lis = ul ? Array.from(ul.children).filter((el) => el.tagName === 'LI') as HTMLElement[] : []
     return {
       pageIndex: pi,
-      heading,
+      headings: headingEls.map((el, hi) => ({ key: `p${pi}_h${hi}`, text: stripHtml(el.innerHTML) })),
       items: lis.map((li, i) => ({ key: `p${pi}_i${i}`, text: liDisplayText(li) })),
     }
   })
@@ -177,11 +260,16 @@ function pageStyle(html: string): string {
   return m ? m[0] : ''
 }
 
-// Rebuilds each page's HTML with the edited heading, item texts, title and
-// fonts, keeping the original <style>, wrapper div, and <li> styles intact.
-export function applyMenuEdits(design: MenuDesign, pages: MenuEditablePage[], opts?: { title?: string; fonts?: MenuFonts }): MenuDesign {
+// Rebuilds each page's HTML with the edited headings, item texts and fonts,
+// keeping the original <style>, wrapper div, and <li> styles intact.
+// Headings that have the same text on every page are treated as shared
+// (e.g. the brand/title line) — editing one propagates to all pages.
+export function applyMenuEdits(design: MenuDesign, pages: MenuEditablePage[], opts?: { fonts?: MenuFonts }): MenuDesign {
+  const editsByPage = new Map(pages.map((p) => [p.pageIndex, p]))
+  const originalHeadings = design.pages.map((page) => pageHeadings(page.html))
+
   const updatedPages = design.pages.map((page, pi) => {
-    const edits = pages.find((p) => p.pageIndex === pi)
+    const edits = editsByPage.get(pi)
     let html = page.html
 
     const style = pageStyle(html)
@@ -190,9 +278,27 @@ export function applyMenuEdits(design: MenuDesign, pages: MenuEditablePage[], op
     doc.body.querySelectorAll('style').forEach((s) => s.remove())
 
     if (edits) {
-      const headings = Array.from(doc.body.querySelectorAll('h1, h2'))
-      const headingEl = headings[headings.length - 1] || null
-      if (headingEl && edits.heading.trim()) headingEl.textContent = edits.heading.trim()
+      const headingEls = Array.from(doc.body.querySelectorAll('h1, h2, h3')) as HTMLElement[]
+      headingEls.forEach((el, hi) => {
+        const originalText = originalHeadings[pi]?.[hi] || ''
+        const sharedAcross = originalHeadings.every((pageHs) => pageHs[hi] === originalText)
+        let newText: string | undefined
+        if (sharedAcross) {
+          // Any page's edit of this shared line wins, so it stays consistent.
+          for (const other of originalHeadings) {
+            const otherEdits = editsByPage.get(originalHeadings.indexOf(other))
+            const t = otherEdits?.headings[hi]?.text?.trim()
+            if (t && t !== originalText) {
+              newText = t
+              break
+            }
+          }
+        } else {
+          const t = edits.headings[hi]?.text?.trim()
+          if (t) newText = t
+        }
+        if (newText) el.textContent = newText
+      })
 
       const texts = edits.items.map((it) => it.text).filter((t) => t.trim() !== '')
       const ul = mainUl(doc)
@@ -219,10 +325,6 @@ export function applyMenuEdits(design: MenuDesign, pages: MenuEditablePage[], op
         })
         doc.body.appendChild(newUl)
       }
-    }
-
-    if (opts?.title && opts.title.trim()) {
-      doc.body.querySelectorAll('h1').forEach((h1) => (h1.textContent = opts.title!.trim()))
     }
 
     const bodyHtml = doc.body.innerHTML.trim()
@@ -338,7 +440,8 @@ export async function downloadMenuDesignPdf(design: MenuDesign, fileName: string
     container.style.top = '0'
     container.style.width = '794px'
     container.style.zIndex = '-1'
-    container.innerHTML = design.pages[i].html
+    container.setAttribute('data-menu-scope', 'pdf-scope')
+    container.innerHTML = scopeMenuHtml(design.pages[i].html, 'pdf-scope')
     document.body.appendChild(container)
     try {
       await document.fonts.ready

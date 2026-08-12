@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getInquiry } from '@/api/inquiries'
 import { generateMenuDesign, loadImageAsDataUrl } from '@/lib/ai'
-import { parseMenuDesigns, downloadMenuDesignPdf, extractMenuEditable, applyMenuEdits, extractMenuTitle, detectPageFonts, FONT_OPTIONS, type MenuDesign, type MenuEditablePage, type MenuFonts } from '@/lib/menuDesign'
+import { parseMenuDesigns, downloadMenuDesignPdf, extractMenuEditable, applyMenuEdits, detectPageFonts, scopeMenuHtml, FONT_OPTIONS, type MenuDesign, type MenuEditablePage, type MenuFonts } from '@/lib/menuDesign'
 import { getTemplateCategories, getTemplateUrl, getTemplateThumbUrl } from '@/api/templates'
 import { getMenuVersions, createMenuVersion } from '@/api/inquiries'
 import PageHeader from '@/components/common/PageHeader'
@@ -12,6 +12,16 @@ import { motion } from 'framer-motion'
 import { ArrowLeft, Sparkles, RotateCcw, Loader2, Phone, Calendar, DollarSign, MessageSquare, FileText, User, Users, Layout, Palette, FileDown, Save, History, Eye, ChevronDown, ChevronUp, X, Pencil, Plus, Trash2 } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
 import { INQUIRY_STATUSES, PAYMENT_STATUSES } from '@/lib/constants'
+
+// Renders one design page with its <style> scoped to a unique container, so
+// multiple previews on screen cannot leak styles or fonts onto each other.
+function PagePreview({ html, scopeId }: { html: string; scopeId: string }) {
+  return (
+    <div data-menu-scope={scopeId}>
+      <div dangerouslySetInnerHTML={{ __html: scopeMenuHtml(html, scopeId) }} />
+    </div>
+  )
+}
 
 export default function MenuGenerator() {
   const { inquiryId } = useParams()
@@ -29,7 +39,6 @@ export default function MenuGenerator() {
   const [regeneratingIdx, setRegeneratingIdx] = useState<number | null>(null)
   const [editingDesignId, setEditingDesignId] = useState<string | null>(null)
   const [editDraft, setEditDraft] = useState<MenuEditablePage[]>([])
-  const [editTitle, setEditTitle] = useState('')
   const [editFonts, setEditFonts] = useState<MenuFonts>({ title: '', heading: '', item: '' })
 
   // Template selection
@@ -153,13 +162,14 @@ export default function MenuGenerator() {
 
   const handleOpenEdit = (design: MenuDesign) => {
     setEditDraft(extractMenuEditable(design))
-    setEditTitle(extractMenuTitle(design))
     setEditFonts(detectPageFonts(design.pages[0]?.html || ''))
     setEditingDesignId(design.id)
   }
 
-  const handleEditHeading = (pageIndex: number, heading: string) => {
-    setEditDraft((prev) => prev.map((p) => (p.pageIndex === pageIndex ? { ...p, heading } : p)))
+  const handleEditHeading = (pageIndex: number, headingKey: string, text: string) => {
+    setEditDraft((prev) => prev.map((p) => (p.pageIndex === pageIndex
+      ? { ...p, headings: p.headings.map((h) => (h.key === headingKey ? { ...h, text } : h)) }
+      : p)))
   }
 
   const handleEditItem = (pageIndex: number, itemKey: string, text: string) => {
@@ -183,7 +193,7 @@ export default function MenuGenerator() {
   const handleSaveEdit = () => {
     const design = designs.find((d) => d.id === editingDesignId)
     if (!design) return
-    setDesigns((prev) => prev.map((d) => (d.id === editingDesignId ? applyMenuEdits(d, editDraft, { title: editTitle, fonts: editFonts }) : d)))
+    setDesigns((prev) => prev.map((d) => (d.id === editingDesignId ? applyMenuEdits(d, editDraft, { fonts: editFonts }) : d)))
     setEditingDesignId(null)
     setEditDraft([])
     toast.success('Design updated. Click "Save Version" to keep it.')
@@ -427,8 +437,9 @@ export default function MenuGenerator() {
                 </div>
                 <div className="max-h-96 overflow-y-auto border-b border-gray-100 bg-gray-50 p-3">
                   {design.pages.map((page, pi) => (
-                    <div key={pi} className="mb-3 overflow-hidden rounded-lg shadow-sm last:mb-0"
-                      dangerouslySetInnerHTML={{ __html: page.html }} />
+                    <div key={pi} className="mb-3 overflow-hidden rounded-lg shadow-sm last:mb-0">
+                      <PagePreview html={page.html} scopeId={`${design.id}-p${pi}`} />
+                    </div>
                   ))}
                 </div>
                 <div className="p-3">
@@ -482,8 +493,9 @@ export default function MenuGenerator() {
                         </div>
                         <div className="max-h-96 overflow-y-auto bg-gray-50 p-3">
                           {(d.pages ?? []).map((page, pi) => (
-                            <div key={pi} className="mb-3 overflow-hidden rounded-lg shadow-sm last:mb-0"
-                              dangerouslySetInnerHTML={{ __html: page.html }} />
+                            <div key={pi} className="mb-3 overflow-hidden rounded-lg shadow-sm last:mb-0">
+                              <PagePreview html={page.html} scopeId={`ver${v.version}-d${di}-p${pi}`} />
+                            </div>
                           ))}
                         </div>
                       </div>
@@ -520,14 +532,6 @@ export default function MenuGenerator() {
                 </button>
               </div>
               <div className="max-h-[70vh] space-y-4 overflow-y-auto bg-gray-50 p-5">
-                {/* Design Title */}
-                <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-                  <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-gray-400">Menu Title</label>
-                  <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)}
-                    placeholder="e.g. Wedding Menu"
-                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-gold/30" />
-                </div>
-
                 {/* Fonts */}
                 <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
                   <label className="mb-2 block text-[10px] font-bold uppercase tracking-wider text-gray-400">Design Fonts</label>
@@ -556,9 +560,16 @@ export default function MenuGenerator() {
 
                 {editDraft.map((page) => (
                   <div key={page.pageIndex} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-                    <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-gray-400">Section Heading</label>
-                    <input value={page.heading} onChange={(e) => handleEditHeading(page.pageIndex, e.target.value)}
-                      className="mb-3 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-gold/30" />
+                    {page.headings.map((heading, hi) => (
+                      <div key={heading.key} className="mb-3 last:mb-0">
+                        <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                          {hi === 0 ? 'Title' : hi === page.headings.length - 1 ? 'Section Heading' : 'Subtitle'}
+                        </label>
+                        <input value={heading.text} onChange={(e) => handleEditHeading(page.pageIndex, heading.key, e.target.value)}
+                          className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-gold/30" />
+                      </div>
+                    ))}
+                    <label className="mb-1 mt-4 block text-[10px] font-bold uppercase tracking-wider text-gray-400">Dishes</label>
                     <div className="space-y-2">
                       {page.items.map((item) => (
                         <div key={item.key} className="flex items-center gap-2">
@@ -574,7 +585,7 @@ export default function MenuGenerator() {
                     </div>
                     <button onClick={() => handleAddItem(page.pageIndex)}
                       className="mt-3 flex h-8 items-center gap-1.5 rounded-lg border border-dashed border-gray-300 px-3 text-[11px] font-medium text-gray-500 transition-colors hover:border-gold hover:text-amber-700">
-                      <Plus size={12} /> Add item
+                      <Plus size={12} /> Add dish
                     </button>
                   </div>
                 ))}
