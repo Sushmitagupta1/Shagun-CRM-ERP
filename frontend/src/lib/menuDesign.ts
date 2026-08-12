@@ -29,6 +29,84 @@ export interface MenuEditablePage {
   items: MenuEditableItem[]
 }
 
+export interface MenuFonts {
+  title: string
+  heading: string
+  item: string
+}
+
+export const FONT_OPTIONS: { label: string; value: string }[] = [
+  { label: 'Playfair Display', value: "'Playfair Display', Georgia, serif" },
+  { label: 'Great Vibes', value: "'Great Vibes', 'Brush Script MT', cursive" },
+  { label: 'Dancing Script', value: "'Dancing Script', 'Brush Script MT', cursive" },
+  { label: 'Cinzel', value: "'Cinzel', Georgia, serif" },
+  { label: 'Cormorant Garamond', value: "'Cormorant Garamond', Georgia, serif" },
+  { label: 'Marcellus', value: "'Marcellus', Georgia, serif" },
+  { label: 'Prata', value: "'Prata', Georgia, serif" },
+  { label: 'EB Garamond', value: "'EB Garamond', Georgia, serif" },
+  { label: 'Lato', value: "'Lato', 'Segoe UI', Arial, sans-serif" },
+  { label: 'Montserrat', value: "'Montserrat', 'Segoe UI', Arial, sans-serif" },
+  { label: 'Georgia', value: 'Georgia, serif' },
+  { label: 'Segoe UI', value: "'Segoe UI', Arial, sans-serif" },
+]
+
+const DEFAULT_FONTS: MenuFonts = {
+  title: "'Playfair Display', Georgia, serif",
+  heading: "'Playfair Display', Georgia, serif",
+  item: "'Lato', 'Segoe UI', Arial, sans-serif",
+}
+
+function normalizeFont(value: string): string {
+  return (value || '').replace(/"/g, "'").replace(/\s+/g, ' ').trim()
+}
+
+// FONT_OPTIONS values are used verbatim as CSS (no extra quoting), so match
+// detected values against the option list after normalising quotes/spaces.
+export function matchFontOption(value: string | null | undefined): string {
+  const norm = normalizeFont(value || '')
+  if (!norm) return DEFAULT_FONTS.title
+  const hit = FONT_OPTIONS.find((f) => normalizeFont(f.value) === norm)
+  return hit ? hit.value : norm
+}
+
+export function extractMenuTitle(design: MenuDesign): string {
+  if (design.pages.length === 0) return ''
+  const doc = new DOMParser().parseFromString(design.pages[0].html, 'text/html')
+  const h1 = doc.body.querySelector('h1')
+  return h1 ? stripHtml(h1.innerHTML) : ''
+}
+
+function fontInRule(style: string, selector: string): string | null {
+  const re = new RegExp(selector + '\\s*\\{[^}]*font-family\\s*:\\s*([^;}]+)', 'gi')
+  let m: RegExpExecArray | null
+  let last: string | null = null
+  while ((m = re.exec(style)) !== null) last = m[1].trim()
+  return last
+}
+
+// Best-effort detection of the current title/heading/item fonts from the
+// page's <style>. Falls back to sensible defaults when nothing is found.
+export function detectPageFonts(html: string): MenuFonts {
+  const sm = html.match(/<style>([\s\S]*?)<\/style>/i)
+  const style = sm ? sm[1] : ''
+  const title = fontInRule(style, 'h1') || fontInRule(style, '\\.\\w*title\\w*') || DEFAULT_FONTS.title
+  const heading = fontInRule(style, 'h2') || fontInRule(style, '\\.\\w*heading\\w*') || fontInRule(style, '\\.\\w*section\\w*') || DEFAULT_FONTS.heading
+  const item = fontInRule(style, 'ul\\s+li') || fontInRule(style, '\\.\\w*item\\w*') || fontInRule(style, 'li') || DEFAULT_FONTS.item
+  return { title: matchFontOption(title), heading: matchFontOption(heading), item: matchFontOption(item) }
+}
+
+const FONT_OVERRIDE_MARK = '/* user-font-overrides */'
+
+// Injects !important font-family overrides at the end of the page's <style>
+// so the user's font choices win over the AI-generated rules.
+export function applyFontOverrides(html: string, fonts: MenuFonts): string {
+  const sm = html.match(/<style>([\s\S]*?)<\/style>/i)
+  if (!sm) return html
+  const base = sm[1].replace(/\n\s*\/\* user-font-overrides \*\/[\s\S]*$/, '').replace(/\s+$/, '')
+  const overrides = `\n${FONT_OVERRIDE_MARK}\nh1, [class*="title"] { font-family: ${fonts.title} !important; }\nh2, [class*="heading"], [class*="section"] { font-family: ${fonts.heading} !important; }\nul li, [class*="item"] { font-family: ${fonts.item} !important; }\n`
+  return html.replace(sm[0], `<style>${base}${overrides}</style>`)
+}
+
 function stripHtml(html: string): string {
   return html.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
 }
@@ -99,50 +177,59 @@ function pageStyle(html: string): string {
   return m ? m[0] : ''
 }
 
-// Rebuilds each page's HTML with the edited heading and item texts, keeping
-// the original <style>, wrapper div, and <li> classes/styles intact.
-export function applyMenuEdits(design: MenuDesign, pages: MenuEditablePage[]): MenuDesign {
+// Rebuilds each page's HTML with the edited heading, item texts, title and
+// fonts, keeping the original <style>, wrapper div, and <li> styles intact.
+export function applyMenuEdits(design: MenuDesign, pages: MenuEditablePage[], opts?: { title?: string; fonts?: MenuFonts }): MenuDesign {
   const updatedPages = design.pages.map((page, pi) => {
     const edits = pages.find((p) => p.pageIndex === pi)
-    if (!edits) return page
+    let html = page.html
 
-    const style = pageStyle(page.html)
-    const doc = new DOMParser().parseFromString(page.html, 'text/html')
+    const style = pageStyle(html)
+    const doc = new DOMParser().parseFromString(html, 'text/html')
     doc.head.querySelectorAll('style').forEach((s) => s.remove())
     doc.body.querySelectorAll('style').forEach((s) => s.remove())
 
-    const headings = Array.from(doc.body.querySelectorAll('h1, h2'))
-    const headingEl = headings[headings.length - 1] || null
-    if (headingEl && edits.heading.trim()) headingEl.textContent = edits.heading.trim()
+    if (edits) {
+      const headings = Array.from(doc.body.querySelectorAll('h1, h2'))
+      const headingEl = headings[headings.length - 1] || null
+      if (headingEl && edits.heading.trim()) headingEl.textContent = edits.heading.trim()
 
-    const texts = edits.items.map((it) => it.text).filter((t) => t.trim() !== '')
-    const ul = mainUl(doc)
-    if (ul) {
-      const lis = Array.from(ul.children).filter((el) => el.tagName === 'LI') as HTMLElement[]
-      lis.forEach((li, i) => {
-        if (i < texts.length) editLiText(li, texts[i])
-        else li.remove()
-      })
-      if (texts.length > lis.length) {
-        const template = lis[lis.length - 1] || doc.createElement('li')
-        for (let i = lis.length; i < texts.length; i++) {
-          const clone = template.cloneNode(true) as HTMLElement
-          editLiText(clone, texts[i])
-          ul.appendChild(clone)
+      const texts = edits.items.map((it) => it.text).filter((t) => t.trim() !== '')
+      const ul = mainUl(doc)
+      if (ul) {
+        const lis = Array.from(ul.children).filter((el) => el.tagName === 'LI') as HTMLElement[]
+        lis.forEach((li, i) => {
+          if (i < texts.length) editLiText(li, texts[i])
+          else li.remove()
+        })
+        if (texts.length > lis.length) {
+          const template = lis[lis.length - 1] || doc.createElement('li')
+          for (let i = lis.length; i < texts.length; i++) {
+            const clone = template.cloneNode(true) as HTMLElement
+            editLiText(clone, texts[i])
+            ul.appendChild(clone)
+          }
         }
+      } else if (texts.length > 0) {
+        const newUl = doc.createElement('ul')
+        texts.forEach((t) => {
+          const li = doc.createElement('li')
+          li.textContent = t
+          newUl.appendChild(li)
+        })
+        doc.body.appendChild(newUl)
       }
-    } else if (texts.length > 0) {
-      const newUl = doc.createElement('ul')
-      texts.forEach((t) => {
-        const li = doc.createElement('li')
-        li.textContent = t
-        newUl.appendChild(li)
-      })
-      doc.body.appendChild(newUl)
+    }
+
+    if (opts?.title && opts.title.trim()) {
+      doc.body.querySelectorAll('h1').forEach((h1) => (h1.textContent = opts.title!.trim()))
     }
 
     const bodyHtml = doc.body.innerHTML.trim()
-    return { ...page, html: style ? `${style}\n${bodyHtml}` : bodyHtml }
+    html = style ? `${style}\n${bodyHtml}` : bodyHtml
+
+    if (opts?.fonts) html = applyFontOverrides(html, opts.fonts)
+    return { ...page, html }
   })
   return { ...design, pages: updatedPages }
 }

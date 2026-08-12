@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getInquiry } from '@/api/inquiries'
 import { generateMenuDesign, loadImageAsDataUrl } from '@/lib/ai'
-import { parseMenuDesigns, downloadMenuDesignPdf, extractMenuEditable, applyMenuEdits, type MenuDesign, type MenuEditablePage } from '@/lib/menuDesign'
+import { parseMenuDesigns, downloadMenuDesignPdf, extractMenuEditable, applyMenuEdits, extractMenuTitle, detectPageFonts, FONT_OPTIONS, type MenuDesign, type MenuEditablePage, type MenuFonts } from '@/lib/menuDesign'
 import { getTemplateCategories, getTemplateUrl, getTemplateThumbUrl } from '@/api/templates'
 import { getMenuVersions, createMenuVersion } from '@/api/inquiries'
 import PageHeader from '@/components/common/PageHeader'
@@ -29,6 +29,8 @@ export default function MenuGenerator() {
   const [regeneratingIdx, setRegeneratingIdx] = useState<number | null>(null)
   const [editingDesignId, setEditingDesignId] = useState<string | null>(null)
   const [editDraft, setEditDraft] = useState<MenuEditablePage[]>([])
+  const [editTitle, setEditTitle] = useState('')
+  const [editFonts, setEditFonts] = useState<MenuFonts>({ title: '', heading: '', item: '' })
 
   // Template selection
   const [selectedCat, setSelectedCat] = useState('')
@@ -151,6 +153,8 @@ export default function MenuGenerator() {
 
   const handleOpenEdit = (design: MenuDesign) => {
     setEditDraft(extractMenuEditable(design))
+    setEditTitle(extractMenuTitle(design))
+    setEditFonts(detectPageFonts(design.pages[0]?.html || ''))
     setEditingDesignId(design.id)
   }
 
@@ -179,7 +183,7 @@ export default function MenuGenerator() {
   const handleSaveEdit = () => {
     const design = designs.find((d) => d.id === editingDesignId)
     if (!design) return
-    setDesigns((prev) => prev.map((d) => (d.id === editingDesignId ? applyMenuEdits(d, editDraft) : d)))
+    setDesigns((prev) => prev.map((d) => (d.id === editingDesignId ? applyMenuEdits(d, editDraft, { title: editTitle, fonts: editFonts }) : d)))
     setEditingDesignId(null)
     setEditDraft([])
     toast.success('Design updated. Click "Save Version" to keep it.')
@@ -516,6 +520,40 @@ export default function MenuGenerator() {
                 </button>
               </div>
               <div className="max-h-[70vh] space-y-4 overflow-y-auto bg-gray-50 p-5">
+                {/* Design Title */}
+                <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+                  <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-gray-400">Menu Title</label>
+                  <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)}
+                    placeholder="e.g. Wedding Menu"
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-gold/30" />
+                </div>
+
+                {/* Fonts */}
+                <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+                  <label className="mb-2 block text-[10px] font-bold uppercase tracking-wider text-gray-400">Design Fonts</label>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    {([
+                      ['Title font', 'title'],
+                      ['Heading font', 'heading'],
+                      ['Item font', 'item'],
+                    ] as const).map(([label, key]) => (
+                      <div key={key}>
+                        <label className="mb-1 block text-[10px] font-medium text-gray-500">{label}</label>
+                        <select
+                          value={editFonts[key] || ''}
+                          onChange={(e) => setEditFonts((f) => ({ ...f, [key]: e.target.value }))}
+                          className="w-full rounded-lg border border-gray-200 px-2 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-gold/30"
+                          style={{ fontFamily: editFonts[key] || undefined }}
+                        >
+                          {FONT_OPTIONS.map((f) => (
+                            <option key={f.value} value={f.value} style={{ fontFamily: f.value }}>{f.label}</option>
+                          ))}
+                        </select>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
                 {editDraft.map((page) => (
                   <div key={page.pageIndex} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
                     <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-gray-400">Section Heading</label>
