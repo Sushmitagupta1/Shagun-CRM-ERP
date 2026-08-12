@@ -260,8 +260,8 @@ export async function generateMenuDesign(params: {
       : ''
     const prompt = buildMenuDesignPrompt(params, themeNote)
     const res = params.templateImage
-      ? await callGeminiVision(prompt, params.templateImage, 8000)
-      : await callGemini(prompt, 8000)
+      ? await callGeminiVision(prompt, params.templateImage, 40000)
+      : await callGemini(prompt, 40000)
     if (res.error) return res
     const cleaned = cleanSingleDesign(res.text)
     if (!cleaned) return { text: '', error: 'AI returned an empty response. Try again.' }
@@ -287,33 +287,42 @@ function buildMenuDesignPrompt(params: {
   const backgroundGuidance = params.templateInfo
     ? `- Set the template background via CSS on the wrapper div, e.g. <div style="display:flex;align-items:center;justify-content:center;background-image:url('TEMPLATE_URL');background-size:100% 100%;background-position:center;background-repeat:no-repeat;min-height:100vh;padding:40px"> ... </div>. Replace TEMPLATE_URL literally with the given template URL string. The wrapper MUST be display:flex with align-items:center and justify-content:center so the content sits in the MIDDLE of the border.`
     : `- Use a clean white or very light background on the wrapper div (no background image), with the same flex centering so the content sits in the middle of the page.`
-  return `You are an expert menu card designer for Shagun Caterers (pure veg only).
-Design a beautiful printable menu card using ONLY the user's menu list and section labels.
+  return `You are an expert luxury menu card designer for Shagun Caterers (pure veg only).
+Design a beautiful wedding-menu booklet using ONLY the user's menu list and section labels.
 
 CONTENT RULE (very important):
-- The design must contain ONLY the section labels and dish names the user provided below.
-- Do NOT write the client's name, the event name/type, the date, the venue, a phone number, or any other text anywhere in the design - not even as a title, subtitle, footer, or decorative line.
-- The only title you may use, if a top title is needed, is the plain generic word "Menu". Do not invent any other text.
-Template background: ${params.templateInfo || 'No template selected — use a clean white background'}
+- The design must contain ONLY text the user provided below. Do NOT invent the client's name, event name, dates, venues, phone numbers, or any other text.
+- If the user's menu already starts with a heading/name/date line, that exact line may be used on the cover. Otherwise use a decorative ornament and the plain word "MENU".
+- A "SPECIAL MENU FOR / AT / Decorator / Event Co-Ordinator / Colour Theme / Crockery & Cutlery / Type of Function / Type of Service / Office Address / Residence Address" block is a DETAILS page — render it exactly as given, leaving values blank when the user left them blank.
+
+DESIGN STYLE (match this elegant wedding-menu look):
+- Warm cream / ivory background (around #F7EBDB to #FEF7EB). NO plain white, no dark backgrounds.
+- Deep maroon (#804231) for the main title and accents; soft charcoal (#231F20) for body text; antique-gold (#C9A227) for thin lines and ornaments.
+- Each page has a thin elegant DOUBLE-LINE border frame (gold outer, maroon inner) inset ~14px from the edges.
+- Title font: elegant serif like 'EB Garamond' / 'Playfair Display', Georgia, serif. Body font: medium sans like 'Montserrat' / 'Lato', 'Segoe UI', Arial, sans-serif.
+- Refined, symmetrical, spacious layout with small compact text. Everything horizontally centered.
+Template background: ${params.templateInfo || 'No template selected — use the cream wedding style above'}
 
 USER'S MENU LIST (section labels are headings):
 ${params.menuText}
 
 INSTRUCTIONS:
 - Return exactly 1 design option. Do NOT output "---DESIGN---", "Design Option N:", "Page N:" or any other separator or label text — output only the page markup.
-- Inside the design, separate pages with "---PAGE---". The "---PAGE---" separator must appear BETWEEN complete pages, never inside a page's markup.
-- Each page is a COMPLETE, SELF-CONTAINED HTML fragment: a <style> block (scoped inline styles) followed by the page markup wrapped in a single wrapper <div> that is opened AND closed on that same page. Do NOT share one wrapper <div> across multiple pages. Do NOT include <html>, <head>, doctype, <script>, external images, or absolute URLs.
-- Each labeled section of the user's menu becomes its OWN page. Example: STARTERS page, MAIN COURSE page, DESSERTS page.
-- Use the user's exact section label text as the page heading.
-- Use <h1> for the design/menu title, the section label as <h2>, and a <ul>/<li> per dish.
-${themeNote || `- Give the design a refined theme appropriate to the event (wedding: gold/maroon elegant serif; engagement: rose/gold; corporate: navy/steel clean sans-serif).`}
+- Separate pages with "---PAGE---". The separator must appear BETWEEN complete pages, never inside a page's markup.
+- Each page is a COMPLETE, SELF-CONTAINED HTML fragment: a <style> block (scoped inline styles) followed by the page markup wrapped in a single wrapper <div> that is opened AND closed on that same page. Do NOT share one wrapper <div> across pages. No <html>, <head>, doctype, <script>, external images, or absolute URLs.
+- PAGE STRUCTURE, in this exact order:
+  1. COVER page: large decorative title (use the user's top line if present, else "MENU"), small flourish ornament under it, the thin double-line frame, nothing else.
+  2. DETAILS page: title "PROPOSED MENU" (or "MENU") then "SPECIAL MENU FOR - PAX ON AT:" and the details list (Decorator, Event Co-Ordinator, Colour Theme, Crockery & Cutlery, Type of Function, Type of Service, Office Address, Residence Address) with the user's values after each colon. If the user's menu has no such block, skip this page.
+  3. MENU pages: each labeled section of the user's menu becomes its OWN page (e.g. a "High Tea" page, a "Mehandi Dinner" page, a "Reception Dinner" page, then each station/section page). Use the user's exact section label as the <h2>.
+- LIST EVERY DISH, DO NOT SKIP ANYTHING: every dish, drink and line the user wrote MUST appear on its own <li>, exactly as written. Never merge several dishes into one line, never summarise, never drop a dish or a subsection. If the menu is long, simply use more pages (---PAGE---) — but include absolutely everything.
+- Use <h1> for the page title (cover title, PROPOSED MENU), <h2> for section labels, and <ul>/<li> per dish.
+${themeNote || ``}
 ${backgroundGuidance}
-- CENTER THE MENU: the inner content card must be positioned in the middle of the page/border. On the wrapper div use display:flex, align-items:center, justify-content:center, min-height:100vh. Inside it, wrap the actual menu in a single centered card (text-align:center) with padding, and put the card content vertically and horizontally centered. Nothing should touch the edges of the border; keep comfortable margins all around.
-- USE GOOD FONTS: pick elegant, refined font stacks that render everywhere (no external font files). Headings: 'Playfair Display', Georgia, serif or 'Great Vibes', 'Brush Script MT', cursive for decorative titles. Body: 'Lato', 'Montserrat', 'Segoe UI', Arial, sans-serif. Do NOT rely on fonts that need downloading.
-- SMALL REFINED FONTS: keep sizes small and elegant. Design title <h1> 20-24px, section headings <h2> 12-14px, dish names 11-12px, descriptions 9-10px, spacing compact so the whole card fits nicely inside the border with the middle placement.
+- CENTER EACH PAGE: on the wrapper div use display:flex, align-items:center, justify-content:center, min-height:100vh, padding:40px. The inner card is centered (text-align:center) with padding; nothing touches the frame edges.
+- SMALL REFINED FONTS: cover title <h1> 26-34px, "PROPOSED MENU" <h1> 28-36px, section headings <h2> 13-15px, dish names 11-12px, descriptions 9-10px. Compact spacing so the whole card fits A4 portrait.
 - Use <ul>/<li> with one <li> per dish. You MAY add small decorative empty spans inside an <li> (e.g. a veg dot), but keep the dish name as the last visible text.
 - Keep all CSS inline in a <style> tag that only targets the page. Use CSS classes, not element selectors that could leak.
-- Content must fit A4 portrait (compact spacing, small refined font sizes).
+- Content must fit A4 portrait. Each page must be a SINGLE A4 sheet — never let one section spill onto a second page, and never put two sections on one page.
 ${templateImageNote}
 ${regenerationNote}`
 }

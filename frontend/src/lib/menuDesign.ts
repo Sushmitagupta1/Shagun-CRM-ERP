@@ -472,40 +472,50 @@ function normalizePage(page: string, designStyle: string | null, designBg: strin
 
 export async function downloadMenuDesignPdf(design: MenuDesign, fileName: string): Promise<void> {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+  // A4 at 96dpi = 794 x 1123 px. Each design page is rendered onto exactly one
+  // such sheet (content is fit-scaled down or vertically centered) so the PDF
+  // is always clean A4 pages, never one long page.
+  const PAGE_W = 794
+  const PAGE_H = 1123
   for (let i = 0; i < design.pages.length; i++) {
     const container = document.createElement('div')
     container.style.position = 'absolute'
     container.style.left = '-9999px'
     container.style.top = '0'
-    container.style.width = '794px'
+    container.style.width = `${PAGE_W}px`
+    container.style.height = `${PAGE_H}px`
+    container.style.overflow = 'hidden'
     container.style.zIndex = '-1'
     container.setAttribute('data-menu-scope', 'pdf-scope')
-    container.innerHTML = scopeMenuHtml(design.pages[i].html, 'pdf-scope')
+    const inner = document.createElement('div')
+    inner.style.width = `${PAGE_W}px`
+    inner.style.transformOrigin = 'top left'
+    inner.innerHTML = scopeMenuHtml(design.pages[i].html, 'pdf-scope')
+    container.appendChild(inner)
     document.body.appendChild(container)
     try {
       await document.fonts.ready
       await new Promise((resolve) => setTimeout(resolve, 300))
 
+      const naturalH = inner.offsetHeight
+      if (naturalH > PAGE_H) {
+        inner.style.transform = `scale(${(PAGE_H / naturalH).toFixed(4)})`
+      } else {
+        inner.style.transform = `translateY(${Math.round((PAGE_H - naturalH) / 2)}px)`
+      }
+
       const canvas = await html2canvas(container, {
         scale: 2,
         useCORS: true,
         backgroundColor: '#ffffff',
-        width: container.offsetWidth,
-        height: container.offsetHeight,
+        width: PAGE_W,
+        height: PAGE_H,
+        windowWidth: PAGE_W,
       })
 
       const imgData = canvas.toDataURL('image/jpeg', 0.92)
       if (i > 0) doc.addPage()
-      const pageW = 210
-      const pageH = 297
-      const imgW = canvas.width
-      const imgH = canvas.height
-      const scale = Math.min(pageW / imgW, pageH / imgH)
-      const w = imgW * scale
-      const h = imgH * scale
-      const x = (pageW - w) / 2
-      const y = (pageH - h) / 2
-      doc.addImage(imgData, 'JPEG', x, y, w, h)
+      doc.addImage(imgData, 'JPEG', 0, 0, 210, 297)
     } finally {
       document.body.removeChild(container)
     }
