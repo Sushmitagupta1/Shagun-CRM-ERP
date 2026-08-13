@@ -1,5 +1,7 @@
 import os
+import uuid
 from collections import defaultdict
+from datetime import date, timedelta
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.inquiry import Inquiry
@@ -9,6 +11,9 @@ from app.models.event_inventory_item import EventInventoryItem
 from app.models.event_vendor import EventVendor
 from app.models.kitchen_inventory_item import KitchenInventoryItem
 from app.models.inventory_file_version import InventoryFileVersion
+from app.models.settlement import Settlement, SettlementStatus
+from app.models.warehouse_request import WarehouseRequest
+from app.models.event_photo import EventPhoto
 from app.services.file_parsers import parse_item_qty_file
 
 
@@ -28,6 +33,76 @@ def _status(received: float, required: float) -> str:
     if received > 0:
         return "Partial"
     return "Not Received"
+
+
+async def _user_name_map(db: AsyncSession, user_ids: set[uuid]) -> dict[str, str]:
+    if not user_ids:
+        return {}
+    result = await db.execute(select(User.id, User.full_name).where(User.id.in_(list(user_ids))))
+    return {str(uid): name for uid, name in result.all()}
+
+
+async def _inquiry_name_map(db: AsyncSession, inquiry_ids: set[uuid]) -> dict[str, str]:
+    if not inquiry_ids:
+        return {}
+    result = await db.execute(select(Inquiry.id, Inquiry.client_name).where(Inquiry.id.in_(list(inquiry_ids))))
+    return {str(iid): name for iid, name in result.all()}
+
+
+def _build_timeline(
+    inquiry: Inquiry,
+    has_kitchen: bool,
+    has_warehouse_request: bool,
+    settlement_status: str | None,
+    today: date,
+) -> list[dict]:
+    execution_date = None
+    if inquiry.event_date:
+        execution_date = inquiry.event_date - timedelta(days=1)
+    return [
+        {
+            "key": "planning",
+            "label": "Planning",
+            "status": "completed",
+            "date": inquiry.created_at,
+            "description": "Inquiry converted to confirmed event",
+        },
+        {
+            "key": "kitchen",
+            "label": "Kitchen",
+            "status": "completed" if has_kitchen else "pending",
+            "date": None,
+            "description": "Kitchen plan / ingredient list prepared",
+        },
+        {
+            "key": "warehouse_request",
+            "label": "Warehouse Request",
+            "status": "completed" if has_warehouse_request else "pending",
+            "date": None,
+            "description": "Inventory requested from warehouse",
+        },
+        {
+            "key": "execution",
+            "label": "Execution",
+            "status": "completed" if inquiry.is_completed else ("active" if execution_date and today >= execution_date else "pending"),
+            "date": inquiry.completed_at if inquiry.is_completed else None,
+            "description": "Event execution window",
+        },
+        {
+            "key": "completion",
+            "label": "Completion",
+            "status": "completed" if inquiry.is_completed else ("active" if inquiry.event_date and today >= inquiry.event_date else "pending"),
+            "date": inquiry.completed_at if inquiry.is_completed else None,
+            "description": "Event execution finished",
+        },
+        {
+            "key": "settlement",
+            "label": "Settlement",
+            "status": settlement_status or "pending",
+            "date": None,
+            "description": "Financial settlement for the event",
+        },
+    ]
 
 
 async def get_base_inventory_map(db: AsyncSession, inquiry: Inquiry) -> dict[str, dict]:
@@ -137,6 +212,88 @@ async def build_event_bundle(db: AsyncSession, inquiry: Inquiry) -> dict:
         "wastage_qty": wastage_qty,
     }
 
+    wr_result = await db.execute(
+        select(WarehouseRequest)
+        .where(WarehouseRequest.inquiry_id == inquiry.id)
+        .order_by(WarehouseRequest.created_at.asc())
+    )
+    warehouse_rows = wr_result.scalars().all()
+    wr_user_ids = {r.requested_by for r in warehouse_rows}
+    for r in warehouse_rows:
+        if r.issued_by:
+            wr_user_ids.add(r.issued_by)
+        if r.received_by:
+            wr_user_ids.add(r.received_by)
+    wr_names = await _user_name_map(db, wr_user_ids)
+    warehouse_requests = [
+        {
+            "id": str(r.id),
+            "item_name": r.item_name,
+            "quantity": r.quantity,
+            "unit": r.unit,
+            "status": r.status,
+            "requested_by_name": wr_names.get(str(r.requested_by)),
+            "issued_by_name": wr_names.get(str(r.issued_by)) if r.issued_by else None,
+            "received_by_name": wr_names.get(str(r.received_by)) if r.received_by else None,
+            "notes": r.notes,
+            "created_at": r.created_at,
+        }
+        for r in warehouse_rows
+    ]
+
+    photo_result = await db.execute(
+        select(EventPhoto, User.full_name)
+        .join(User, EventPhoto.uploaded_by == User.id)
+        .where(EventPhoto.inquiry_id == inquiry.id)
+        .order_by(EventPhoto.created_at.desc())
+    )
+    photos = [
+        {
+            "id": str(p.id),
+            "category": p.category,
+            "file_name": p.file_name,
+            "uploaded_at": p.created_at,
+            "uploaded_by_name": name,
+        }
+        for p, name in photo_result.all()
+    ]
+
+    transfer_targets = await _inquiry_name_map(db, {m.to_inquiry_id for m in movements if m.to_inquiry_id})
+    returns: list[dict] = []
+    transfers: list[dict] = []
+    wastage_rows: list[dict] = []
+    for m in movements:
+        if m.movement_type not in ("returned", "transferred", "wastage"):
+            continue
+        base = {
+            "id": str(m.id),
+            "item_name": m.item_name,
+            "quantity": m.quantity,
+            "unit": m.unit,
+            "from_event": inquiry.client_name,
+            "created_at": m.created_at,
+        }
+        if m.movement_type == "returned":
+            returns.append(base)
+        elif m.movement_type == "transferred":
+            transfers.append({**base, "to_event": transfer_targets.get(str(m.to_inquiry_id)) if m.to_inquiry_id else None})
+        else:
+            wastage_rows.append(base)
+
+    settlement_row = (
+        await db.execute(select(Settlement).where(Settlement.inquiry_id == inquiry.id))
+    ).scalar_one_or_none()
+    settlement_status = None
+    if settlement_row is not None:
+        settlement_status = "active" if settlement_row.status == SettlementStatus.PENDING else "completed"
+    timeline = _build_timeline(
+        inquiry,
+        has_kitchen=bool(inquiry.ingredient_file_path or inquiry.kitchen_inventory_file_path),
+        has_warehouse_request=bool(warehouse_rows),
+        settlement_status=settlement_status,
+        today=date.today(),
+    )
+
     return {
         "id": str(inquiry.id),
         "client_name": inquiry.client_name,
@@ -162,6 +319,7 @@ async def build_event_bundle(db: AsyncSession, inquiry: Inquiry) -> dict:
                 "service_name": v.service_name,
                 "rate": float(v.rate) if v.rate is not None else None,
                 "total_cost": float(v.total_cost) if v.total_cost is not None else None,
+                "payment_status": v.payment_status,
                 "remark": v.remark,
             }
             for v in vendors
@@ -181,4 +339,13 @@ async def build_event_bundle(db: AsyncSession, inquiry: Inquiry) -> dict:
         ],
         "closure": closure,
         "upload_history": upload_history,
+        "presentation_file_name": inquiry.presentation_file_name,
+        "ingredient_file_name": inquiry.ingredient_file_name,
+        "kitchen_inventory_file_name": inquiry.kitchen_inventory_file_name,
+        "warehouse_requests": warehouse_requests,
+        "photos": photos,
+        "returns": returns,
+        "transfers": transfers,
+        "wastage_rows": wastage_rows,
+        "timeline": timeline,
     }
