@@ -1,6 +1,6 @@
 import uuid
 import math
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -355,7 +355,8 @@ async def upload_inquiry_file(
         old = await db.execute(select(EventVendor).where(EventVendor.inquiry_id == inquiry_id))
         for v in old.scalars().all():
             await db.delete(v)
-        for r in parsed:
+        base_ts = datetime.now(timezone.utc)
+        for i, r in enumerate(parsed):
             db.add(EventVendor(
                 inquiry_id=inquiry_id,
                 vendor_name=r["vendor_name"],
@@ -363,13 +364,15 @@ async def upload_inquiry_file(
                 rate=r["rate"],
                 total_cost=r["total_cost"],
                 remark=r["remark"],
+                created_at=base_ts + timedelta(microseconds=i),
             ))
     elif file_type == "kitchen_inventory":
         parsed = parse_kitchen_inventory_file(file_path, ext)
         old = await db.execute(select(KitchenInventoryItem).where(KitchenInventoryItem.inquiry_id == inquiry_id))
         for k in old.scalars().all():
             await db.delete(k)
-        for r in parsed:
+        base_ts = datetime.now(timezone.utc)
+        for i, r in enumerate(parsed):
             db.add(KitchenInventoryItem(
                 inquiry_id=inquiry_id,
                 item_name=r["item_name"],
@@ -378,6 +381,7 @@ async def upload_inquiry_file(
                 used_qty=r["used_qty"],
                 remaining_qty=r["remaining_qty"],
                 remark=r["remark"],
+                created_at=base_ts + timedelta(microseconds=i),
             ))
 
     setattr(inquiry, f"{file_type}_file_name", file.filename)
