@@ -6,9 +6,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { useNavigate } from 'react-router-dom'
 import PageHeader from '@/components/common/PageHeader'
 import { KPICardSkeleton } from '@/components/common/Skeleton'
-import InventoryPanelModal from '@/components/inventory/InventoryPanelModal'
 import { uploadInventoryMovementFile } from '@/api/inquiries'
-import type { Inquiry } from '@/types/inquiry'
 import { toast } from 'sonner'
 import {
   Clock,
@@ -19,12 +17,6 @@ import {
 } from 'lucide-react'
 import { getErrorMessage } from '@/lib/apiError'
 
-const todayEvents = [
-  { id: '1', name: 'Sharma Wedding Reception', time: '6:00 PM', venue: 'Grand Palace Banquet' },
-  { id: '2', name: 'Tata Motors Annual Gala', time: '7:30 PM', venue: 'ITC Maurya' },
-  { id: '3', name: 'Mehta Family Birthday', time: '12:00 PM', venue: 'Hyatt Regency' },
-]
-
 export default function OperationsDashboard() {
   const { user } = useAuth()
   const navigate = useNavigate()
@@ -32,9 +24,10 @@ export default function OperationsDashboard() {
   const { data: kpis, isLoading } = useOperationsKPIs()
   const { data: inquiriesData } = useInquiries({ status: 'operation_handover', per_page: 10 })
   const confirmedEvents = inquiriesData?.items ?? []
+  const todayISO = new Date().toISOString().slice(0, 10)
+  const todaysEvents = confirmedEvents.filter((e) => e.event_date === todayISO)
   const [inventoryNames, setInventoryNames] = useState<Record<string, string>>({})
   const [uploadingId, setUploadingId] = useState<string | null>(null)
-  const [selectedInquiry, setSelectedInquiry] = useState<Inquiry | null>(null)
 
   const handleInventoryUpload = async (inqId: string, file?: File) => {
     if (!file) return
@@ -54,16 +47,15 @@ export default function OperationsDashboard() {
     <div className="space-y-6">
       <PageHeader title={`Hi, ${firstName}`} subtitle="Manage event execution, vendors, and logistics" />
 
-      {/* Top Row — 5 KPI Cards */}
-      <div className="grid grid-cols-5 gap-4">
+      {/* Top Row — 4 KPI Cards */}
+      <div className="grid grid-cols-4 gap-4">
         {isLoading
-          ? Array.from({ length: 5 }).map((_, i) => <KPICardSkeleton key={i} />)
+          ? Array.from({ length: 4 }).map((_, i) => <KPICardSkeleton key={i} />)
           : [
-              { label: 'Upcoming Events', value: kpis?.upcoming_events ?? 0, color: 'text-blue-600', to: '/operations' },
-              { label: 'Pending Tasks', value: kpis?.todays_events ?? 0, color: 'text-amber-600', to: '/operations' },
-              { label: 'Vendors Active', value: kpis?.pending_kitchen_plans ?? 0, color: 'text-rose-600', to: '/operations' },
-              { label: 'Budget Utilization', value: kpis?.pending_vendor_requests ?? 0, color: 'text-purple-600', to: '/operations' },
-              { label: 'Completion Rate', value: kpis?.pending_warehouse_requests ?? 0, color: 'text-emerald-600', to: '/operations' },
+              { label: 'Upcoming Events', value: kpis?.upcoming_events ?? 0, color: 'text-blue-600', to: '/events' },
+              { label: "Today's Events", value: kpis?.todays_events ?? 0, color: 'text-amber-600', to: '/events' },
+              { label: 'Pending Kitchen Plans', value: kpis?.pending_kitchen_plans ?? 0, color: 'text-rose-600', to: '/events' },
+              { label: 'Pending Warehouse Requests', value: kpis?.pending_warehouse_requests ?? 0, color: 'text-emerald-600', to: '/events' },
             ].map((kpi, i) => (
               <motion.div
                 key={kpi.label}
@@ -92,22 +84,27 @@ export default function OperationsDashboard() {
         >
           <h3 className="mb-4 shrink-0 text-sm font-bold text-gray-900">Today's Schedule</h3>
           <div className="flex-1 space-y-3 overflow-y-auto">
-            {todayEvents.map((evt, i) => (
-              <motion.div
-                key={evt.id}
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.5 + i * 0.08 }}
-                className="rounded-lg border border-gray-100 bg-white p-3.5"
-                style={{ borderLeft: '4px solid #D97706' }}
-              >
-                <p className="text-sm font-bold text-gray-900">{evt.name}</p>
-                <div className="mt-1 flex items-center gap-3 text-[11px] text-gray-500">
-                  <span className="flex items-center gap-1"><Clock size={10} /> {evt.time}</span>
-                  <span className="flex items-center gap-1"><Building2 size={10} /> {evt.venue}</span>
-                </div>
-              </motion.div>
-            ))}
+            {todaysEvents.length === 0 ? (
+              <p className="flex h-full items-center justify-center text-xs text-gray-400">No events scheduled for today.</p>
+            ) : (
+              todaysEvents.map((evt, i) => (
+                <motion.div
+                  key={evt.id}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.5 + i * 0.08 }}
+                  onClick={() => navigate(`/events/${evt.id}`)}
+                  className="cursor-pointer rounded-lg border border-gray-100 bg-white p-3.5 transition-shadow hover:shadow-md"
+                  style={{ borderLeft: '4px solid #D97706' }}
+                >
+                  <p className="text-sm font-bold text-gray-900">{evt.client_name}</p>
+                  <div className="mt-1 flex items-center gap-3 text-[11px] text-gray-500">
+                    <span className="flex items-center gap-1"><Clock size={10} /> {evt.event_type}</span>
+                    <span className="flex items-center gap-1"><Building2 size={10} /> {evt.venue}</span>
+                  </div>
+                </motion.div>
+              ))
+            )}
           </div>
         </motion.div>
       </div>
@@ -148,9 +145,9 @@ export default function OperationsDashboard() {
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1">
                           <button
-                            onClick={() => setSelectedInquiry(inq)}
+                            onClick={() => navigate(`/events/${inq.id}`)}
                             className="rounded bg-maroon p-1.5 text-white hover:bg-maroon-dark"
-                            title="Open details — menu, ingredient excel, inventory excel, stock register">
+                            title="Open Event View">
                             <Eye size={14} />
                           </button>
                           <label className={`flex cursor-pointer items-center gap-1 rounded p-1 hover:bg-gray-100 hover:text-emerald-600 ${inventoryName ? 'text-emerald-600' : 'text-gray-400'}`} title={inventoryName ? `Inventory excel uploaded: ${inventoryName}` : 'Upload inventory excel'}>
@@ -175,12 +172,6 @@ export default function OperationsDashboard() {
           </div>
         </motion.div>
       </div>
-
-      <InventoryPanelModal
-        inquiry={selectedInquiry}
-        isOpen={Boolean(selectedInquiry)}
-        onClose={() => setSelectedInquiry(null)}
-      />
     </div>
   )
 }
