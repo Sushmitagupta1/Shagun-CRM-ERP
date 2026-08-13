@@ -1,5 +1,6 @@
 import os
 os.environ["ENVIRONMENT"] = "testing"
+os.environ["UPLOAD_DIR"] = os.path.join(os.environ.get("TEMP", "/tmp"), "shagun_test_uploads")
 
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
