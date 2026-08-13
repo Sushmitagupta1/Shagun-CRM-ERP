@@ -12,6 +12,8 @@ from app.models.inventory_file_version import InventoryFileVersion
 from app.models.event_inventory_item import EventInventoryItem
 from app.models.event_vendor import EventVendor
 from app.models.kitchen_inventory_item import KitchenInventoryItem
+from app.models.warehouse_request import WarehouseRequest
+from app.models.event_photo import EventPhoto
 
 __all__ = [
     "User",
@@ -35,4 +37,6 @@ __all__ = [
     "EventInventoryItem",
     "EventVendor",
     "KitchenInventoryItem",
+    "WarehouseRequest",
+    "EventPhoto",
 ]
