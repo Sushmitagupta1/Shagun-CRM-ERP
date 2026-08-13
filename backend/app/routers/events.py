@@ -2,7 +2,7 @@ import os
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, File, Form, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
@@ -13,8 +13,19 @@ from app.models.user import User
 from app.models.event_inventory_item import EventInventoryItem
 from app.models.event_vendor import EventVendor
 from app.models.inventory_file_version import InventoryFileVersion
-from app.schemas.event import EventListItem, EventDetail, InventoryItemsSaveRequest, VendorsSaveRequest
-from app.services.event_service import build_event_bundle, get_base_inventory_map
+from app.models.inventory_movement import InventoryMovement
+from app.models.warehouse_request import WarehouseRequest
+from app.models.event_photo import EventPhoto
+from app.schemas.event import (
+    EventListItem,
+    EventDetail,
+    InventoryItemsSaveRequest,
+    VendorsSaveRequest,
+    WarehouseRequestCreate,
+    TransferCreate,
+    WarehouseRequestItem,
+)
+from app.services.event_service import build_event_bundle, get_base_inventory_map, _user_name_map, _inquiry_name_map
 from app.middleware.auth import get_current_user, require_role
 
 router = APIRouter(prefix="/api/events", tags=["events"])
@@ -26,6 +37,19 @@ async def get_inquiry_or_404(db: AsyncSession, inquiry_id: uuid.UUID) -> Inquiry
     if inquiry is None:
         raise HTTPException(status_code=404, detail="Event not found")
     return inquiry
+
+
+async def get_warehouse_request_or_404(db: AsyncSession, inquiry_id: uuid.UUID, request_id: uuid.UUID) -> WarehouseRequest:
+    result = await db.execute(
+        select(WarehouseRequest).where(
+            WarehouseRequest.id == request_id,
+            WarehouseRequest.inquiry_id == inquiry_id,
+        )
+    )
+    req = result.scalar_one_or_none()
+    if req is None:
+        raise HTTPException(status_code=404, detail="Warehouse request not found")
+    return req
 
 
 @router.get("", response_model=list[EventListItem])
@@ -168,6 +192,262 @@ async def save_vendors(
 
     await db.commit()
     return {"ok": True}
+
+
+@router.post("/{inquiry_id}/warehouse-requests")
+async def create_warehouse_requests(
+    inquiry_id: uuid.UUID,
+    data: WarehouseRequestCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role("admin", "operations_manager")),
+):
+    inquiry = await get_inquiry_or_404(db, inquiry_id)
+    if inquiry.is_completed:
+        raise HTTPException(status_code=400, detail="Event is completed and locked")
+    items = data.items
+    if data.from_ingredient:
+        base_map = await get_base_inventory_map(db, inquiry)
+        if not base_map:
+            raise HTTPException(status_code=400, detail="No ingredient plan uploaded for this event")
+        items = [
+            WarehouseRequestItem(item_name=v["item_name"], quantity=v["required_qty"], unit=v["unit"])
+            for v in base_map.values()
+        ]
+    if not items:
+        raise HTTPException(status_code=400, detail="No items to request")
+    created = 0
+    for it in items:
+        if not it.item_name.strip():
+            continue
+        db.add(WarehouseRequest(
+            inquiry_id=inquiry_id,
+            item_name=it.item_name.strip(),
+            quantity=it.quantity,
+            unit=it.unit,
+            status="pending",
+            requested_by=current_user.id,
+        ))
+        created += 1
+    await db.commit()
+    return {"ok": True, "created": created}
+
+
+@router.get("/{inquiry_id}/warehouse-requests")
+async def list_warehouse_requests(
+    inquiry_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    await get_inquiry_or_404(db, inquiry_id)
+    result = await db.execute(
+        select(WarehouseRequest)
+        .where(WarehouseRequest.inquiry_id == inquiry_id)
+        .order_by(WarehouseRequest.created_at.asc())
+    )
+    rows = result.scalars().all()
+    user_ids = {r.requested_by for r in rows}
+    for r in rows:
+        if r.issued_by:
+            user_ids.add(r.issued_by)
+        if r.received_by:
+            user_ids.add(r.received_by)
+    names = await _user_name_map(db, user_ids)
+    return [
+        {
+            "id": str(r.id),
+            "item_name": r.item_name,
+            "quantity": r.quantity,
+            "unit": r.unit,
+            "status": r.status,
+            "requested_by_name": names.get(str(r.requested_by)),
+            "issued_by_name": names.get(str(r.issued_by)) if r.issued_by else None,
+            "received_by_name": names.get(str(r.received_by)) if r.received_by else None,
+            "notes": r.notes,
+            "created_at": r.created_at,
+        }
+        for r in rows
+    ]
+
+
+@router.patch("/{inquiry_id}/warehouse-requests/{request_id}/issue")
+async def issue_warehouse_request(
+    inquiry_id: uuid.UUID,
+    request_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role("admin", "warehouse")),
+):
+    inquiry = await get_inquiry_or_404(db, inquiry_id)
+    if inquiry.is_completed:
+        raise HTTPException(status_code=400, detail="Event is completed and locked")
+    req = await get_warehouse_request_or_404(db, inquiry_id, request_id)
+    if req.status == "received":
+        raise HTTPException(status_code=400, detail="Request already received")
+    req.status = "issued"
+    req.issued_by = current_user.id
+    await db.commit()
+    return {"ok": True, "status": req.status}
+
+
+@router.patch("/{inquiry_id}/warehouse-requests/{request_id}/receive")
+async def receive_warehouse_request(
+    inquiry_id: uuid.UUID,
+    request_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role("admin", "operations_manager")),
+):
+    inquiry = await get_inquiry_or_404(db, inquiry_id)
+    if inquiry.is_completed:
+        raise HTTPException(status_code=400, detail="Event is completed and locked")
+    req = await get_warehouse_request_or_404(db, inquiry_id, request_id)
+    req.status = "received"
+    req.received_by = current_user.id
+    await db.commit()
+    return {"ok": True, "status": req.status}
+
+
+@router.post("/{inquiry_id}/photos")
+async def upload_event_photo(
+    inquiry_id: uuid.UUID,
+    file: UploadFile = File(...),
+    category: str = Form(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role("admin", "operations_manager")),
+):
+    inquiry = await get_inquiry_or_404(db, inquiry_id)
+    if inquiry.is_completed:
+        raise HTTPException(status_code=400, detail="Event is completed and locked")
+    if category not in ("before_setup", "setup", "after_cleaning"):
+        raise HTTPException(status_code=400, detail="category must be one of: before_setup, setup, after_cleaning")
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    if ext not in (".jpg", ".jpeg", ".png", ".webp"):
+        raise HTTPException(status_code=400, detail="Only image files are allowed")
+    content = await file.read()
+    if len(content) > settings.MAX_UPLOAD_SIZE:
+        raise HTTPException(status_code=400, detail="File too large (max 20MB)")
+    upload_dir = os.path.join(settings.UPLOAD_DIR, str(inquiry_id), "photos", category)
+    os.makedirs(upload_dir, exist_ok=True)
+    file_path = os.path.join(upload_dir, file.filename or "unnamed")
+    with open(file_path, "wb") as f:
+        f.write(content)
+    photo = EventPhoto(
+        inquiry_id=inquiry_id,
+        category=category,
+        file_name=file.filename or "unnamed",
+        file_path=file_path,
+        uploaded_by=current_user.id,
+    )
+    db.add(photo)
+    await db.commit()
+    await db.refresh(photo)
+    return {"id": str(photo.id), "file_name": photo.file_name}
+
+
+@router.get("/{inquiry_id}/photos")
+async def list_event_photos(
+    inquiry_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    await get_inquiry_or_404(db, inquiry_id)
+    result = await db.execute(
+        select(EventPhoto, User.full_name)
+        .join(User, EventPhoto.uploaded_by == User.id)
+        .where(EventPhoto.inquiry_id == inquiry_id)
+        .order_by(EventPhoto.created_at.desc())
+    )
+    return [
+        {
+            "id": str(p.id),
+            "category": p.category,
+            "file_name": p.file_name,
+            "uploaded_at": p.created_at,
+            "uploaded_by_name": name,
+        }
+        for p, name in result.all()
+    ]
+
+
+@router.get("/{inquiry_id}/photos/{photo_id}/download")
+async def download_event_photo(
+    inquiry_id: uuid.UUID,
+    photo_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    await get_inquiry_or_404(db, inquiry_id)
+    result = await db.execute(
+        select(EventPhoto).where(
+            EventPhoto.id == photo_id,
+            EventPhoto.inquiry_id == inquiry_id,
+        )
+    )
+    photo = result.scalar_one_or_none()
+    if photo is None:
+        raise HTTPException(status_code=404, detail="Photo not found")
+    path = Path(photo.file_path).resolve()
+    upload_root = Path(settings.UPLOAD_DIR).resolve()
+    if not str(path).startswith(str(upload_root)) or not os.path.isfile(path):
+        raise HTTPException(status_code=404, detail="Photo not found")
+    return FileResponse(path, filename=photo.file_name)
+
+
+@router.post("/{inquiry_id}/transfers")
+async def create_transfer(
+    inquiry_id: uuid.UUID,
+    data: TransferCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role("admin", "operations_manager")),
+):
+    inquiry = await get_inquiry_or_404(db, inquiry_id)
+    if inquiry.is_completed:
+        raise HTTPException(status_code=400, detail="Event is completed and locked")
+    if str(data.to_inquiry_id) == str(inquiry_id):
+        raise HTTPException(status_code=400, detail="Target event must differ from the source event")
+    target = await db.execute(select(Inquiry).where(Inquiry.id == data.to_inquiry_id))
+    if target.scalar_one_or_none() is None:
+        raise HTTPException(status_code=404, detail="Target event not found")
+    db.add(InventoryMovement(
+        inquiry_id=inquiry_id,
+        movement_type="transferred",
+        item_name=data.item_name,
+        quantity=data.quantity,
+        unit=data.unit,
+        to_inquiry_id=data.to_inquiry_id,
+        created_by=current_user.id,
+    ))
+    await db.commit()
+    return {"ok": True}
+
+
+@router.get("/{inquiry_id}/transfers")
+async def list_transfers(
+    inquiry_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    inquiry = await get_inquiry_or_404(db, inquiry_id)
+    result = await db.execute(
+        select(InventoryMovement)
+        .where(
+            InventoryMovement.inquiry_id == inquiry_id,
+            InventoryMovement.movement_type == "transferred",
+        )
+        .order_by(InventoryMovement.created_at.desc())
+    )
+    rows = result.scalars().all()
+    target_names = await _inquiry_name_map(db, {m.to_inquiry_id for m in rows if m.to_inquiry_id})
+    return [
+        {
+            "id": str(m.id),
+            "item_name": m.item_name,
+            "quantity": m.quantity,
+            "unit": m.unit,
+            "from_event": inquiry.client_name,
+            "to_event": target_names.get(str(m.to_inquiry_id)) if m.to_inquiry_id else None,
+            "created_at": m.created_at,
+        }
+        for m in rows
+    ]
 
 
 @router.post("/{inquiry_id}/complete")
