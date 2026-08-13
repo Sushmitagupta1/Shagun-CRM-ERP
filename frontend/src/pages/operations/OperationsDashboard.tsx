@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
+import dayjs from 'dayjs'
 import { useOperationsKPIs } from '@/hooks/useDashboard'
 import { useInquiries } from '@/hooks/useInquiries'
+import { useEvents } from '@/hooks/useEvents'
 import { useAuth } from '@/hooks/useAuth'
 import { useNavigate } from 'react-router-dom'
 import PageHeader from '@/components/common/PageHeader'
@@ -24,8 +26,9 @@ export default function OperationsDashboard() {
   const { data: kpis, isLoading } = useOperationsKPIs()
   const { data: inquiriesData } = useInquiries({ status: 'operation_handover', per_page: 10 })
   const confirmedEvents = inquiriesData?.items ?? []
-  const todayISO = new Date().toISOString().slice(0, 10)
-  const todaysEvents = confirmedEvents.filter((e) => e.event_date === todayISO)
+  const { data: events } = useEvents()
+  const todayISO = dayjs().format('YYYY-MM-DD')
+  const todaysEvents = events?.filter((e) => e.event_date === todayISO) ?? []
   const [inventoryNames, setInventoryNames] = useState<Record<string, string>>({})
   const [uploadingId, setUploadingId] = useState<string | null>(null)
 
