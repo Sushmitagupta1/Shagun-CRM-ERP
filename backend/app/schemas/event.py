@@ -33,6 +33,7 @@ class EventVendorRow(BaseModel):
     service_name: str | None = None
     rate: float | None = None
     total_cost: float | None = None
+    payment_status: str = "unpaid"
     remark: str | None = None
 
 
@@ -65,6 +66,63 @@ class FileVersion(BaseModel):
     uploaded_by_name: str | None = None
 
 
+class WarehouseRequestRow(BaseModel):
+    id: uuid.UUID
+    item_name: str
+    quantity: float = 0
+    unit: str | None = None
+    status: str = "pending"
+    requested_by_name: str | None = None
+    issued_by_name: str | None = None
+    received_by_name: str | None = None
+    notes: str | None = None
+    created_at: datetime
+
+
+class EventPhotoRow(BaseModel):
+    id: uuid.UUID
+    category: str
+    file_name: str
+    uploaded_at: datetime
+    uploaded_by_name: str | None = None
+
+
+class TransferRow(BaseModel):
+    id: uuid.UUID
+    item_name: str
+    quantity: float = 0
+    unit: str | None = None
+    from_event: str
+    to_event: str | None = None
+    created_at: datetime
+
+
+class TimelineStage(BaseModel):
+    key: str
+    label: str
+    status: str
+    date: datetime | None = None
+    description: str | None = None
+
+
+class WarehouseRequestItem(BaseModel):
+    item_name: str
+    quantity: float = 0
+    unit: str | None = None
+
+
+class WarehouseRequestCreate(BaseModel):
+    from_ingredient: bool = False
+    items: list[WarehouseRequestItem] | None = None
+
+
+class TransferCreate(BaseModel):
+    item_name: str
+    quantity: float = 0
+    unit: str | None = None
+    to_inquiry_id: uuid.UUID
+
+
 class EventDetail(BaseModel):
     id: uuid.UUID
     client_name: str
@@ -85,6 +143,15 @@ class EventDetail(BaseModel):
     kitchen_inventory: list[KitchenInventoryRow] = []
     closure: ClosureSummary = ClosureSummary()
     upload_history: list[FileVersion] = []
+    presentation_file_name: str | None = None
+    ingredient_file_name: str | None = None
+    kitchen_inventory_file_name: str | None = None
+    warehouse_requests: list[WarehouseRequestRow] = []
+    photos: list[EventPhotoRow] = []
+    returns: list[TransferRow] = []
+    transfers: list[TransferRow] = []
+    wastage_rows: list[TransferRow] = []
+    timeline: list[TimelineStage] = []
 
 
 class InventoryItemSave(BaseModel):
@@ -103,6 +170,7 @@ class VendorSave(BaseModel):
     id: uuid.UUID
     rate: float | None = None
     total_cost: float | None = None
+    payment_status: str | None = None
     remark: str | None = None
 
 
