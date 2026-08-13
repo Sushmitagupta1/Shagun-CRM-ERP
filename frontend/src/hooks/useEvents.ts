@@ -37,6 +37,9 @@ export function useCompleteEvent(id: string) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: () => eventsApi.completeEvent(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['event-detail', id] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['event-detail', id] })
+      queryClient.invalidateQueries({ queryKey: ['events'] })
+    },
   })
 }
