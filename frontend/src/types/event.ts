@@ -28,6 +28,7 @@ export interface EventVendorRow {
   service_name: string | null
   rate: number | null
   total_cost: number | null
+  payment_status: string
   remark: string | null
 }
 
@@ -80,6 +81,15 @@ export interface EventDetail {
   kitchen_inventory: KitchenInventoryRow[]
   closure: ClosureSummary
   upload_history: FileVersion[]
+  presentation_file_name: string | null
+  ingredient_file_name: string | null
+  kitchen_inventory_file_name: string | null
+  warehouse_requests: WarehouseRequestRow[]
+  photos: EventPhotoRow[]
+  returns: TransferRow[]
+  transfers: TransferRow[]
+  wastage_rows: TransferRow[]
+  timeline: TimelineStage[]
 }
 
 export interface InventoryItemSave {
@@ -94,5 +104,45 @@ export interface VendorSave {
   id: string
   rate?: number | null
   total_cost?: number | null
+  payment_status?: string | null
   remark?: string | null
+}
+
+export interface WarehouseRequestRow {
+  id: string
+  item_name: string
+  quantity: number
+  unit: string | null
+  status: string
+  requested_by_name: string | null
+  issued_by_name: string | null
+  received_by_name: string | null
+  notes: string | null
+  created_at: string
+}
+
+export interface EventPhotoRow {
+  id: string
+  category: string
+  file_name: string
+  uploaded_at: string
+  uploaded_by_name: string | null
+}
+
+export interface TransferRow {
+  id: string
+  item_name: string
+  quantity: number
+  unit: string | null
+  from_event: string
+  to_event: string | null
+  created_at: string
+}
+
+export interface TimelineStage {
+  key: string
+  label: string
+  status: string
+  date: string | null
+  description: string | null
 }

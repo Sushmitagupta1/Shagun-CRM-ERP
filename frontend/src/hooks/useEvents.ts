@@ -43,3 +43,65 @@ export function useCompleteEvent(id: string) {
     },
   })
 }
+
+export function useWarehouseRequests(id: string) {
+  return useQuery({
+    queryKey: ['warehouse-requests', id],
+    queryFn: () => eventsApi.getWarehouseRequests(id),
+  })
+}
+
+export function useCreateWarehouseRequests(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: { from_ingredient: boolean; items?: { item_name: string; quantity: number; unit?: string | null }[] }) =>
+      eventsApi.createWarehouseRequests(id, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['event-detail', id] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard', 'operations'] })
+    },
+  })
+}
+
+export function useIssueWarehouseRequest(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (requestId: string) => eventsApi.issueWarehouseRequest(id, requestId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['event-detail', id] }),
+  })
+}
+
+export function useReceiveWarehouseRequest(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (requestId: string) => eventsApi.receiveWarehouseRequest(id, requestId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['event-detail', id] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard', 'operations'] })
+    },
+  })
+}
+
+export function useUploadEventPhoto(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ category, file }: { category: string; file: File }) => eventsApi.uploadEventPhoto(id, category, file),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['event-detail', id] }),
+  })
+}
+
+export function useCreateTransfer(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: { item_name: string; quantity: number; unit?: string | null; to_inquiry_id: string }) =>
+      eventsApi.createTransfer(id, payload),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['event-detail', id] }),
+  })
+}
+
+export function useTransfers(id: string) {
+  return useQuery({
+    queryKey: ['transfers', id],
+    queryFn: () => eventsApi.getTransfers(id),
+  })
+}
