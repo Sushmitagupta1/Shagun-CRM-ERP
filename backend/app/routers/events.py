@@ -1,10 +1,12 @@
 import os
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
+from app.config import settings
 from app.database import get_db
 from app.models.inquiry import Inquiry, InquiryStatus
 from app.models.user import User
@@ -68,6 +70,7 @@ async def download_upload_version(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role("admin", "operations_manager", "kitchen", "warehouse")),
 ):
+    await get_inquiry_or_404(db, inquiry_id)
     result = await db.execute(
         select(InventoryFileVersion).where(
             InventoryFileVersion.id == version_id,
@@ -75,9 +78,13 @@ async def download_upload_version(
         )
     )
     version = result.scalar_one_or_none()
-    if version is None or not os.path.isfile(version.file_path):
+    if version is None:
         raise HTTPException(status_code=404, detail="File not found")
-    return FileResponse(version.file_path, filename=version.file_name)
+    path = Path(version.file_path).resolve()
+    upload_root = Path(settings.UPLOAD_DIR).resolve()
+    if not str(path).startswith(str(upload_root)) or not os.path.isfile(path):
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(path, filename=version.file_name)
 
 
 @router.post("/{inquiry_id}/inventory-items")

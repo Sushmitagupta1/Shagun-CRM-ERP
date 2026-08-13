@@ -155,11 +155,21 @@ async def test_download_upload_version(client):
     dl = await client.get(f"/api/events/{inquiry_id}/uploads/{version_id}/download", headers=auth(token))
     assert dl.status_code == 200, dl.text
     assert "received_v1.csv" in (dl.headers.get("content-disposition") or "")
+    assert dl.content == b"Paneer,5,kg\n"
 
     # scoping: version of event A not downloadable via event B
     other = await create_handover_inquiry(client, token)
     other_dl = await client.get(f"/api/events/{other}/uploads/{version_id}/download", headers=auth(token))
     assert other_dl.status_code == 404
+
+    # random version id on same event -> 404
+    missing = await client.get(f"/api/events/{inquiry_id}/uploads/{uuid.uuid4()}/download", headers=auth(token))
+    assert missing.status_code == 404
+
+    # role outside the gate -> 403
+    sales_token = await login(client, "vinod@shaguncatering.com", "vinod123")
+    forbidden = await client.get(f"/api/events/{inquiry_id}/uploads/{version_id}/download", headers=auth(sales_token))
+    assert forbidden.status_code == 403
 
 
 async def test_vendor_upload_and_total(client):

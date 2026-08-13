@@ -433,6 +433,8 @@ export default function EventView() {
                     <td className="px-3 py-2.5">
                       <button
                         onClick={() => downloadUploadVersion(id, v.id, v.file_name)}
+                        title={`Download ${v.file_name}`}
+                        aria-label={`Download ${v.file_name}`}
                         className="flex items-center gap-1 rounded border border-gray-200 px-2 py-1 text-[11px] font-medium hover:bg-gray-50"
                       >
                         <Download size={11} /> Download
