@@ -11,13 +11,16 @@ from app.models.inventory_movement import InventoryMovement
 from app.models.notification import Notification
 from app.models.menu_slot import MenuSlot
 from app.models.user import User, Role
+from app.models.event_vendor import EventVendor
+from app.models.kitchen_inventory_item import KitchenInventoryItem
+from app.models.inventory_file_version import InventoryFileVersion
 from app.schemas.inquiry import InquiryCreate, InquiryUpdate, InquiryResponse, FollowUpCreate, FollowUpUpdate, FollowUpResponse, MeetingCreate, MeetingStatusUpdate, MeetingResponse, MenuSlotResponse, CalendarResponse
 from app.schemas.inventory import InventoryMovementCreate, InventoryMovementResponse
 from app.schemas.common import PaginatedResponse
 from app.middleware.auth import get_current_user
 
 from app.services.inquiry_service import get_inquiry_or_404
-from app.services.file_parsers import read_file_preview, parse_item_qty_file
+from app.services.file_parsers import read_file_preview, parse_item_qty_file, parse_vendor_file, parse_kitchen_inventory_file
 import os
 from fastapi import UploadFile, File
 from app.config import settings
@@ -302,6 +305,8 @@ ALLOWED_ROLES = {
     "returned": {"admin", "operations_manager", "warehouse"},
     "transferred": {"admin", "operations_manager", "warehouse"},
     "wastage": {"admin", "operations_manager", "warehouse"},
+    "vendor": {"admin", "operations_manager", "warehouse"},
+    "kitchen_inventory": {"admin", "kitchen"},
     "call_recording": {"admin", "sales_head", "presentation_exec"},
 }
 
@@ -328,6 +333,8 @@ async def upload_inquiry_file(
     if current_user.role.name not in ALLOWED_ROLES[file_type]:
         raise HTTPException(status_code=403, detail="Not authorized")
     inquiry = await get_inquiry_or_404(db, inquiry_id)
+    if inquiry.is_completed:
+        raise HTTPException(status_code=400, detail="Event is completed and locked")
 
     ext = os.path.splitext(file.filename or "")[1].lower()
     if ext not in settings.ALLOWED_EXTENSIONS:
@@ -347,6 +354,40 @@ async def upload_inquiry_file(
     setattr(inquiry, f"{file_type}_file_path", file_path)
     await db.commit()
     await db.refresh(inquiry)
+
+    if file_type == "vendor":
+        ext = os.path.splitext(file.filename or "")[1].lower()
+        parsed = parse_vendor_file(file_path, ext)
+        old = await db.execute(select(EventVendor).where(EventVendor.inquiry_id == inquiry_id))
+        for v in old.scalars().all():
+            await db.delete(v)
+        for r in parsed:
+            db.add(EventVendor(
+                inquiry_id=inquiry_id,
+                vendor_name=r["vendor_name"],
+                service_name=r["service_name"],
+                rate=r["rate"],
+                total_cost=r["total_cost"],
+                remark=r["remark"],
+            ))
+        await db.commit()
+    elif file_type == "kitchen_inventory":
+        ext = os.path.splitext(file.filename or "")[1].lower()
+        parsed = parse_kitchen_inventory_file(file_path, ext)
+        old = await db.execute(select(KitchenInventoryItem).where(KitchenInventoryItem.inquiry_id == inquiry_id))
+        for k in old.scalars().all():
+            await db.delete(k)
+        for r in parsed:
+            db.add(KitchenInventoryItem(
+                inquiry_id=inquiry_id,
+                item_name=r["item_name"],
+                prepared_qty=r["prepared_qty"],
+                unit=r["unit"],
+                used_qty=r["used_qty"],
+                remaining_qty=r["remaining_qty"],
+                remark=r["remark"],
+            ))
+        await db.commit()
 
     if file_type in ("menu", "presentation"):
         notify_result = await db.execute(
@@ -384,6 +425,8 @@ async def upload_inventory_movement_file(
     if current_user.role.name not in ("admin", "operations_manager", "warehouse"):
         raise HTTPException(status_code=403, detail="Not authorized")
     inquiry = await get_inquiry_or_404(db, inquiry_id)
+    if inquiry.is_completed:
+        raise HTTPException(status_code=400, detail="Event is completed and locked")
 
     ext = os.path.splitext(file.filename or "")[1].lower()
     if ext not in (".xlsx", ".csv"):
@@ -412,6 +455,23 @@ async def upload_inventory_movement_file(
             unit=unit,
             created_by=current_user.id,
         ))
+
+    ver_result = await db.execute(
+        select(func.coalesce(func.max(InventoryFileVersion.version_no), 0))
+        .where(
+            InventoryFileVersion.inquiry_id == inquiry_id,
+            InventoryFileVersion.movement_type == movement_type,
+        )
+    )
+    next_version = (ver_result.scalar() or 0) + 1
+    db.add(InventoryFileVersion(
+        inquiry_id=inquiry_id,
+        movement_type=movement_type,
+        file_name=file.filename,
+        file_path=file_path,
+        version_no=next_version,
+        uploaded_by=current_user.id,
+    ))
 
     name_col, path_col = INVENTORY_FILE_COLUMNS[movement_type]
     setattr(inquiry, name_col, file.filename)
