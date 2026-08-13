@@ -15,6 +15,8 @@ import MenuLibrary from '@/pages/menu/MenuLibrary'
 import MenuGenerator from '@/pages/menu/MenuGenerator'
 import PresentationDashboard from '@/pages/presentation/PresentationDashboard'
 import OperationsDashboard from '@/pages/operations/OperationsDashboard'
+import EventList from '@/pages/events/EventList'
+import EventView from '@/pages/events/EventView'
 import KitchenDashboard from '@/pages/kitchen/KitchenDashboard'
 import WarehouseDashboard from '@/pages/warehouse/WarehouseDashboard'
 import InquiryList from '@/pages/inquiries/InquiryList'
@@ -128,6 +130,22 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute allowedRoles={['operations_manager']}>
             <OperationsDashboard />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'events',
+        element: (
+          <ProtectedRoute allowedRoles={['operations_manager', 'kitchen', 'admin']}>
+            <EventList />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'events/:id',
+        element: (
+          <ProtectedRoute allowedRoles={['operations_manager', 'kitchen', 'admin']}>
+            <EventView />
           </ProtectedRoute>
         ),
       },
