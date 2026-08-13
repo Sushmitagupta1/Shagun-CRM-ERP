@@ -17,6 +17,7 @@ import PageHeader from '@/components/common/PageHeader'
 import { useAuth } from '@/hooks/useAuth'
 import { useEventDetail, useSaveInventoryItems, useSaveVendors, useCompleteEvent } from '@/hooks/useEvents'
 import { downloadInquiryFile, uploadInquiryFile } from '@/api/inquiries'
+import { downloadUploadVersion } from '@/api/events'
 import type { EventInventoryRow, EventVendorRow } from '@/types/event'
 import { getErrorMessage } from '@/lib/apiError'
 import { INQUIRY_STATUSES } from '@/lib/constants'
@@ -407,7 +408,45 @@ export default function EventView() {
         </div>
       </Section>
 
-      {/* 7. Mark Event as Completed */}
+      {/* 7. Upload History */}
+      <Section title="Upload History">
+        {data.upload_history.length === 0 ? (
+          <p className="py-4 text-center text-xs text-gray-400">No inventory movement uploads yet.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-200 bg-gray-50">
+                  {['Version', 'Movement Type', 'File Name', 'Uploaded At', 'Uploaded By', 'Actions'].map((h) => (
+                    <th key={h} className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-gray-500">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {data.upload_history.map((v) => (
+                  <tr key={v.id} className="border-b border-gray-50">
+                    <td className="px-3 py-2.5 text-xs font-medium text-gray-900">V{v.version_no}</td>
+                    <td className="px-3 py-2.5 text-xs capitalize text-gray-700">{v.movement_type}</td>
+                    <td className="px-3 py-2.5 text-xs text-gray-600">{v.file_name}</td>
+                    <td className="px-3 py-2.5 text-xs text-gray-600">{v.uploaded_at ? new Date(v.uploaded_at).toLocaleString('en-IN') : '—'}</td>
+                    <td className="px-3 py-2.5 text-xs text-gray-600">{v.uploaded_by_name ?? '—'}</td>
+                    <td className="px-3 py-2.5">
+                      <button
+                        onClick={() => downloadUploadVersion(id, v.id, v.file_name)}
+                        className="flex items-center gap-1 rounded border border-gray-200 px-2 py-1 text-[11px] font-medium hover:bg-gray-50"
+                      >
+                        <Download size={11} /> Download
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Section>
+
+      {/* 8. Mark Event as Completed */}
       {canComplete && (
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="flex justify-end rounded-xl border border-gray-100 bg-white p-5 shadow-md">
           <button onClick={handleComplete} disabled={complete.isPending}

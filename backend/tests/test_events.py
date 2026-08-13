@@ -137,6 +137,31 @@ async def test_upload_history_versions(client):
     assert history[0]["version_no"] == 2  # latest first
 
 
+async def test_download_upload_version(client):
+    token = await login(client, "admin@shaguncatering.com", "admin123")
+    inquiry_id = await create_handover_inquiry(client, token)
+
+    resp = await client.post(
+        f"/api/inquiries/{inquiry_id}/inventory-upload?movement_type=received",
+        headers=auth(token),
+        files=csv_upload("received_v1.csv", "Paneer,5,kg\n"),
+    )
+    assert resp.status_code == 200, resp.text
+
+    detail = (await client.get(f"/api/events/{inquiry_id}", headers=auth(token))).json()
+    version_id = detail["upload_history"][0]["id"]
+    assert detail["upload_history"][0]["file_name"] == "received_v1.csv"
+
+    dl = await client.get(f"/api/events/{inquiry_id}/uploads/{version_id}/download", headers=auth(token))
+    assert dl.status_code == 200, dl.text
+    assert "received_v1.csv" in (dl.headers.get("content-disposition") or "")
+
+    # scoping: version of event A not downloadable via event B
+    other = await create_handover_inquiry(client, token)
+    other_dl = await client.get(f"/api/events/{other}/uploads/{version_id}/download", headers=auth(token))
+    assert other_dl.status_code == 404
+
+
 async def test_vendor_upload_and_total(client):
     token = await login(client, "admin@shaguncatering.com", "admin123")
     inquiry_id = await create_handover_inquiry(client, token)

@@ -1,6 +1,8 @@
+import os
 import uuid
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from app.database import get_db
@@ -8,6 +10,7 @@ from app.models.inquiry import Inquiry, InquiryStatus
 from app.models.user import User
 from app.models.event_inventory_item import EventInventoryItem
 from app.models.event_vendor import EventVendor
+from app.models.inventory_file_version import InventoryFileVersion
 from app.schemas.event import EventListItem, EventDetail, InventoryItemsSaveRequest, VendorsSaveRequest
 from app.services.event_service import build_event_bundle, get_base_inventory_map
 from app.middleware.auth import get_current_user, require_role
@@ -56,6 +59,25 @@ async def get_event_detail(
 ):
     inquiry = await get_inquiry_or_404(db, inquiry_id)
     return await build_event_bundle(db, inquiry)
+
+
+@router.get("/{inquiry_id}/uploads/{version_id}/download")
+async def download_upload_version(
+    inquiry_id: uuid.UUID,
+    version_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role("admin", "operations_manager", "kitchen", "warehouse")),
+):
+    result = await db.execute(
+        select(InventoryFileVersion).where(
+            InventoryFileVersion.id == version_id,
+            InventoryFileVersion.inquiry_id == inquiry_id,
+        )
+    )
+    version = result.scalar_one_or_none()
+    if version is None or not os.path.isfile(version.file_path):
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(version.file_path, filename=version.file_name)
 
 
 @router.post("/{inquiry_id}/inventory-items")
