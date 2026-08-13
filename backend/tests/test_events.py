@@ -507,15 +507,24 @@ async def test_event_timeline_and_ops_kpis(client):
     assert stages[0]["status"] == "completed"
     assert stages[1]["status"] == "pending"
 
+    kpis_before = (await client.get("/api/dashboard/operations", headers=auth(admin_token))).json()
+
     kitchen = csv_upload("kitchen.csv", "Item Name,Prepared Qty,Unit,Used Qty,Remaining Qty,Remark\nPaneer,50,kg,0,50,ok\n")
-    await client.post(f"/api/inquiries/{inquiry_id}/upload?file_type=kitchen_inventory", headers=auth(admin_token), files=kitchen)
+    kitchen_resp = await client.post(f"/api/inquiries/{inquiry_id}/upload?file_type=kitchen_inventory", headers=auth(admin_token), files=kitchen)
+    assert kitchen_resp.status_code == 200, kitchen_resp.text
     detail = (await client.get(f"/api/events/{inquiry_id}", headers=auth(admin_token))).json()
     assert detail["timeline"][1]["status"] == "completed"
 
-    kpis = (await client.get("/api/dashboard/operations", headers=auth(admin_token))).json()
-    assert kpis["pending_kitchen_plans"] >= 1
-    assert kpis["pending_vendor_requests"] >= 1
+    kpis_after_kitchen = (await client.get("/api/dashboard/operations", headers=auth(admin_token))).json()
+    assert kpis_after_kitchen["pending_kitchen_plans"] == kpis_before["pending_kitchen_plans"] - 1
 
-    await client.post(f"/api/events/{inquiry_id}/warehouse-requests", headers=auth(admin_token), json={"from_ingredient": False, "items": [{"item_name": "Gas Cylinder", "quantity": 2, "unit": "pc"}]})
-    kpis = (await client.get("/api/dashboard/operations", headers=auth(admin_token))).json()
-    assert kpis["pending_warehouse_requests"] >= 1
+    vendor = csv_upload("vendor.csv", "Vendor Name,Service Name,Rate,Total Cost,Remark\nABC Catering,Staff,500,15000,staff team\n")
+    vendor_resp = await client.post(f"/api/inquiries/{inquiry_id}/upload?file_type=vendor", headers=auth(admin_token), files=vendor)
+    assert vendor_resp.status_code == 200, vendor_resp.text
+    kpis_after_vendor = (await client.get("/api/dashboard/operations", headers=auth(admin_token))).json()
+    assert kpis_after_vendor["pending_vendor_requests"] == kpis_before["pending_vendor_requests"] - 1
+
+    created = await client.post(f"/api/events/{inquiry_id}/warehouse-requests", headers=auth(admin_token), json={"from_ingredient": False, "items": [{"item_name": "Gas Cylinder", "quantity": 2, "unit": "pc"}]})
+    assert created.status_code == 200, created.text
+    kpis_after_request = (await client.get("/api/dashboard/operations", headers=auth(admin_token))).json()
+    assert kpis_after_request["pending_warehouse_requests"] == kpis_before["pending_warehouse_requests"] + 1
