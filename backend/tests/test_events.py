@@ -316,3 +316,206 @@ async def test_full_excel_preview_no_cap(client):
     preview = await client.get(f"/api/inquiries/{inquiry_id}/file/inventory/preview", headers=auth(token))
     assert preview.status_code == 200
     assert len(preview.json()["rows"]) == 251  # header + 250
+
+
+async def test_warehouse_request_lifecycle(client):
+    admin_token = await login(client, "admin@shaguncatering.com", "admin123")
+    warehouse_token = await login(client, "thol@shaguncatering.com", "thol123")
+    kitchen_token = await login(client, "kitchen@shaguncatering.com", "kitchen123")
+    inquiry_id = await create_handover_inquiry(client, admin_token)
+
+    ingredient = csv_upload("ingredient.csv", "Item Name,Qty,Unit\nPaneer,10,kg\nRice,20,kg\n")
+    resp = await client.post(f"/api/inquiries/{inquiry_id}/upload?file_type=ingredient", headers=auth(admin_token), files=ingredient)
+    assert resp.status_code == 200, resp.text
+
+    created = await client.post(f"/api/events/{inquiry_id}/warehouse-requests", headers=auth(admin_token), json={"from_ingredient": True})
+    assert created.status_code == 200, created.text
+    assert created.json()["created"] == 2
+
+    listed = await client.get(f"/api/events/{inquiry_id}/warehouse-requests", headers=auth(admin_token))
+    assert listed.status_code == 200
+    rows = listed.json()
+    assert len(rows) == 2
+    assert all(r["status"] == "pending" for r in rows)
+
+    request_id = rows[0]["id"]
+
+    issued = await client.patch(f"/api/events/{inquiry_id}/warehouse-requests/{request_id}/issue", headers=auth(warehouse_token))
+    assert issued.status_code == 200, issued.text
+    assert issued.json()["status"] == "issued"
+
+    received = await client.patch(f"/api/events/{inquiry_id}/warehouse-requests/{request_id}/receive", headers=auth(admin_token))
+    assert received.status_code == 200, received.text
+    assert received.json()["status"] == "received"
+
+    # kitchen cannot issue
+    forbidden = await client.patch(f"/api/events/{inquiry_id}/warehouse-requests/{request_id}/issue", headers=auth(kitchen_token))
+    assert forbidden.status_code == 403
+
+    # no ingredient plan -> 400
+    other = await create_handover_inquiry(client, admin_token)
+    bad = await client.post(f"/api/events/{other}/warehouse-requests", headers=auth(admin_token), json={"from_ingredient": True})
+    assert bad.status_code == 400
+
+    # completion lock
+    complete = await client.post(f"/api/events/{inquiry_id}/complete", headers=auth(admin_token))
+    assert complete.status_code == 200, complete.text
+    locked = await client.post(f"/api/events/{inquiry_id}/warehouse-requests", headers=auth(admin_token), json={"from_ingredient": True})
+    assert locked.status_code == 400
+
+
+async def test_photo_upload_and_download(client):
+    admin_token = await login(client, "admin@shaguncatering.com", "admin123")
+    sales_token = await login(client, "vinod@shaguncatering.com", "vinod123")
+    inquiry_id = await create_handover_inquiry(client, admin_token)
+
+    up = await client.post(
+        f"/api/events/{inquiry_id}/photos",
+        headers=auth(admin_token),
+        data={"category": "before_setup"},
+        files={"file": ("setup.jpg", b"\xff\xd8\xff\xe0fake-jpeg", "image/jpeg")},
+    )
+    assert up.status_code == 200, up.text
+    photo_id = up.json()["id"]
+
+    # bad category -> 400
+    bad = await client.post(
+        f"/api/events/{inquiry_id}/photos",
+        headers=auth(admin_token),
+        data={"category": "party"},
+        files={"file": ("x.jpg", b"data", "image/jpeg")},
+    )
+    assert bad.status_code == 400
+
+    # non-image -> 400
+    nonimg = await client.post(
+        f"/api/events/{inquiry_id}/photos",
+        headers=auth(admin_token),
+        data={"category": "setup"},
+        files={"file": ("x.csv", b"a,b", "text/csv")},
+    )
+    assert nonimg.status_code == 400
+
+    # sales cannot upload -> 403
+    forbidden = await client.post(
+        f"/api/events/{inquiry_id}/photos",
+        headers=auth(sales_token),
+        data={"category": "setup"},
+        files={"file": ("x.jpg", b"data", "image/jpeg")},
+    )
+    assert forbidden.status_code == 403
+
+    # bundle lists the photo
+    detail = (await client.get(f"/api/events/{inquiry_id}", headers=auth(admin_token))).json()
+    assert len(detail["photos"]) == 1
+    assert detail["photos"][0]["category"] == "before_setup"
+
+    # download works
+    dl = await client.get(f"/api/events/{inquiry_id}/photos/{photo_id}/download", headers=auth(admin_token))
+    assert dl.status_code == 200
+    assert dl.content == b"\xff\xd8\xff\xe0fake-jpeg"
+
+    # scoping: wrong event -> 404
+    other = await create_handover_inquiry(client, admin_token)
+    other_dl = await client.get(f"/api/events/{other}/photos/{photo_id}/download", headers=auth(admin_token))
+    assert other_dl.status_code == 404
+
+    # completion lock
+    complete = await client.post(f"/api/events/{inquiry_id}/complete", headers=auth(admin_token))
+    assert complete.status_code == 200, complete.text
+    locked = await client.post(
+        f"/api/events/{inquiry_id}/photos",
+        headers=auth(admin_token),
+        data={"category": "setup"},
+        files={"file": ("y.jpg", b"data", "image/jpeg")},
+    )
+    assert locked.status_code == 400
+
+
+async def test_direct_transfer(client):
+    admin_token = await login(client, "admin@shaguncatering.com", "admin123")
+    inquiry_a = await create_handover_inquiry(client, admin_token)
+    inquiry_b = await create_handover_inquiry(client, admin_token)
+
+    created = await client.post(f"/api/events/{inquiry_a}/transfers", headers=auth(admin_token), json={
+        "item_name": "Steel Plate", "quantity": 50, "unit": "pcs", "to_inquiry_id": inquiry_b,
+    })
+    assert created.status_code == 200, created.text
+
+    detail = (await client.get(f"/api/events/{inquiry_a}", headers=auth(admin_token))).json()
+    assert len(detail["transfers"]) == 1
+    assert detail["transfers"][0]["to_event"] is not None
+
+    transfers = (await client.get(f"/api/events/{inquiry_a}/transfers", headers=auth(admin_token))).json()
+    assert len(transfers) == 1
+    assert transfers[0]["item_name"] == "Steel Plate"
+
+    # self-transfer -> 400
+    self_t = await client.post(f"/api/events/{inquiry_a}/transfers", headers=auth(admin_token), json={
+        "item_name": "Plate", "quantity": 1, "to_inquiry_id": inquiry_a,
+    })
+    assert self_t.status_code == 400
+
+    # missing target -> 404
+    missing = await client.post(f"/api/events/{inquiry_a}/transfers", headers=auth(admin_token), json={
+        "item_name": "Plate", "quantity": 1, "to_inquiry_id": str(uuid.uuid4()),
+    })
+    assert missing.status_code == 404
+
+    # sales cannot create -> 403
+    sales_token = await login(client, "vinod@shaguncatering.com", "vinod123")
+    forbidden = await client.post(f"/api/events/{inquiry_a}/transfers", headers=auth(sales_token), json={
+        "item_name": "Plate", "quantity": 1, "to_inquiry_id": inquiry_b,
+    })
+    assert forbidden.status_code == 403
+
+
+async def test_vendor_payment_status_save(client):
+    admin_token = await login(client, "admin@shaguncatering.com", "admin123")
+    inquiry_id = await create_handover_inquiry(client, admin_token)
+
+    vendor = csv_upload("vendor.csv", "Vendor Name,Service Name,Rate,Total Cost,Remark\nABC Catering,Staff,500,15000,staff team\n")
+    resp = await client.post(f"/api/inquiries/{inquiry_id}/upload?file_type=vendor", headers=auth(admin_token), files=vendor)
+    assert resp.status_code == 200, resp.text
+
+    detail = (await client.get(f"/api/events/{inquiry_id}", headers=auth(admin_token))).json()
+    vendor_id = detail["vendors"][0]["id"]
+    assert detail["vendors"][0]["payment_status"] == "unpaid"
+
+    ok = await client.post(f"/api/events/{inquiry_id}/vendors", headers=auth(admin_token), json={
+        "rows": [{"id": vendor_id, "rate": None, "total_cost": None, "payment_status": "paid", "remark": "paid in full"}]
+    })
+    assert ok.status_code == 200, ok.text
+
+    detail = (await client.get(f"/api/events/{inquiry_id}", headers=auth(admin_token))).json()
+    assert detail["vendors"][0]["payment_status"] == "paid"
+
+    # changing payment_status without remark -> 400
+    bad = await client.post(f"/api/events/{inquiry_id}/vendors", headers=auth(admin_token), json={
+        "rows": [{"id": vendor_id, "rate": None, "total_cost": None, "payment_status": "unpaid", "remark": None}]
+    })
+    assert bad.status_code == 400
+
+
+async def test_event_timeline_and_ops_kpis(client):
+    admin_token = await login(client, "admin@shaguncatering.com", "admin123")
+    inquiry_id = await create_handover_inquiry(client, admin_token)
+
+    detail = (await client.get(f"/api/events/{inquiry_id}", headers=auth(admin_token))).json()
+    stages = detail["timeline"]
+    assert [s["key"] for s in stages] == ["planning", "kitchen", "warehouse_request", "execution", "completion", "settlement"]
+    assert stages[0]["status"] == "completed"
+    assert stages[1]["status"] == "pending"
+
+    kitchen = csv_upload("kitchen.csv", "Item Name,Prepared Qty,Unit,Used Qty,Remaining Qty,Remark\nPaneer,50,kg,0,50,ok\n")
+    await client.post(f"/api/inquiries/{inquiry_id}/upload?file_type=kitchen_inventory", headers=auth(admin_token), files=kitchen)
+    detail = (await client.get(f"/api/events/{inquiry_id}", headers=auth(admin_token))).json()
+    assert detail["timeline"][1]["status"] == "completed"
+
+    kpis = (await client.get("/api/dashboard/operations", headers=auth(admin_token))).json()
+    assert kpis["pending_kitchen_plans"] >= 1
+    assert kpis["pending_vendor_requests"] >= 1
+
+    await client.post(f"/api/events/{inquiry_id}/warehouse-requests", headers=auth(admin_token), json={"from_ingredient": False, "items": [{"item_name": "Gas Cylinder", "quantity": 2, "unit": "pc"}]})
+    kpis = (await client.get("/api/dashboard/operations", headers=auth(admin_token))).json()
+    assert kpis["pending_warehouse_requests"] >= 1
