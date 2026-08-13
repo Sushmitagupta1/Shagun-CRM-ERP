@@ -350,13 +350,7 @@ async def upload_inquiry_file(
     with open(file_path, "wb") as f:
         f.write(content)
 
-    setattr(inquiry, f"{file_type}_file_name", file.filename)
-    setattr(inquiry, f"{file_type}_file_path", file_path)
-    await db.commit()
-    await db.refresh(inquiry)
-
     if file_type == "vendor":
-        ext = os.path.splitext(file.filename or "")[1].lower()
         parsed = parse_vendor_file(file_path, ext)
         old = await db.execute(select(EventVendor).where(EventVendor.inquiry_id == inquiry_id))
         for v in old.scalars().all():
@@ -370,9 +364,7 @@ async def upload_inquiry_file(
                 total_cost=r["total_cost"],
                 remark=r["remark"],
             ))
-        await db.commit()
     elif file_type == "kitchen_inventory":
-        ext = os.path.splitext(file.filename or "")[1].lower()
         parsed = parse_kitchen_inventory_file(file_path, ext)
         old = await db.execute(select(KitchenInventoryItem).where(KitchenInventoryItem.inquiry_id == inquiry_id))
         for k in old.scalars().all():
@@ -387,7 +379,11 @@ async def upload_inquiry_file(
                 remaining_qty=r["remaining_qty"],
                 remark=r["remark"],
             ))
-        await db.commit()
+
+    setattr(inquiry, f"{file_type}_file_name", file.filename)
+    setattr(inquiry, f"{file_type}_file_path", file_path)
+    await db.commit()
+    await db.refresh(inquiry)
 
     if file_type in ("menu", "presentation"):
         notify_result = await db.execute(
