@@ -17,6 +17,7 @@ from app.schemas.common import PaginatedResponse
 from app.middleware.auth import get_current_user
 
 from app.services.inquiry_service import get_inquiry_or_404
+from app.services.file_parsers import read_file_preview, parse_item_qty_file
 import os
 from fastapi import UploadFile, File
 from app.config import settings
@@ -370,52 +371,6 @@ async def upload_inquiry_file(
     return {"file_name": file.filename, "file_path": file_path}
 
 
-INVENTORY_HEADER_WORDS = {"item", "item name", "item_name", "itemname", "product", "material", "ingredient", "name", "description"}
-
-
-def parse_movement_file(file_path: str, ext: str):
-    rows: list[tuple[str, float, str | None]] = []
-    if ext == ".csv":
-        import csv
-        with open(file_path, "r", encoding="utf-8", errors="replace") as f:
-            reader = csv.reader(f)
-            for raw in reader:
-                row = [c.strip() for c in raw]
-                if not any(row):
-                    continue
-                item = row[0] if len(row) > 0 else ""
-                if not item or item.lower() in INVENTORY_HEADER_WORDS:
-                    continue
-                try:
-                    qty = float((row[1] if len(row) > 1 else "").replace(",", "")) if len(row) > 1 and row[1] else 0.0
-                except (ValueError, TypeError):
-                    qty = 0.0
-                if qty <= 0:
-                    continue
-                unit = row[2] if len(row) > 2 and row[2] else None
-                rows.append((item, qty, unit))
-    else:
-        from openpyxl import load_workbook
-        wb = load_workbook(file_path, data_only=True)
-        ws = wb.active
-        for raw in ws.iter_rows(values_only=True):
-            row = ["" if c is None else str(c).strip() for c in raw]
-            if not any(row):
-                continue
-            item = row[0] if len(row) > 0 else ""
-            if not item or item.lower() in INVENTORY_HEADER_WORDS:
-                continue
-            try:
-                qty = float((row[1] if len(row) > 1 else "").replace(",", "")) if len(row) > 1 and row[1] else 0.0
-            except (ValueError, TypeError):
-                qty = 0.0
-            if qty <= 0:
-                continue
-            unit = row[2] if len(row) > 2 and row[2] else None
-            rows.append((item, qty, unit))
-    return rows
-
-
 @router.post("/{inquiry_id}/inventory-upload")
 async def upload_inventory_movement_file(
     inquiry_id: uuid.UUID,
@@ -443,7 +398,7 @@ async def upload_inventory_movement_file(
     with open(file_path, "wb") as f:
         f.write(content)
 
-    rows = parse_movement_file(file_path, ext)
+    rows = parse_item_qty_file(file_path, ext)
 
     old = await db.execute(select(InventoryMovement).where(InventoryMovement.inquiry_id == inquiry_id, InventoryMovement.movement_type == movement_type))
     for m in old.scalars().all():
@@ -464,38 +419,6 @@ async def upload_inventory_movement_file(
     await db.commit()
 
     return {"file_name": file.filename, "entries_created": len(rows)}
-
-
-MAX_PREVIEW_ROWS = 200
-MAX_PREVIEW_COLS = 12
-
-
-def read_file_preview(file_path: str, ext: str):
-    rows: list[list] = []
-    if ext == ".csv":
-        import csv
-        with open(file_path, "r", encoding="utf-8", errors="replace") as f:
-            reader = csv.reader(f)
-            for raw in reader:
-                if len(rows) >= MAX_PREVIEW_ROWS:
-                    break
-                row = ["" if c is None else str(c).strip() for c in raw[:MAX_PREVIEW_COLS]]
-                if any(row):
-                    rows.append(row)
-    else:
-        from openpyxl import load_workbook
-        wb = load_workbook(file_path, data_only=True, read_only=True)
-        try:
-            ws = wb.active
-            for raw in ws.iter_rows(values_only=True):
-                if len(rows) >= MAX_PREVIEW_ROWS:
-                    break
-                row = ["" if c is None else (c if isinstance(c, (int, float)) else str(c).strip()) for c in raw[:MAX_PREVIEW_COLS]]
-                if any(row):
-                    rows.append(row)
-        finally:
-            wb.close()
-    return rows
 
 
 @router.get("/{inquiry_id}/file/{file_type}/preview")
