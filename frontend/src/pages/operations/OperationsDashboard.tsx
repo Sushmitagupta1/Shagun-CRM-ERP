@@ -18,6 +18,7 @@ import {
   FileSpreadsheet,
 } from 'lucide-react'
 import { getErrorMessage } from '@/lib/apiError'
+import { INQUIRY_STATUSES } from '@/lib/constants'
 
 export default function OperationsDashboard() {
   const { user } = useAuth()
@@ -26,6 +27,8 @@ export default function OperationsDashboard() {
   const { data: kpis, isLoading } = useOperationsKPIs()
   const { data: inquiriesData } = useInquiries({ status: 'operation_handover', per_page: 10 })
   const confirmedEvents = inquiriesData?.items ?? []
+  const { data: allInquiriesData } = useInquiries({ per_page: 10 })
+  const allInquiries = allInquiriesData?.items ?? []
   const { data: events } = useEvents()
   const todayISO = dayjs().format('YYYY-MM-DD')
   const todaysEvents = events?.filter((e) => e.event_date === todayISO) ?? []
@@ -50,14 +53,15 @@ export default function OperationsDashboard() {
     <div className="space-y-6">
       <PageHeader title={`Hi, ${firstName}`} subtitle="Manage event execution, vendors, and logistics" />
 
-      {/* Top Row — 4 KPI Cards */}
-      <div className="grid grid-cols-4 gap-4">
+      {/* Top Row — 5 KPI Cards */}
+      <div className="grid grid-cols-5 gap-4">
         {isLoading
-          ? Array.from({ length: 4 }).map((_, i) => <KPICardSkeleton key={i} />)
+          ? Array.from({ length: 5 }).map((_, i) => <KPICardSkeleton key={i} />)
           : [
               { label: 'Upcoming Events', value: kpis?.upcoming_events ?? 0, color: 'text-blue-600', to: '/events' },
               { label: "Today's Events", value: kpis?.todays_events ?? 0, color: 'text-amber-600', to: '/events' },
               { label: 'Pending Kitchen Plans', value: kpis?.pending_kitchen_plans ?? 0, color: 'text-rose-600', to: '/events' },
+              { label: 'Pending Vendor Requests', value: kpis?.pending_vendor_requests ?? 0, color: 'text-violet-600', to: '/events' },
               { label: 'Pending Warehouse Requests', value: kpis?.pending_warehouse_requests ?? 0, color: 'text-emerald-600', to: '/events' },
             ].map((kpi, i) => (
               <motion.div
@@ -170,6 +174,58 @@ export default function OperationsDashboard() {
                     </tr>
                   )
                 })}
+              </tbody>
+            </table>
+          </div>
+        </motion.div>
+      </div>
+
+      {/* All Inquiries Table */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-1">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.8 }}
+          className="flex overflow-hidden rounded-xl border border-gray-100 bg-white shadow-md"
+          style={{ height: 300, flexDirection: 'column' }}
+        >
+          <div className="shrink-0 border-b border-gray-100 px-5 py-3">
+            <h3 className="text-sm font-bold text-gray-900">All Inquiries</h3>
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            <table className="w-full">
+              <thead className="sticky top-0 z-10">
+                <tr className="border-b border-gray-200 bg-gray-50">
+                  {['Client Name', 'Number', 'Event Type', 'Function Date', 'Pax', 'Status', 'Actions'].map((h) => (
+                    <th key={h} className="bg-gray-50 px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-gray-500">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {allInquiries.map((inq) => (
+                  <tr key={inq.id} className="border-b border-gray-50 transition-colors hover:bg-gray-50">
+                    <td className="whitespace-nowrap px-4 py-3 text-xs font-medium text-gray-900">{inq.client_name}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-xs text-gray-600">{inq.client_phone ?? '—'}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-xs text-gray-600">{inq.event_type ?? '—'}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-xs text-gray-600">{inq.event_date ?? '—'}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-xs text-gray-600">{inq.pax ?? '—'}</td>
+                    <td className="px-4 py-3">
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                        INQUIRY_STATUSES[inq.status as keyof typeof INQUIRY_STATUSES]?.color ?? 'bg-gray-100 text-gray-700'
+                      }`}>
+                        {INQUIRY_STATUSES[inq.status as keyof typeof INQUIRY_STATUSES]?.label ?? inq.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <button
+                        onClick={() => navigate(inq.status === 'operation_handover' ? `/events/${inq.id}` : `/inquiries/${inq.id}`)}
+                        className="rounded bg-maroon p-1.5 text-white hover:bg-maroon-dark"
+                        title="Open detail">
+                        <Eye size={14} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
