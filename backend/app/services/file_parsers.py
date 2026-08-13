@@ -1,4 +1,5 @@
 import csv
+import re
 from openpyxl import load_workbook
 
 ITEM_HEADER_WORDS = {"item", "item name", "item_name", "itemname", "product", "material", "ingredient", "name", "description"}
@@ -58,7 +59,8 @@ def _to_float(value) -> float | None:
 
 
 def _normalize(text: str) -> str:
-    return "".join(ch for ch in str(text).lower() if ch.isalnum())
+    text = re.sub(r"\([^)]*\)", "", str(text).lower())
+    return "".join(ch for ch in text if ch.isalnum())
 
 
 def _find_col(headers: list[str], keywords: set[str]) -> int | None:
