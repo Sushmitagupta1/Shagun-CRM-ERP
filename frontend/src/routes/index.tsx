@@ -136,7 +136,7 @@ export const router = createBrowserRouter([
       {
         path: 'events',
         element: (
-          <ProtectedRoute allowedRoles={['operations_manager', 'kitchen', 'admin']}>
+          <ProtectedRoute allowedRoles={['operations_manager', 'kitchen', 'admin', 'warehouse']}>
             <EventList />
           </ProtectedRoute>
         ),
@@ -144,7 +144,7 @@ export const router = createBrowserRouter([
       {
         path: 'events/:id',
         element: (
-          <ProtectedRoute allowedRoles={['operations_manager', 'kitchen', 'admin']}>
+          <ProtectedRoute allowedRoles={['operations_manager', 'kitchen', 'admin', 'warehouse']}>
             <EventView />
           </ProtectedRoute>
         ),

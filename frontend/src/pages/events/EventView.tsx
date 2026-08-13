@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { toast } from 'sonner'
@@ -7,7 +7,6 @@ import {
   ChevronDown,
   ChevronRight,
   Download,
-  Eye,
   Upload,
   CheckCircle2,
   Lock,
@@ -44,7 +43,7 @@ export default function EventView() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const role = user?.role?.name ?? ''
-  const { data, isLoading } = useEventDetail(id)
+  const { data, isLoading, refetch } = useEventDetail(id)
   const saveItems = useSaveInventoryItems(id)
   const saveVendors = useSaveVendors(id)
   const complete = useCompleteEvent(id)
@@ -57,15 +56,14 @@ export default function EventView() {
   const [savedInventory, setSavedInventory] = useState<EventInventoryRow[]>([])
   const [savedVendors, setSavedVendors] = useState<EventVendorRow[]>([])
 
-  useMemo(() => {
+  useEffect(() => {
     if (data) {
       setInventoryRows(data.inventory)
       setVendorRows(data.vendors)
       setSavedInventory(JSON.parse(JSON.stringify(data.inventory)))
       setSavedVendors(JSON.parse(JSON.stringify(data.vendors)))
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data?.id, data?.inventory, data?.vendors])
+  }, [data])
 
   const updateRow = (itemName: string, patch: Partial<EventInventoryRow>) => {
     setInventoryRows((prev) => prev.map((r) => (r.item_name === itemName ? { ...r, ...patch } : r)))
@@ -79,7 +77,7 @@ export default function EventView() {
     try {
       await uploadInquiryFile(id, fileType, file)
       toast.success(`${fileType === 'vendor' ? 'Vendor' : 'Kitchen inventory'} excel uploaded`)
-      window.location.reload()
+      refetch()
     } catch (err) {
       toast.error(getErrorMessage(err, 'Upload failed'))
     }
@@ -338,7 +336,7 @@ export default function EventView() {
           </table>
         </div>
         <div className="mt-4 flex flex-wrap gap-2">
-          {VENDOR_UPLOAD_ROLES.includes(role) && (
+          {VENDOR_UPLOAD_ROLES.includes(role) && !data.is_completed && (
             <label className="flex cursor-pointer items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-100">
               <Upload size={12} /> Upload Vendor Excel
               <input type="file" className="hidden" accept=".xlsx,.csv" onChange={(e) => { handleUpload('vendor', e.target.files?.[0]); e.target.value = '' }} />
@@ -381,7 +379,7 @@ export default function EventView() {
             </tbody>
           </table>
         </div>
-        {KITCHEN_UPLOAD_ROLES.includes(role) && (
+        {KITCHEN_UPLOAD_ROLES.includes(role) && !data.is_completed && (
           <label className="mt-4 inline-flex cursor-pointer items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-100">
             <Upload size={12} /> Upload Kitchen Inventory Excel
             <input type="file" className="hidden" accept=".xlsx,.csv" onChange={(e) => { handleUpload('kitchen_inventory', e.target.files?.[0]); e.target.value = '' }} />

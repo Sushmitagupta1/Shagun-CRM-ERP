@@ -37,7 +37,7 @@ const navItems: NavItem[] = [
   { to: '/menu-library', label: 'Menu Library', icon: BookOpen, roles: ['menu_planner', 'admin'] },
   { to: '/presentations', label: 'Presentations', icon: Presentation, roles: ['presentation_exec'] },
   { to: '/operations', label: 'Operations', icon: Truck, roles: ['operations_manager'] },
-  { to: '/events', label: 'Event', icon: CalendarDays, roles: ['operations_manager', 'kitchen', 'admin'] },
+  { to: '/events', label: 'Event', icon: CalendarDays, roles: ['operations_manager', 'kitchen', 'admin', 'warehouse'] },
   { to: '/kitchen', label: 'Kitchen', icon: ChefHat, roles: ['kitchen'] },
   { to: '/warehouse', label: 'Warehouse (THOL)', icon: Package, roles: ['warehouse'] },
   { to: '/users', label: 'User Management', icon: Users, roles: ['admin'] },
