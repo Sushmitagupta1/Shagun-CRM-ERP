@@ -326,7 +326,8 @@ async def upload_event_photo(
         raise HTTPException(status_code=400, detail="File too large (max 20MB)")
     upload_dir = os.path.join(settings.UPLOAD_DIR, str(inquiry_id), "photos", category)
     os.makedirs(upload_dir, exist_ok=True)
-    file_path = os.path.join(upload_dir, file.filename or "unnamed")
+    stored_name = f"{uuid.uuid4().hex}{ext}"
+    file_path = os.path.join(upload_dir, stored_name)
     with open(file_path, "wb") as f:
         f.write(content)
     photo = EventPhoto(
