@@ -58,6 +58,7 @@ export function useCreateWarehouseRequests(id: string) {
       eventsApi.createWarehouseRequests(id, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['event-detail', id] })
+      queryClient.invalidateQueries({ queryKey: ['warehouse-requests', id] })
       queryClient.invalidateQueries({ queryKey: ['dashboard', 'operations'] })
     },
   })
@@ -67,7 +68,11 @@ export function useIssueWarehouseRequest(id: string) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (requestId: string) => eventsApi.issueWarehouseRequest(id, requestId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['event-detail', id] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['event-detail', id] })
+      queryClient.invalidateQueries({ queryKey: ['warehouse-requests', id] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard', 'operations'] })
+    },
   })
 }
 
@@ -77,6 +82,7 @@ export function useReceiveWarehouseRequest(id: string) {
     mutationFn: (requestId: string) => eventsApi.receiveWarehouseRequest(id, requestId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['event-detail', id] })
+      queryClient.invalidateQueries({ queryKey: ['warehouse-requests', id] })
       queryClient.invalidateQueries({ queryKey: ['dashboard', 'operations'] })
     },
   })
@@ -95,7 +101,10 @@ export function useCreateTransfer(id: string) {
   return useMutation({
     mutationFn: (payload: { item_name: string; quantity: number; unit?: string | null; to_inquiry_id: string }) =>
       eventsApi.createTransfer(id, payload),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['event-detail', id] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['event-detail', id] })
+      queryClient.invalidateQueries({ queryKey: ['transfers', id] })
+    },
   })
 }
 
