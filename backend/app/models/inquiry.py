@@ -81,6 +81,12 @@ class Inquiry(UUIDMixin, TimestampMixin, Base):
     venue: Mapped[str | None] = mapped_column(String(255), nullable=True)
     call_recording_file_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     call_recording_file_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    vendor_file_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    vendor_file_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    kitchen_inventory_file_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    kitchen_inventory_file_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    is_completed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class FollowUp(UUIDMixin, TimestampMixin, Base):

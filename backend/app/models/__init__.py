@@ -8,6 +8,10 @@ from app.models.inventory_movement import InventoryMovement
 from app.models.company_settings import CompanySettings
 from app.models.menu_version import MenuVersion
 from app.models.menu_slot import MenuSlot
+from app.models.inventory_file_version import InventoryFileVersion
+from app.models.event_inventory_item import EventInventoryItem
+from app.models.event_vendor import EventVendor
+from app.models.kitchen_inventory_item import KitchenInventoryItem
 
 __all__ = [
     "User",
@@ -27,4 +31,8 @@ __all__ = [
     "CompanySettings",
     "MenuVersion",
     "MenuSlot",
+    "InventoryFileVersion",
+    "EventInventoryItem",
+    "EventVendor",
+    "KitchenInventoryItem",
 ]
