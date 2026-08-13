@@ -1994,17 +1994,17 @@ git commit -m "feat(events view): documents, vendor payment status, warehouse re
 **Files:**
 - Verify: backend tests, frontend build
 
-- [ ] **Step 1: Run backend tests**
+- [x] **Step 1: Run backend tests**
 
 Run: `cd backend && python -m pytest -v`
 Expected: all tests pass (44 total).
 
-- [ ] **Step 2: Run frontend build**
+- [x] **Step 2: Run frontend build**
 
 Run: `cd frontend && npm run build`
 Expected: build succeeds.
 
-- [ ] **Step 3: Spec cross-check**
+- [x] **Step 3: Spec cross-check**
 
 Verify each spec item maps to a task:
 1. 5 KPI cards incl. Pending Vendor Requests (real) → Task 8, Task 5.
@@ -2017,7 +2017,7 @@ Verify each spec item maps to a task:
 8. Event Timeline (6 stages) → Task 3, Task 9.
 9. Quick Actions — intentionally skipped.
 
-- [ ] **Step 4: Final commit (any leftover)**
+- [x] **Step 4: Final commit (any leftover)**
 
 ```bash
 git add -A
