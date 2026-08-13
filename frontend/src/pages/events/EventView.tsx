@@ -23,11 +23,12 @@ import { useAuth } from '@/hooks/useAuth'
 import { useEventDetail, useSaveInventoryItems, useSaveVendors, useCompleteEvent, useCreateWarehouseRequests, useIssueWarehouseRequest, useReceiveWarehouseRequest, useUploadEventPhoto, useCreateTransfer, useEvents } from '@/hooks/useEvents'
 import { downloadInquiryFile, uploadInquiryFile } from '@/api/inquiries'
 import { downloadUploadVersion, getEventPhotoBlob, downloadEventPhoto } from '@/api/events'
-import type { EventInventoryRow, EventPhotoRow, EventVendorRow } from '@/types/event'
+import type { EventInventoryRow, EventPhotoRow, EventVendorRow, TransferRow } from '@/types/event'
 import { getErrorMessage } from '@/lib/apiError'
 import { INQUIRY_STATUSES } from '@/lib/constants'
 
 const EDITABLE_ROLES = ['operations_manager', 'admin', 'warehouse']
+const OPERATIONS_ROLES = ['operations_manager', 'admin']
 const KITCHEN_UPLOAD_ROLES = ['kitchen', 'admin']
 const VENDOR_UPLOAD_ROLES = ['operations_manager', 'admin', 'warehouse']
 
@@ -53,14 +54,17 @@ function Section({ title, defaultOpen = true, children }: { title: string; defau
 function PhotoThumb({ eventId, photo, onDownload }: { eventId: string; photo: EventPhotoRow; onDownload: () => void }) {
   const [url, setUrl] = useState<string | null>(null)
   useEffect(() => {
+    let cancelled = false
     let objectUrl: string | null = null
     getEventPhotoBlob(eventId, photo.id)
       .then((blob) => {
+        if (cancelled) return
         objectUrl = window.URL.createObjectURL(blob)
         setUrl(objectUrl)
       })
-      .catch(() => setUrl(null))
+      .catch(() => { if (!cancelled) setUrl(null) })
     return () => {
+      cancelled = true
       if (objectUrl) window.URL.revokeObjectURL(objectUrl)
     }
   }, [eventId, photo.id])
@@ -203,7 +207,7 @@ export default function EventView() {
   }
 
   const handleCreateTransfer = () => {
-    if (!transferForm.item_name.trim() || transferForm.quantity <= 0 || !transferForm.to_inquiry_id) {
+    if (!transferForm.item_name.trim() || !Number.isFinite(transferForm.quantity) || transferForm.quantity <= 0 || !transferForm.to_inquiry_id) {
       toast.error('Item, quantity, and target event are required')
       return
     }
@@ -502,7 +506,7 @@ export default function EventView() {
           {canEdit && role === 'operations_manager' && !data.ingredient_file_name && (
             <p className="w-full text-xs text-amber-600">Upload the Ingredient Excel first, then send it to THOL.</p>
           )}
-          {canEdit && (
+          {OPERATIONS_ROLES.includes(role) && (
             <button
               onClick={handleSendToTHOL}
               disabled={createRequests.isPending || !data.ingredient_file_name}
@@ -525,10 +529,10 @@ export default function EventView() {
                 </tr>
               </thead>
               <tbody>
-                {data.warehouse_requests.map((r) => (
+                {(data.warehouse_requests ?? []).map((r) => (
                   <tr key={r.id} className="border-b border-gray-50">
                     <td className="px-3 py-2.5 text-xs font-medium text-gray-900">{r.item_name}</td>
-                    <td className="px-3 py-2.5 text-xs tabular-nums text-gray-700">{r.quantity} {r.unit ?? ''}</td>
+                    <td className="px-3 py-2.5 text-xs tabular-nums text-gray-700">{r.quantity}</td>
                     <td className="px-3 py-2.5 text-xs text-gray-600">{r.unit ?? '—'}</td>
                     <td className="px-3 py-2.5">
                       <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
@@ -576,7 +580,7 @@ export default function EventView() {
 
       {/* 5c. Transfer Panel */}
       <Section title="Transfer Panel">
-        {canEdit && (
+        {OPERATIONS_ROLES.includes(role) && (
           <div className="mb-4 rounded-lg border border-gray-100 bg-cream p-3">
             <h4 className="mb-2 flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-gray-500">
               <ArrowRightLeft size={11} /> Add Direct Transfer
@@ -616,9 +620,9 @@ export default function EventView() {
         )}
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           {[
-            { title: 'Items Returned', rows: data.returns, cols: ['Item', 'Qty', 'Event', 'Date'] },
-            { title: 'Direct Transfers', rows: data.transfers, cols: ['Item', 'Qty', 'From', 'To', 'Date'] },
-            { title: 'Wastage', rows: data.wastage_rows, cols: ['Item', 'Qty', 'Event', 'Date'] },
+            { title: 'Items Returned', rows: data.returns ?? [], cols: ['Item', 'Qty', 'Event', 'Date'] },
+            { title: 'Direct Transfers', rows: data.transfers ?? [], cols: ['Item', 'Qty', 'From', 'To', 'Date'] },
+            { title: 'Wastage', rows: data.wastage_rows ?? [], cols: ['Item', 'Qty', 'Event', 'Date'] },
           ].map((panel) => (
             <div key={panel.title} className="rounded-lg border border-gray-100 bg-white">
               <div className="border-b border-gray-100 px-3 py-2">
@@ -636,11 +640,11 @@ export default function EventView() {
                   <tbody>
                     {panel.rows.length === 0 ? (
                       <tr><td colSpan={panel.cols.length} className="px-2 py-6 text-center text-[11px] text-gray-400">None</td></tr>
-                    ) : panel.rows.map((row: any) => (
+                    ) : panel.rows.map((row: TransferRow) => (
                       <tr key={row.id} className="border-b border-gray-50">
                         <td className="px-2 py-2 text-[11px] font-medium text-gray-900">{row.item_name}</td>
                         <td className="px-2 py-2 text-[11px] tabular-nums text-gray-700">{row.quantity} {row.unit ?? ''}</td>
-                        <td className="px-2 py-2 text-[11px] text-gray-600">{panel.title === 'Direct Transfers' ? row.from_event : row.from_event}</td>
+                        <td className="px-2 py-2 text-[11px] text-gray-600">{row.from_event}</td>
                         {panel.title === 'Direct Transfers' && <td className="px-2 py-2 text-[11px] text-gray-600">{row.to_event ?? '—'}</td>}
                         <td className="px-2 py-2 text-[11px] text-gray-600">{row.created_at ? new Date(row.created_at).toLocaleDateString('en-IN') : '—'}</td>
                       </tr>
@@ -657,12 +661,12 @@ export default function EventView() {
       <Section title="Photos">
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           {PHOTO_CATEGORIES.map((cat) => {
-            const items = data.photos.filter((p) => p.category === cat.key)
+            const items = (data.photos ?? []).filter((p) => p.category === cat.key)
             return (
               <div key={cat.key} className="rounded-lg border border-gray-100 bg-white">
                 <div className="flex items-center justify-between border-b border-gray-100 px-3 py-2">
                   <h4 className="flex items-center gap-1 text-xs font-bold text-gray-900"><ImageIcon size={12} /> {cat.label}</h4>
-                  {canEdit && (
+                  {OPERATIONS_ROLES.includes(role) && (
                     <label className="flex cursor-pointer items-center gap-1 rounded border border-emerald-200 px-2 py-1 text-[11px] font-medium text-emerald-600 hover:bg-emerald-50">
                       <Upload size={10} /> Upload
                       <input type="file" className="hidden" accept=".jpg,.jpeg,.png,.webp"
@@ -686,9 +690,9 @@ export default function EventView() {
       {/* 5e. Event Timeline */}
       <Section title="Event Timeline">
         <ol className="space-y-0">
-          {data.timeline.map((stage, idx) => (
+          {(data.timeline ?? []).map((stage, idx) => (
             <li key={stage.key} className="relative flex gap-3 pb-5">
-              {idx < data.timeline.length - 1 && <span className="absolute left-[9px] top-5 h-full w-px bg-gray-200" />}
+              {idx < (data.timeline ?? []).length - 1 && <span className="absolute left-[9px] top-5 h-full w-px bg-gray-200" />}
               <span className={`mt-0.5 h-[19px] w-[19px] shrink-0 rounded-full border-2 ${
                 stage.status === 'completed' ? 'border-emerald-500 bg-emerald-500'
                 : stage.status === 'active' ? 'border-blue-500 bg-white'
