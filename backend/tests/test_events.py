@@ -158,6 +158,51 @@ async def test_vendor_upload_and_total(client):
     assert detail["vendors"][0]["rate"] == 600
 
 
+async def test_vendor_edit_requires_remark(client):
+    token = await login(client, "admin@shaguncatering.com", "admin123")
+    inquiry_id = await create_handover_inquiry(client, token)
+
+    vendor = csv_upload("vendor.csv", "Vendor Name,Service Name,Rate,Total Cost,Remark\nABC Catering,Staff,500,15000,staff team\n")
+    resp = await client.post(f"/api/inquiries/{inquiry_id}/upload?file_type=vendor", headers=auth(token), files=vendor)
+    assert resp.status_code == 200, resp.text
+
+    detail = (await client.get(f"/api/events/{inquiry_id}", headers=auth(token))).json()
+    vendor_id = detail["vendors"][0]["id"]
+
+    bad = await client.post(f"/api/events/{inquiry_id}/vendors", headers=auth(token), json={
+        "rows": [{"id": vendor_id, "rate": 999, "total_cost": None, "remark": None}]
+    })
+    assert bad.status_code == 400
+
+    ok = await client.post(f"/api/events/{inquiry_id}/vendors", headers=auth(token), json={
+        "rows": [{"id": vendor_id, "rate": 999, "total_cost": None, "remark": "rate changed"}]
+    })
+    assert ok.status_code == 200, ok.text
+
+
+async def test_vendor_edit_scoped_to_event(client):
+    token = await login(client, "admin@shaguncatering.com", "admin123")
+    inquiry_a = await create_handover_inquiry(client, token)
+    inquiry_b = await create_handover_inquiry(client, token)
+
+    vendor = csv_upload("vendor.csv", "Vendor Name,Service Name,Rate,Total Cost,Remark\nABC Catering,Staff,500,15000,staff team\n")
+    resp_a = await client.post(f"/api/inquiries/{inquiry_a}/upload?file_type=vendor", headers=auth(token), files=vendor)
+    assert resp_a.status_code == 200, resp_a.text
+    resp_b = await client.post(f"/api/inquiries/{inquiry_b}/upload?file_type=vendor", headers=auth(token), files=vendor)
+    assert resp_b.status_code == 200, resp_b.text
+
+    detail_a = (await client.get(f"/api/events/{inquiry_a}", headers=auth(token))).json()
+    vendor_id_a = detail_a["vendors"][0]["id"]
+
+    wrong = await client.post(f"/api/events/{inquiry_b}/vendors", headers=auth(token), json={
+        "rows": [{"id": vendor_id_a, "rate": 999, "total_cost": None, "remark": "x"}]
+    })
+    assert wrong.status_code == 404
+
+    detail_a = (await client.get(f"/api/events/{inquiry_a}", headers=auth(token))).json()
+    assert detail_a["vendors"][0]["rate"] == 500
+
+
 async def test_kitchen_inventory_upload(client):
     token = await login(client, "kitchen@shaguncatering.com", "kitchen123")
     admin_token = await login(client, "admin@shaguncatering.com", "admin123")
@@ -198,6 +243,30 @@ async def test_complete_event_locks_edits(client):
 
     # uploads rejected after completion
     up = await client.post(f"/api/inquiries/{inquiry_id}/inventory-upload?movement_type=received", headers=auth(token), files=csv_upload("received.csv", "Paneer,5,kg\n"))
+    assert up.status_code == 400
+
+
+async def test_complete_event_blocks_all_edits(client):
+    token = await login(client, "admin@shaguncatering.com", "admin123")
+    inquiry_id = await create_handover_inquiry(client, token)
+
+    ingredient = csv_upload("ingredient.csv", "Item Name,Qty,Unit\nPaneer,10,kg\n")
+    await client.post(f"/api/inquiries/{inquiry_id}/upload?file_type=ingredient", headers=auth(token), files=ingredient)
+    vendor = csv_upload("vendor.csv", "Vendor Name,Service Name,Rate,Total Cost,Remark\nABC Catering,Staff,500,15000,staff team\n")
+    await client.post(f"/api/inquiries/{inquiry_id}/upload?file_type=vendor", headers=auth(token), files=vendor)
+
+    complete = await client.post(f"/api/events/{inquiry_id}/complete", headers=auth(token))
+    assert complete.status_code == 200, complete.text
+
+    detail = (await client.get(f"/api/events/{inquiry_id}", headers=auth(token))).json()
+    vendor_id = detail["vendors"][0]["id"]
+
+    edit = await client.post(f"/api/events/{inquiry_id}/vendors", headers=auth(token), json={
+        "rows": [{"id": vendor_id, "rate": 600, "total_cost": None, "remark": "x"}]
+    })
+    assert edit.status_code == 400
+
+    up = await client.post(f"/api/inquiries/{inquiry_id}/upload?file_type=vendor", headers=auth(token), files=csv_upload("vendor2.csv", "Vendor Name,Service Name,Rate,Total Cost,Remark\nNew Vendor,Staff,100,1000,none\n"))
     assert up.status_code == 400
 
 
