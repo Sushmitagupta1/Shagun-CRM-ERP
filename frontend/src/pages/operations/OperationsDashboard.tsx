@@ -217,12 +217,14 @@ export default function OperationsDashboard() {
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <button
-                        onClick={() => navigate(inq.status === 'operation_handover' ? `/events/${inq.id}` : `/inquiries/${inq.id}`)}
-                        className="rounded bg-maroon p-1.5 text-white hover:bg-maroon-dark"
-                        title="Open detail">
-                        <Eye size={14} />
-                      </button>
+                      {inq.status === 'operation_handover' && (
+                        <button
+                          onClick={() => navigate(`/events/${inq.id}`)}
+                          className="rounded bg-maroon p-1.5 text-white hover:bg-maroon-dark"
+                          title="Open event">
+                          <Eye size={14} />
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
