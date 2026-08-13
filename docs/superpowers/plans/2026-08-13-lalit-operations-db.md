@@ -18,7 +18,7 @@
 - Create: `backend/alembic/versions/9029_add_operations_db.py`
 - Modify: `backend/alembic/env.py` (no change needed — models imported via `app.models`)
 
-- [ ] **Step 1: Create the migration file**
+- [x] **Step 1: Create the migration file**
 
 Create `backend/alembic/versions/9029_add_operations_db.py`:
 
@@ -116,12 +116,12 @@ def downgrade() -> None:
     op.drop_column("inquiries", "is_completed")
 ```
 
-- [ ] **Step 2: Run the migration**
+- [x] **Step 2: Run the migration**
 
 Run: `cd backend && python -m alembic upgrade head`
 Expected: applies migration 9029; `python -m alembic heads` shows `9029 (head)`.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add backend/alembic/versions/9029_add_operations_db.py
@@ -140,7 +140,7 @@ git commit -m "feat(db): add operations db tables (inventory versions, vendors, 
 - Modify: `backend/app/models/inquiry.py`
 - Modify: `backend/app/models/__init__.py`
 
-- [ ] **Step 1: Write the four new model files**
+- [x] **Step 1: Write the four new model files**
 
 Create `backend/app/models/inventory_file_version.py`:
 
@@ -238,7 +238,7 @@ class KitchenInventoryItem(UUIDMixin, TimestampMixin, Base):
     remark: Mapped[str | None] = mapped_column(Text, nullable=True)
 ```
 
-- [ ] **Step 2: Add fields to Inquiry model**
+- [x] **Step 2: Add fields to Inquiry model**
 
 In `backend/app/models/inquiry.py`, add after `call_recording_file_path` (line 83):
 
@@ -253,7 +253,7 @@ In `backend/app/models/inquiry.py`, add after `call_recording_file_path` (line 8
 
 `datetime` and `Boolean` are already imported in that file.
 
-- [ ] **Step 3: Register models in `backend/app/models/__init__.py`**
+- [x] **Step 3: Register models in `backend/app/models/__init__.py`**
 
 Add imports and `__all__` entries:
 
@@ -266,12 +266,12 @@ from app.models.kitchen_inventory_item import KitchenInventoryItem
 
 Add to `__all__`: `"InventoryFileVersion"`, `"EventInventoryItem"`, `"EventVendor"`, `"KitchenInventoryItem"`.
 
-- [ ] **Step 4: Verify imports work**
+- [x] **Step 4: Verify imports work**
 
 Run: `cd backend && python -c "from app.models import InventoryFileVersion, EventInventoryItem, EventVendor, KitchenInventoryItem; print('ok')"`
 Expected: prints `ok`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/models/
@@ -286,7 +286,7 @@ git commit -m "feat(models): add inventory versions, event inventory, vendors, k
 - Create: `backend/app/services/file_parsers.py`
 - Modify: `backend/app/routers/inquiries.py` (replace local `read_file_preview` with import)
 
-- [ ] **Step 1: Write `backend/app/services/file_parsers.py`**
+- [x] **Step 1: Write `backend/app/services/file_parsers.py`**
 
 ```python
 import csv
@@ -425,7 +425,7 @@ def parse_kitchen_inventory_file(file_path: str, ext: str) -> list[dict]:
     return result
 ```
 
-- [ ] **Step 2: Replace `read_file_preview` in `inquiries.py` with an import**
+- [x] **Step 2: Replace `read_file_preview` in `inquiries.py` with an import**
 
 In `backend/app/routers/inquiries.py`:
 - Delete the `MAX_PREVIEW_ROWS = 200`, `MAX_PREVIEW_COLS = 12` constants (lines 469-470) and the whole `read_file_preview` function (lines 473-498).
@@ -438,12 +438,12 @@ from app.services.file_parsers import read_file_preview, parse_item_qty_file
 
 - In `upload_inventory_movement_file` (line ~446), replace `rows = parse_movement_file(file_path, ext)` with `rows = parse_item_qty_file(file_path, ext)`.
 
-- [ ] **Step 3: Verify existing preview + upload still import**
+- [x] **Step 3: Verify existing preview + upload still import**
 
 Run: `cd backend && python -c "from app.routers.inquiries import read_file_preview, parse_item_qty_file; print('ok')"`
 Expected: prints `ok`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add backend/app/services/file_parsers.py backend/app/routers/inquiries.py
@@ -457,7 +457,7 @@ git commit -m "feat(parsers): full-file preview, vendor and kitchen inventory ex
 **Files:**
 - Modify: `backend/app/routers/inquiries.py`
 
-- [ ] **Step 1: Extend `ALLOWED_ROLES` with vendor + kitchen_inventory**
+- [x] **Step 1: Extend `ALLOWED_ROLES` with vendor + kitchen_inventory**
 
 Replace the `ALLOWED_ROLES` dict (lines 296-305) with:
 
@@ -476,7 +476,7 @@ ALLOWED_ROLES = {
 }
 ```
 
-- [ ] **Step 2: Add vendor/kitchen parsing to `upload_inquiry_file`**
+- [x] **Step 2: Add vendor/kitchen parsing to `upload_inquiry_file`**
 
 In `upload_inquiry_file`, immediately after `await db.commit()` (line 347) and before the `if file_type in ("menu", "presentation"):` block, insert:
 
@@ -525,7 +525,7 @@ from app.models.inventory_file_version import InventoryFileVersion
 from app.services.file_parsers import read_file_preview, parse_item_qty_file, parse_vendor_file, parse_kitchen_inventory_file
 ```
 
-- [ ] **Step 3: Block uploads when event is completed**
+- [x] **Step 3: Block uploads when event is completed**
 
 At the top of `upload_inquiry_file` after `inquiry = await get_inquiry_or_404(db, inquiry_id)` (line 329) add:
 
@@ -536,7 +536,7 @@ At the top of `upload_inquiry_file` after `inquiry = await get_inquiry_or_404(db
 
 Same in `upload_inventory_movement_file` after `inquiry = await get_inquiry_or_404(db, inquiry_id)` (line 431).
 
-- [ ] **Step 4: Add version history to inventory movement uploads**
+- [x] **Step 4: Add version history to inventory movement uploads**
 
 In `upload_inventory_movement_file`, after `for item, qty, unit in rows:` block (lines 451-459) and before `await db.commit()` (line 464), add:
 
@@ -559,12 +559,12 @@ In `upload_inventory_movement_file`, after `for item, qty, unit in rows:` block 
     ))
 ```
 
-- [ ] **Step 5: Verify imports**
+- [x] **Step 5: Verify imports**
 
 Run: `cd backend && python -c "import app.routers.inquiries; print('ok')"`
 Expected: prints `ok`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/app/routers/inquiries.py
@@ -578,7 +578,7 @@ git commit -m "feat(inquiries): vendor/kitchen uploads, inventory version histor
 **Files:**
 - Create: `backend/app/schemas/event.py`
 
-- [ ] **Step 1: Write `backend/app/schemas/event.py`**
+- [x] **Step 1: Write `backend/app/schemas/event.py`**
 
 ```python
 import uuid
@@ -693,12 +693,12 @@ class VendorsSaveRequest(BaseModel):
     rows: list[VendorSave]
 ```
 
-- [ ] **Step 2: Verify import**
+- [x] **Step 2: Verify import**
 
 Run: `cd backend && python -c "from app.schemas.event import EventDetail; print('ok')"`
 Expected: prints `ok`.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add backend/app/schemas/event.py
@@ -712,7 +712,7 @@ git commit -m "feat(schemas): event view bundle, closure summary, upload history
 **Files:**
 - Create: `backend/app/services/event_service.py`
 
-- [ ] **Step 1: Write `backend/app/services/event_service.py`**
+- [x] **Step 1: Write `backend/app/services/event_service.py`**
 
 ```python
 import os
@@ -901,12 +901,12 @@ async def build_event_bundle(db: AsyncSession, inquiry: Inquiry) -> dict:
     }
 ```
 
-- [ ] **Step 2: Verify import**
+- [x] **Step 2: Verify import**
 
 Run: `cd backend && python -c "from app.services.event_service import build_event_bundle; print('ok')"`
 Expected: prints `ok`.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add backend/app/services/event_service.py
@@ -921,7 +921,7 @@ git commit -m "feat(service): derive event view bundle from ingredient excel, mo
 - Create: `backend/app/routers/events.py`
 - Modify: `backend/app/main.py`
 
-- [ ] **Step 1: Write `backend/app/routers/events.py`**
+- [x] **Step 1: Write `backend/app/routers/events.py`**
 
 ```python
 import uuid
@@ -1082,18 +1082,18 @@ async def complete_event(
     return {"ok": True}
 ```
 
-- [ ] **Step 2: Register router in `main.py`**
+- [x] **Step 2: Register router in `main.py`**
 
 In `backend/app/main.py`:
 - Add import after line 13: `from app.routers.events import router as events_router`
 - Add after line 27: `app.include_router(events_router)`
 
-- [ ] **Step 3: Verify import + route registration**
+- [x] **Step 3: Verify import + route registration**
 
 Run: `cd backend && python -c "from app.main import app; print([r.path for r in app.routes if r.path.startswith('/api/events')])"`
 Expected: prints the four event routes.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add backend/app/routers/events.py backend/app/main.py
@@ -1108,7 +1108,7 @@ git commit -m "feat(events): list, detail bundle, save inventory/vendors, comple
 - Create: `backend/tests/test_events.py`
 - Modify: `backend/tests/conftest.py` (temp upload dir)
 
-- [ ] **Step 1: Point tests at a temp upload dir**
+- [x] **Step 1: Point tests at a temp upload dir**
 
 In `backend/tests/conftest.py`, add after `os.environ["ENVIRONMENT"] = "testing"`:
 
@@ -1116,7 +1116,7 @@ In `backend/tests/conftest.py`, add after `os.environ["ENVIRONMENT"] = "testing"
 os.environ["UPLOAD_DIR"] = os.path.join(os.environ.get("TEMP", "/tmp"), "shagun_test_uploads")
 ```
 
-- [ ] **Step 2: Write `backend/tests/test_events.py`**
+- [x] **Step 2: Write `backend/tests/test_events.py`**
 
 ```python
 import os
@@ -1335,17 +1335,17 @@ async def test_full_excel_preview_no_cap(client):
     assert len(preview.json()["rows"]) == 251  # header + 250
 ```
 
-- [ ] **Step 3: Run the tests**
+- [x] **Step 3: Run the tests**
 
 Run: `cd backend && python -m pytest tests/test_events.py -v`
 Expected: all tests pass. If `create_handover_inquiry` returns 201 but the status PATCH fails with 403 (role), check the login user — admin is allowed. If `venue` isn't accepted by `InquiryCreate`, remove that field from the create payload (schema check in Task 5's spec: `venue` exists on InquiryCreate).
 
-- [ ] **Step 4: Run the full backend test suite**
+- [x] **Step 4: Run the full backend test suite**
 
 Run: `cd backend && python -m pytest -v`
 Expected: existing tests + new tests pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/tests/
@@ -1362,7 +1362,7 @@ git commit -m "test(events): event bundle, edits, versions, vendors, kitchen, co
 - Create: `frontend/src/hooks/useEvents.ts`
 - Modify: `frontend/src/api/inquiries.ts` (extend `InquiryFileType`)
 
-- [ ] **Step 1: Write `frontend/src/types/event.ts`**
+- [x] **Step 1: Write `frontend/src/types/event.ts`**
 
 ```typescript
 export interface EventListItem {
@@ -1465,7 +1465,7 @@ export interface VendorSave {
 }
 ```
 
-- [ ] **Step 2: Write `frontend/src/api/events.ts`**
+- [x] **Step 2: Write `frontend/src/api/events.ts`**
 
 ```typescript
 import client from './client'
@@ -1497,7 +1497,7 @@ export async function completeEvent(id: string): Promise<{ ok: boolean }> {
 }
 ```
 
-- [ ] **Step 3: Write `frontend/src/hooks/useEvents.ts`**
+- [x] **Step 3: Write `frontend/src/hooks/useEvents.ts`**
 
 ```typescript
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -1544,7 +1544,7 @@ export function useCompleteEvent(id: string) {
 }
 ```
 
-- [ ] **Step 4: Extend `InquiryFileType` in `frontend/src/api/inquiries.ts`**
+- [x] **Step 4: Extend `InquiryFileType` in `frontend/src/api/inquiries.ts`**
 
 Replace line 102:
 
@@ -1552,12 +1552,12 @@ Replace line 102:
 export type InquiryFileType = 'menu' | 'presentation' | 'ingredient' | 'inventory' | 'returned' | 'transferred' | 'wastage' | 'vendor' | 'kitchen_inventory' | 'call_recording'
 ```
 
-- [ ] **Step 5: Typecheck**
+- [x] **Step 5: Typecheck**
 
 Run: `cd frontend && npx tsc --noEmit`
 Expected: no errors.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add frontend/src/types/event.ts frontend/src/api/events.ts frontend/src/hooks/useEvents.ts frontend/src/api/inquiries.ts
@@ -1573,7 +1573,7 @@ git commit -m "feat(events): frontend types, api client, hooks"
 - Modify: `frontend/src/routes/index.tsx`
 - Modify: `frontend/src/components/layout/Sidebar.tsx`
 
-- [ ] **Step 1: Write `frontend/src/pages/events/EventList.tsx`**
+- [x] **Step 1: Write `frontend/src/pages/events/EventList.tsx`**
 
 ```tsx
 import { motion } from 'framer-motion'
@@ -1655,7 +1655,7 @@ export default function EventList() {
 }
 ```
 
-- [ ] **Step 2: Add routes in `frontend/src/routes/index.tsx`**
+- [x] **Step 2: Add routes in `frontend/src/routes/index.tsx`**
 
 Add imports after line 17:
 
@@ -1687,7 +1687,7 @@ Add routes after the `operations` route (after line 133):
 
 Note: `EventView` is created in Task 11 — do not run a build until Task 11 is done.
 
-- [ ] **Step 3: Add sidebar item**
+- [x] **Step 3: Add sidebar item**
 
 In `frontend/src/components/layout/Sidebar.tsx`:
 - Add `CalendarDays` to the lucide-react import list.
@@ -1697,7 +1697,7 @@ In `frontend/src/components/layout/Sidebar.tsx`:
   { to: '/events', label: 'Event', icon: CalendarDays, roles: ['operations_manager', 'kitchen', 'admin'] },
 ```
 
-- [ ] **Step 4: Commit (EventList only — route references EventView so commit after Task 11)**
+- [x] **Step 4: Commit (EventList only — route references EventView so commit after Task 11)**
 
 Proceed to Task 11; commit both tasks together at the end of Task 11.
 
@@ -1708,7 +1708,7 @@ Proceed to Task 11; commit both tasks together at the end of Task 11.
 **Files:**
 - Create: `frontend/src/pages/events/EventView.tsx`
 
-- [ ] **Step 1: Write `frontend/src/pages/events/EventView.tsx`**
+- [x] **Step 1: Write `frontend/src/pages/events/EventView.tsx`**
 
 ```tsx
 import { useMemo, useState } from 'react'
@@ -2137,12 +2137,12 @@ export default function EventView() {
 }
 ```
 
-- [ ] **Step 2: Typecheck**
+- [x] **Step 2: Typecheck**
 
 Run: `cd frontend && npx tsc --noEmit`
 Expected: no errors.
 
-- [ ] **Step 3: Commit Task 10 + 11 together**
+- [x] **Step 3: Commit Task 10 + 11 together**
 
 ```bash
 git add frontend/src/pages/events/ frontend/src/routes/index.tsx frontend/src/components/layout/Sidebar.tsx
@@ -2156,7 +2156,7 @@ git commit -m "feat(events): event list and event view pages with sidebar + rout
 **Files:**
 - Modify: `frontend/src/pages/operations/OperationsDashboard.tsx`
 
-- [ ] **Step 1: Replace the sample data and KPI grid**
+- [x] **Step 1: Replace the sample data and KPI grid**
 
 In `frontend/src/pages/operations/OperationsDashboard.tsx`:
 - Delete the `todayEvents` array (lines 22-26).
@@ -2198,7 +2198,7 @@ Add near the top of the component body (after `const confirmedEvents = ...` line
       </div>
 ```
 
-- [ ] **Step 2: Replace the Today's Schedule body**
+- [x] **Step 2: Replace the Today's Schedule body**
 
 Replace the `{todayEvents.map(...)}` block (lines 95-110) with real events:
 
@@ -2240,7 +2240,7 @@ Note: `evt.is_completed` doesn't exist on the `Inquiry` type returned by `useInq
                   </div>
 ```
 
-- [ ] **Step 3: Make the Upcoming Events eye button navigate to Event View**
+- [x] **Step 3: Make the Upcoming Events eye button navigate to Event View**
 
 Replace the eye button onClick (lines 150-155) with:
 
@@ -2253,11 +2253,11 @@ Replace the eye button onClick (lines 150-155) with:
                           </button>
 ```
 
-- [ ] **Step 4: Remove the InventoryPanelModal usage**
+- [x] **Step 4: Remove the InventoryPanelModal usage**
 
 - Remove the `InventoryPanelModal` import (line 9), the `selectedInquiry` state (line 37), and the `<InventoryPanelModal ... />` block (lines 179-183).
 
-- [ ] **Step 5: Typecheck + build**
+- [x] **Step 5: Typecheck + build**
 
 Run: `cd frontend && npx tsc --noEmit`
 Expected: no errors.
@@ -2265,12 +2265,12 @@ Expected: no errors.
 Run: `cd frontend && npm run build`
 Expected: build succeeds.
 
-- [ ] **Step 6: Lint**
+- [x] **Step 6: Lint**
 
 Run: `cd frontend && npm run lint`
 Expected: no errors (or only pre-existing warnings).
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add frontend/src/pages/operations/OperationsDashboard.tsx
@@ -2284,17 +2284,17 @@ git commit -m "feat(operations): real today's schedule, 4 KPI cards, event view 
 **Files:**
 - Verify: backend tests, frontend build
 
-- [ ] **Step 1: Run backend tests**
+- [x] **Step 1: Run backend tests**
 
 Run: `cd backend && python -m pytest -v`
 Expected: all tests pass (existing + new event tests).
 
-- [ ] **Step 2: Run frontend build**
+- [x] **Step 2: Run frontend build**
 
 Run: `cd frontend && npm run build`
 Expected: build succeeds.
 
-- [ ] **Step 3: Spec cross-check**
+- [x] **Step 3: Spec cross-check**
 
 Verify each spec item maps to a task:
 1. Operations home: Completion Rate removed, real Today's Schedule → Task 12.
@@ -2304,7 +2304,7 @@ Verify each spec item maps to a task:
 5. Event View layout flow (Details → Menu → Inventory → Vendors → Kitchen → Closure → Complete) → Task 11.
 6. Mark Event as Completed locks edits → Tasks 4, 7, 11.
 
-- [ ] **Step 4: Final commit (any leftover)**
+- [x] **Step 4: Final commit (any leftover)**
 
 ```bash
 git add -A
@@ -2315,10 +2315,15 @@ git commit -m "chore: operations db feature complete"
 
 ## Execution Handoff
 
-Plan complete and saved to `docs/superpowers/plans/2026-08-13-lalit-operations-db.md`. Two execution options:
+Plan complete and saved to `docs/superpowers/plans/2026-08-13-lalit-operations-db.md`.
 
-**1. Subagent-Driven (recommended)** — I dispatch a fresh subagent per task, review between tasks, fast iteration
+## Completion Record
 
-**2. Inline Execution** — Execute tasks in this session using executing-plans, batch execution with checkpoints
+All 13 tasks implemented and committed (see git log `046c5ce` → `48144b6`). Task 13 verified:
 
-**Which approach?**
+- Backend: `python -m pytest -v` → **39 passed**.
+- Frontend: `npm run build` → **build succeeds** (only a chunk-size warning).
+- Spec cross-check: all 6 spec items map to implemented tasks and pass.
+- All 57 plan checkboxes marked complete in a final commit.
+
+Final commit message: `chore: operations db feature complete`
