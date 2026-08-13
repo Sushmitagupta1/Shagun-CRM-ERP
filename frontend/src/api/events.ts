@@ -86,3 +86,15 @@ export async function getTransfers(id: string): Promise<TransferRow[]> {
   const response = await client.get(`/events/${id}/transfers`)
   return response.data
 }
+
+export async function downloadEventPhoto(id: string, photoId: string, fileName?: string | null): Promise<void> {
+  const response = await client.get(`/events/${id}/photos/${photoId}/download`, { responseType: 'blob' })
+  const url = window.URL.createObjectURL(new Blob([response.data]))
+  const link = document.createElement('a')
+  link.href = url
+  link.setAttribute('download', fileName || `photo_${photoId}`)
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  window.URL.revokeObjectURL(url)
+}
