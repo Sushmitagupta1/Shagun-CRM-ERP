@@ -4,6 +4,7 @@ from sqlalchemy import select, func
 from app.models.inquiry import Inquiry, InquiryStatus, PaymentStatus, FollowUp, Meeting
 from app.models.menu_slot import MenuSlot
 from app.models.user import User
+from app.models.warehouse_request import WarehouseRequest
 
 
 async def get_admin_kpis(db: AsyncSession) -> dict:
@@ -292,24 +293,32 @@ async def get_presentation_kpis(db: AsyncSession, user_id) -> dict:
 
 async def get_operations_kpis(db: AsyncSession) -> dict:
     today = date.today()
+    handover = Inquiry.status == InquiryStatus.OPERATION_HANDOVER
     upcoming = (await db.execute(select(func.count(Inquiry.id)).where(
+        handover,
         Inquiry.event_date >= today,
-        Inquiry.status == InquiryStatus.OPERATION_HANDOVER
     ))).scalar() or 0
     today_events = (await db.execute(select(func.count(Inquiry.id)).where(
+        handover,
         Inquiry.event_date == today,
-        Inquiry.status == InquiryStatus.OPERATION_HANDOVER
     ))).scalar() or 0
     pending_kitchen = (await db.execute(select(func.count(Inquiry.id)).where(
-        Inquiry.status == InquiryStatus.OPERATION_HANDOVER,
-        Inquiry.event_date >= today
+        handover,
+        Inquiry.kitchen_inventory_file_name.is_(None),
+    ))).scalar() or 0
+    pending_vendor = (await db.execute(select(func.count(Inquiry.id)).where(
+        handover,
+        Inquiry.vendor_file_name.is_(None),
+    ))).scalar() or 0
+    pending_warehouse = (await db.execute(select(func.count(WarehouseRequest.id)).where(
+        WarehouseRequest.status == "pending",
     ))).scalar() or 0
     return {
         "upcoming_events": upcoming,
         "todays_events": today_events,
         "pending_kitchen_plans": pending_kitchen,
-        "pending_vendor_requests": 0,
-        "pending_warehouse_requests": 0,
+        "pending_vendor_requests": pending_vendor,
+        "pending_warehouse_requests": pending_warehouse,
     }
 
 

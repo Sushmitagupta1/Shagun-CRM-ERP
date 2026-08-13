@@ -181,6 +181,7 @@ async def save_vendors(
         changed = (
             (row.rate is not None and vendor.rate is not None and float(row.rate) != float(vendor.rate))
             or (row.total_cost is not None and vendor.total_cost is not None and float(row.total_cost) != float(vendor.total_cost))
+            or (row.payment_status is not None and vendor.payment_status != row.payment_status)
         )
         if changed and not (row.remark or "").strip():
             raise HTTPException(status_code=400, detail=f"Remark is mandatory when changing vendor '{vendor.vendor_name}'")
@@ -188,6 +189,8 @@ async def save_vendors(
             vendor.rate = row.rate
         if row.total_cost is not None:
             vendor.total_cost = row.total_cost
+        if row.payment_status is not None:
+            vendor.payment_status = row.payment_status
         vendor.remark = row.remark
 
     await db.commit()
