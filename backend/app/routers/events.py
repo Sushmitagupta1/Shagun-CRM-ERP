@@ -121,7 +121,7 @@ async def save_vendors(
         raise HTTPException(status_code=400, detail="Event is completed and locked")
 
     for row in data.rows:
-        result = await db.execute(select(EventVendor).where(EventVendor.id == row.id))
+        result = await db.execute(select(EventVendor).where(EventVendor.id == row.id, EventVendor.inquiry_id == inquiry_id))
         vendor = result.scalar_one_or_none()
         if vendor is None:
             raise HTTPException(status_code=404, detail=f"Vendor {row.id} not found")
