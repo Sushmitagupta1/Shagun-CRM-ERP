@@ -63,6 +63,8 @@ export default function EventInventoryList() {
             return (
               <div key={ev.id} className="rounded-lg border border-gray-100">
                 <button
+                  type="button"
+                  aria-expanded={open}
                   onClick={() => setOpenId(open ? null : ev.id)}
                   className="flex w-full items-center gap-2 px-3 py-2 text-left"
                 >
@@ -70,7 +72,7 @@ export default function EventInventoryList() {
                   <span className="flex-1 text-xs font-semibold text-gray-900">{ev.client_name}</span>
                   <span className="text-[10px] text-gray-400">{ev.event_type} · {ev.event_date ?? 'no date'}</span>
                   {ev.is_completed && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[9px] font-bold text-emerald-700">Done</span>}
-                  <Eye size={13} className="text-gray-300 hover:text-blue-500" />
+                  <Eye size={13} className="pointer-events-none text-gray-300" aria-hidden="true" />
                 </button>
                 {open && <div className="border-t border-gray-100"><EventInventoryTable eventId={ev.id} /></div>}
               </div>
