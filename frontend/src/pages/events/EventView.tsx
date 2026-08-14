@@ -18,6 +18,7 @@ import {
   ArrowRightLeft,
   Image as ImageIcon,
   Search,
+  Eye as EyeIcon,
 } from 'lucide-react'
 import PageHeader from '@/components/common/PageHeader'
 import { useAuth } from '@/hooks/useAuth'
@@ -202,7 +203,6 @@ export default function EventView() {
   const receiveAll = useReceiveAllInventory(id)
   const returnAll = useReturnAllInventory(id)
   const { data: audit } = useEventAudit(id)
-  void audit
   const saveVendors = useSaveVendors(id)
   const complete = useCompleteEvent(id)
   const createRequests = useCreateWarehouseRequests(id)
@@ -214,6 +214,7 @@ export default function EventView() {
 
   const [transferForm, setTransferForm] = useState({ item_name: '', quantity: 0, unit: '', to_inquiry_id: '' })
   const [inventorySearch, setInventorySearch] = useState('')
+  const [vendorSearch, setVendorSearch] = useState('')
 
   const canEdit = !data?.is_completed && EDITABLE_ROLES.includes(role)
   const canEditVendors = !data?.is_completed && VENDOR_EDIT_ROLES.includes(role)
@@ -524,6 +525,15 @@ export default function EventView() {
 
       {/* 4. Vendor Details */}
       <Section title="Vendor Details">
+        <div className="relative mb-3 min-w-[220px]">
+          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input
+            value={vendorSearch}
+            onChange={(e) => setVendorSearch(e.target.value)}
+            placeholder="Search vendors…"
+            className="w-full rounded-lg border border-gray-200 py-2 pl-8 pr-3 text-xs text-gray-700 focus:border-blue-500 focus:outline-none"
+          />
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
@@ -536,7 +546,7 @@ export default function EventView() {
             <tbody>
               {vendorRows.length === 0 ? (
                 <tr><td colSpan={7} className="px-3 py-10 text-center text-xs text-gray-400">No vendors yet — upload a Vendor Excel.</td></tr>
-              ) : vendorRows.map((v, i) => (
+              ) : vendorRows.filter((v) => v.vendor_name.toLowerCase().includes(vendorSearch.toLowerCase())).map((v, i) => (
                 <tr key={v.id} className="border-b border-gray-50">
                   <td className="px-3 py-2.5 text-xs text-gray-500">{i + 1}</td>
                   <td className="px-3 py-2.5 text-xs font-medium text-gray-900">{v.vendor_name}</td>
@@ -625,12 +635,26 @@ export default function EventView() {
             </tbody>
           </table>
         </div>
-        {KITCHEN_UPLOAD_ROLES.includes(role) && !data.is_completed && (
-          <label className="mt-4 inline-flex cursor-pointer items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-100">
-            <Upload size={12} /> Upload Kitchen Inventory Excel
-            <input type="file" className="hidden" accept=".xlsx,.csv" onChange={(e) => { handleUpload('kitchen_inventory', e.target.files?.[0]); e.target.value = '' }} />
-          </label>
-        )}
+        <div className="mt-4 flex flex-wrap gap-2">
+          {data.kitchen_inventory_file_name && (
+            <button onClick={() => viewInquiryFile(id, 'kitchen_inventory')}
+              className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50">
+              <EyeIcon size={12} /> View Excel
+            </button>
+          )}
+          {data.kitchen_inventory_file_name && (
+            <button onClick={() => downloadInquiryFile(id, 'kitchen_inventory', data.kitchen_inventory_file_name)}
+              className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50">
+              <Download size={12} /> Download Excel
+            </button>
+          )}
+          {KITCHEN_UPLOAD_ROLES.includes(role) && !data.is_completed && (
+            <label className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-100">
+              <Upload size={12} /> Upload Kitchen Inventory Excel
+              <input type="file" className="hidden" accept=".xlsx,.csv" onChange={(e) => { handleUpload('kitchen_inventory', e.target.files?.[0]); e.target.value = '' }} />
+            </label>
+          )}
+        </div>
       </Section>
 
       {/* 5b. Warehouse Requests */}
@@ -860,7 +884,8 @@ export default function EventView() {
             ['Not Received Qty', data.closure.not_received_qty],
             ['Transferred Qty', data.closure.transferred_qty],
             ['Returned to THOL Qty', data.closure.returned_thol_qty],
-            ['Wastage Qty', data.closure.wastage_qty],
+            ['Breakage / Wastage', data.closure.wastage_qty],
+            ['Pending Qty', data.closure.pending_qty],
           ].map(([label, value]) => (
             <div key={label} className="rounded-lg border border-gray-100 bg-cream p-3">
               <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">{label}</p>
@@ -868,6 +893,46 @@ export default function EventView() {
             </div>
           ))}
         </div>
+      </Section>
+
+      {/* 6b. Audit Trail */}
+      <Section title="Audit Trail">
+        {!audit || audit.length === 0 ? (
+          <p className="py-4 text-center text-xs text-gray-400">No activity recorded yet.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-200 bg-gray-50">
+                  {['Time', 'User', 'Action', 'Type', 'Item', 'Field', 'From', 'To', 'Remark'].map((h) => (
+                    <th key={h} className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-gray-500">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {audit.map((a) => (
+                  <tr key={a.id} className="border-b border-gray-50">
+                    <td className="whitespace-nowrap px-3 py-2.5 text-[11px] text-gray-600">{a.created_at ? new Date(a.created_at).toLocaleString('en-IN') : '—'}</td>
+                    <td className="px-3 py-2.5 text-[11px] font-medium text-gray-900">{a.user_name ?? '—'}</td>
+                    <td className="px-3 py-2.5">
+                      <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase ${
+                        a.action === 'upload' ? 'bg-blue-100 text-blue-700'
+                        : a.action === 'complete' ? 'bg-emerald-100 text-emerald-700'
+                        : 'bg-gray-100 text-gray-700'
+                      }`}>{a.action}</span>
+                    </td>
+                    <td className="px-3 py-2.5 text-[11px] text-gray-600">{a.entity_type}</td>
+                    <td className="px-3 py-2.5 text-[11px] text-gray-600">{a.item_name ?? '—'}</td>
+                    <td className="px-3 py-2.5 text-[11px] text-gray-600">{a.field_name ?? '—'}</td>
+                    <td className="px-3 py-2.5 text-[11px] text-gray-600">{a.old_value ?? '—'}</td>
+                    <td className="px-3 py-2.5 text-[11px] font-medium text-gray-900">{a.new_value ?? '—'}</td>
+                    <td className="px-3 py-2.5 text-[11px] text-gray-600">{a.remark ?? '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </Section>
 
       {/* 7. Upload History */}
