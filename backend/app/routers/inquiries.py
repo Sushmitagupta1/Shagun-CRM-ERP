@@ -21,6 +21,8 @@ from app.middleware.auth import get_current_user
 
 from app.services.inquiry_service import get_inquiry_or_404
 from app.services.file_parsers import read_file_preview, parse_item_qty_file, parse_vendor_file, parse_kitchen_inventory_file
+from app.models.event_inventory_item import EventInventoryItem
+from app.services.event_service import log_event_audit
 import os
 from fastapi import UploadFile, File
 from app.config import settings
@@ -383,11 +385,30 @@ async def upload_inquiry_file(
                 remark=r["remark"],
                 created_at=base_ts + timedelta(microseconds=i),
             ))
+    elif file_type == "ingredient":
+        parsed = parse_item_qty_file(file_path, ext)
+        existing_items = {
+            o.item_name.strip().lower(): o
+            for o in (await db.execute(select(EventInventoryItem).where(EventInventoryItem.inquiry_id == inquiry_id))).scalars().all()
+        }
+        for item_name, qty, unit in parsed:
+            key = item_name.strip().lower()
+            ov = existing_items.get(key)
+            if ov is None:
+                ov = EventInventoryItem(inquiry_id=inquiry_id, item_name=item_name.strip(), required_qty=qty)
+                db.add(ov)
+                existing_items[key] = ov
+            else:
+                ov.required_qty = qty
 
     setattr(inquiry, f"{file_type}_file_name", file.filename)
     setattr(inquiry, f"{file_type}_file_path", file_path)
     await db.commit()
     await db.refresh(inquiry)
+
+    await log_event_audit(db, inquiry_id, current_user.id, "upload", "file",
+                          field_name=file_type, new_value=file.filename)
+    await db.commit()
 
     if file_type in ("menu", "presentation"):
         notify_result = await db.execute(
@@ -476,6 +497,9 @@ async def upload_inventory_movement_file(
     name_col, path_col = INVENTORY_FILE_COLUMNS[movement_type]
     setattr(inquiry, name_col, file.filename)
     setattr(inquiry, path_col, file_path)
+
+    await log_event_audit(db, inquiry_id, current_user.id, "upload", "file",
+                          field_name=movement_type, new_value=file.filename)
     await db.commit()
 
     return {"file_name": file.filename, "entries_created": len(rows)}
