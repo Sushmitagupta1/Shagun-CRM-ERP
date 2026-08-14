@@ -605,14 +605,15 @@ export async function downloadMenuDesignPdf(design: MenuDesign, fileName: string
     container.setAttribute('data-menu-scope', 'pdf-scope')
     const inner = document.createElement('div')
     inner.style.width = `${PAGE_W}px`
-    inner.style.height = `${PAGE_H}px`
     inner.style.transformOrigin = 'top left'
     // Full-A4 fix: min-height:100vh resolves to the BROWSER window height (not
     // the sheet), which pushed the content to the wrong place and left the
-    // picture not covering the page. Pin the page height and cover-fill the
-    // template so the picture spans the whole A4 edge-to-edge with no stretch.
+    // picture not covering the page. Pin the page to the sheet height and
+    // cover-fill the template so the picture spans the whole A4 edge-to-edge
+    // with no stretch. min-height (not height) lets a page taller than one
+    // sheet grow so it can be measured and scaled to fit instead of clipped.
     const fixed = scopeMenuHtml(design.pages[i].html, 'pdf-scope')
-      .replace(/min-height\s*:\s*100vh/gi, `height:${PAGE_H}px`)
+      .replace(/min-height\s*:\s*100vh/gi, `min-height:${PAGE_H}px`)
       .replace(/background-size\s*:\s*100%\s*100%/gi, 'background-size:cover;background-position:center')
     inner.innerHTML = fixed
     container.appendChild(inner)
