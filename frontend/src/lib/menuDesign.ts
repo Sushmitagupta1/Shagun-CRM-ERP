@@ -11,6 +11,7 @@ export interface MenuDesign {
   name: string
   pages: MenuDesignPage[]
   raw: string
+  paletteIndex?: number
 }
 
 export interface ParsedDesigns {
@@ -59,6 +60,53 @@ export const FONT_OPTIONS: { label: string; value: string }[] = [
   { label: 'Montserrat', value: "'Montserrat', 'Segoe UI', Arial, sans-serif" },
   { label: 'Georgia', value: 'Georgia, serif' },
   { label: 'Segoe UI', value: "'Segoe UI', Arial, sans-serif" },
+]
+
+export interface MenuPalette {
+  id: string
+  name: string
+  heading: string
+  item: string
+  desc: string
+  headingFont: string
+  itemFont: string
+  descFont: string
+}
+
+// Three distinct text palettes for the 3 design options. All use the SAME
+// selected template background; only heading/dish/description colours + fonts
+// differ per option (blue / purple / black & gold).
+export const MENU_PALETTES: MenuPalette[] = [
+  {
+    id: 'blue',
+    name: 'Royal Blue',
+    heading: '#1E3A8A',
+    item: '#3B5BDB',
+    desc: '#4B5563',
+    headingFont: "'Playfair Display', Georgia, serif",
+    itemFont: "'Montserrat', 'Segoe UI', Arial, sans-serif",
+    descFont: "'Lato', 'Segoe UI', Arial, sans-serif",
+  },
+  {
+    id: 'purple',
+    name: 'Royal Purple',
+    heading: '#4A148C',
+    item: '#6A1B9A',
+    desc: '#374151',
+    headingFont: "'Playfair Display', Georgia, serif",
+    itemFont: "'Montserrat', 'Segoe UI', Arial, sans-serif",
+    descFont: "'Lato', 'Segoe UI', Arial, sans-serif",
+  },
+  {
+    id: 'black-gold',
+    name: 'Black & Gold',
+    heading: '#1A1A1A',
+    item: '#8C6A1F',
+    desc: '#4B5563',
+    headingFont: "'Playfair Display', Georgia, serif",
+    itemFont: "'Montserrat', 'Segoe UI', Arial, sans-serif",
+    descFont: "'Lato', 'Segoe UI', Arial, sans-serif",
+  },
 ]
 
 const DEFAULT_FONTS: MenuFonts = {
@@ -156,6 +204,25 @@ export function applyTextOverrides(html: string, fonts?: MenuFonts, colors?: Men
   }
   const overrides = `\n${FONT_OVERRIDE_MARK}\n${rules.join('\n')}\n`
   return html.replace(sm[0], `<style>${base}${overrides}</style>`)
+}
+
+const MENU_TYPOGRAPHY_MARK = '/* menu-typography */'
+
+// Appends deterministic palette rules to the page's <style> so the 3-level
+// hierarchy (ALL-CAPS heading / medium dish name / small description, each a
+// different colour + font) always renders, even if Gemini drifts. Re-running
+// replaces any previous block (idempotent), so Regenerate/Edit can re-apply.
+export function withMenuTypography(html: string, palette: MenuPalette): string {
+  const sm = html.match(/<style>([\s\S]*?)<\/style>/i)
+  if (!sm) return html
+  const base = sm[1].replace(/\n\s*\/\* menu-typography \*\/[\s\S]*$/, '').replace(/\s+$/, '')
+  const rules = [
+    `h1, h2, [class*="heading"], [class*="section"] { text-transform: uppercase !important; color: ${palette.heading} !important; font-family: ${palette.headingFont} !important; }`,
+    `.dish-name { color: ${palette.item} !important; font-family: ${palette.itemFont} !important; }`,
+    `.dish-desc { color: ${palette.desc} !important; font-family: ${palette.descFont} !important; font-size: 10.5px !important; }`,
+  ]
+  const block = `\n${MENU_TYPOGRAPHY_MARK}\n${rules.join('\n')}\n`
+  return html.replace(sm[0], `<style>${base}${block}</style>`)
 }
 
 // Prefixes every selector in the page's <style> with the given scope attribute
@@ -417,7 +484,7 @@ export function sanitizeMenuHtml(html: string): string {
   return doc.body.innerHTML
 }
 
-export function parseMenuDesigns(raw: string): ParsedDesigns {
+export function parseMenuDesigns(raw: string, paletteIndex = 0): ParsedDesigns {
   const cleaned = sanitizeMenuHtml(raw)
   const designBlocks = cleaned.split('---DESIGN---').map((b) => b.trim()).filter(Boolean)
   if (designBlocks.length === 0) {
@@ -428,12 +495,17 @@ export function parseMenuDesigns(raw: string): ParsedDesigns {
     const name = nameMatch
       ? nameMatch[1].replace(/<[^>]+>/g, '').trim() || `Design Option ${i + 1}`
       : `Design Option ${i + 1}`
+    const paletteIdx = (i + paletteIndex) % MENU_PALETTES.length
     const pageHtml = splitPages(block)
     return {
       id: `design_${i}`,
       name,
-      pages: pageHtml.map((html, p) => ({ html, index: p })),
+      pages: pageHtml.map((html, p) => ({
+        html: withMenuTypography(html, MENU_PALETTES[paletteIdx]),
+        index: p,
+      })),
       raw: block,
+      paletteIndex: paletteIdx,
     }
   })
   return { designs }
