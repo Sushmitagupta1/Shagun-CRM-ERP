@@ -403,12 +403,11 @@ async def upload_inquiry_file(
 
     setattr(inquiry, f"{file_type}_file_name", file.filename)
     setattr(inquiry, f"{file_type}_file_path", file_path)
-    await db.commit()
-    await db.refresh(inquiry)
 
     await log_event_audit(db, inquiry_id, current_user.id, "upload", "file",
                           field_name=file_type, new_value=file.filename)
     await db.commit()
+    await db.refresh(inquiry)
 
     if file_type in ("menu", "presentation"):
         notify_result = await db.execute(
