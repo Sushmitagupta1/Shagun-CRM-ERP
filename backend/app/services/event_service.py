@@ -14,6 +14,7 @@ from app.models.inventory_file_version import InventoryFileVersion
 from app.models.settlement import Settlement, SettlementStatus
 from app.models.warehouse_request import WarehouseRequest
 from app.models.event_photo import EventPhoto
+from app.models.event_audit_log import EventAuditLog
 from app.services.file_parsers import parse_item_qty_file
 
 
@@ -25,14 +26,45 @@ def _sum_movements(movements: list[InventoryMovement], movement_type: str) -> di
     return totals
 
 
-def _status(received: float, required: float) -> str:
-    if required <= 0:
-        return "Not Received"
+def _received_tag(received: float, required: float) -> str:
+    if required <= 0 or received <= 0:
+        return "No"
     if received >= required:
-        return "Received"
-    if received > 0:
-        return "Partial"
-    return "Not Received"
+        return "Yes"
+    return "Half"
+
+
+def _fmt_value(v) -> str | None:
+    if v is None:
+        return None
+    if isinstance(v, float):
+        return "%g" % v
+    return str(v)
+
+
+async def log_event_audit(
+    db: AsyncSession,
+    inquiry_id: uuid.UUID,
+    user_id: uuid.UUID,
+    action: str,
+    entity_type: str,
+    item_name: str | None = None,
+    field_name: str | None = None,
+    old_value: str | None = None,
+    new_value: str | None = None,
+    remark: str | None = None,
+) -> None:
+    db.add(EventAuditLog(
+        inquiry_id=inquiry_id,
+        user_id=user_id,
+        action=action,
+        entity_type=entity_type,
+        item_name=item_name,
+        field_name=field_name,
+        old_value=old_value,
+        new_value=new_value,
+        remark=remark,
+    ))
 
 
 async def _user_name_map(db: AsyncSession, user_ids: set[uuid]) -> dict[str, str]:
@@ -147,18 +179,23 @@ async def build_event_bundle(db: AsyncSession, inquiry: Inquiry) -> dict:
     inventory_rows = []
     for key, base in base_map.items():
         ov = overrides.get(key)
-        received_qty = ov.received_qty if ov is not None and ov.received_qty is not None else base["received_qty"]
-        transfer_count = ov.transfer_count if ov is not None and ov.transfer_count is not None else base["transfer_count"]
-        returned_qty = ov.returned_qty if ov is not None and ov.returned_qty is not None else base["returned_qty"]
+        required_qty = ov.required_qty if ov is not None and ov.required_qty is not None else base["required_qty"]
+        received_qty = ov.received_qty if ov is not None and ov.received_qty is not None else 0
+        transfer_count = ov.transfer_count if ov is not None and ov.transfer_count is not None else 0
+        returned_qty = ov.returned_qty if ov is not None and ov.returned_qty is not None else 0
+        breakage_count = ov.breakage_count if ov is not None and ov.breakage_count is not None else 0
+        not_received_count = ov.not_received_count if ov is not None and ov.not_received_count is not None else 0
         inventory_rows.append({
             "sr_no": base["sr_no"],
             "item_name": base["item_name"],
-            "required_qty": base["required_qty"],
+            "required_qty": required_qty,
             "received_qty": received_qty,
-            "not_received_count": 1 if received_qty == 0 else 0,
-            "received_status": _status(received_qty, base["required_qty"]),
+            "not_received_count": int(not_received_count),
+            "received_tag": _received_tag(received_qty, required_qty),
             "transfer_count": transfer_count,
             "returned_qty": returned_qty,
+            "breakage_count": breakage_count,
+            "transfer_event": ov.transfer_event if ov is not None else None,
             "unit": base["unit"],
             "remark": ov.remark if ov is not None else None,
         })
@@ -176,7 +213,7 @@ async def build_event_bundle(db: AsyncSession, inquiry: Inquiry) -> dict:
 
     mov_result = await db.execute(select(InventoryMovement).where(InventoryMovement.inquiry_id == inquiry.id))
     movements = mov_result.scalars().all()
-    wastage_qty = sum(m.quantity or 0 for m in movements if m.movement_type == "wastage")
+    movement_wastage = sum(m.quantity or 0 for m in movements if m.movement_type == "wastage")
 
     sales_head_name = None
     if inquiry.assigned_to:
@@ -202,14 +239,20 @@ async def build_event_bundle(db: AsyncSession, inquiry: Inquiry) -> dict:
         for v, name in hist_result.all()
     ]
 
+    total_required = sum(r["required_qty"] for r in inventory_rows)
+    total_received = sum(r["received_qty"] for r in inventory_rows)
+    breakage_qty = sum(r["breakage_count"] for r in inventory_rows)
+    wastage_total = breakage_qty + movement_wastage
     closure = {
         "total_items": len(inventory_rows),
-        "total_required_qty": sum(r["required_qty"] for r in inventory_rows),
-        "total_received_qty": sum(r["received_qty"] for r in inventory_rows),
-        "not_received_qty": sum(r["required_qty"] for r in inventory_rows if r["received_qty"] == 0),
+        "total_required_qty": total_required,
+        "total_received_qty": total_received,
+        "not_received_qty": sum(r["not_received_count"] for r in inventory_rows),
         "transferred_qty": sum(r["transfer_count"] for r in inventory_rows),
         "returned_thol_qty": sum(r["returned_qty"] for r in inventory_rows),
-        "wastage_qty": wastage_qty,
+        "wastage_qty": wastage_total,
+        "breakage_qty": breakage_qty,
+        "pending_qty": max(total_required - total_received - wastage_total, 0),
     }
 
     wr_result = await db.execute(
