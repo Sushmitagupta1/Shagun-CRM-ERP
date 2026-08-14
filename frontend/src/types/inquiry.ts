@@ -1,3 +1,7 @@
+import type { WordLine } from '@/lib/menuDesign'
+
+export type { WordLine }
+
 export type InquiryStatus =
   | 'new_inquiry'
   | 'followup'
@@ -79,6 +83,7 @@ export interface MenuDesignPayload {
   pages: { html: string; index: number }[]
   raw: string
   paletteIndex?: number
+  wordLines?: WordLine[]
 }
 
 export interface MenuVersion {

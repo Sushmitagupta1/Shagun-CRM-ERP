@@ -1,6 +1,6 @@
 import client from './client'
 import type { PaginatedResponse } from '@/types/common'
-import type { Inquiry, InquiryCreate, FollowUp, Meeting, MenuVersion, MenuSlot } from '@/types/inquiry'
+import type { Inquiry, InquiryCreate, FollowUp, Meeting, MenuVersion, MenuSlot, WordLine } from '@/types/inquiry'
 import type { InventoryMovement, InventoryMovementCreate } from '@/types/inventory'
 
 export async function getInquiries(params: {
@@ -254,6 +254,30 @@ export async function downloadMenuSlotFile(inquiryId: string, slotId: string, fi
   const link = document.createElement('a')
   link.href = url
   link.setAttribute('download', fileName || `menu_slot_${slotId}`)
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  window.URL.revokeObjectURL(url)
+}
+
+export async function parseWordFile(file: File): Promise<{ file_name: string; lines: WordLine[] }> {
+  const formData = new FormData()
+  formData.append('file', file)
+  const response = await client.post('/menu/parse-word', formData)
+  return response.data
+}
+
+export async function downloadWordMenu(payload: {
+  lines: WordLine[]
+  template_category: string
+  template_file: string
+  colors: { heading: string; item: string; desc: string }
+}): Promise<void> {
+  const response = await client.post('/menu/export-word', payload, { responseType: 'blob' })
+  const url = window.URL.createObjectURL(new Blob([response.data]))
+  const link = document.createElement('a')
+  link.href = url
+  link.setAttribute('download', 'menu.docx')
   document.body.appendChild(link)
   link.click()
   document.body.removeChild(link)

@@ -1050,10 +1050,12 @@ ${text}`
 
 - [ ] **Step 2: Add `WordLine` to types/inquiry.ts**
 
-In `frontend/src/types/inquiry.ts`, add an import at the top of the file (line 1):
+In `frontend/src/types/inquiry.ts`, add an import at the top of the file (line 1) and re-export it so `api/inquiries.ts` can import `WordLine` from `@/types/inquiry`:
 
 ```ts
 import type { WordLine } from '@/lib/menuDesign'
+
+export type { WordLine }
 ```
 
 and add `wordLines` to `MenuDesignPayload` (after `paletteIndex?: number`, line 81):

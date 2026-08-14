@@ -334,3 +334,20 @@ ${backgroundGuidance}
 ${templateImageNote}
 ${regenerationNote}`
 }
+
+// ── AI Spelling Polish ──
+
+// Fixes only spelling in a menu text; keeps categories, dish names' meaning,
+// order and line structure unchanged.
+export async function polishMenuText(text: string): Promise<AIResponse> {
+  const prompt = `You are proofreading a catering menu. Fix ONLY spelling and obvious typos in the text below.
+Rules:
+- Do NOT change the categories, the dish names' meaning, the order of lines, or the number of lines.
+- Do NOT add or remove lines, do NOT rephrase, do NOT restructure.
+- Change only misspelled or mistyped words.
+- Return ONLY the corrected text, keeping the exact same line breaks as the input. No extra commentary.
+
+MENU TEXT:
+${text}`
+  return callGemini(prompt)
+}
