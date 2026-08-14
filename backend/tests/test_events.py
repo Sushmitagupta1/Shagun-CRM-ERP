@@ -85,36 +85,51 @@ async def test_inventory_derivation_and_edits(client):
     assert len(detail["inventory"]) == 2
     paneer = detail["inventory"][0]
     assert paneer["item_name"] == "Paneer"
+    assert paneer["required_qty"] == 10
     assert paneer["received_qty"] == 0
-    assert paneer["received_status"] == "Not Received"
-    assert paneer["not_received_count"] == 1
+    assert paneer["received_tag"] == "No"
+    assert paneer["not_received_count"] == 0
 
-    received = csv_upload("received.csv", "Paneer,6,kg\n")
-    rec_resp = await client.post(f"/api/inquiries/{inquiry_id}/inventory-upload?movement_type=received", headers=auth(token), files=received)
-    assert rec_resp.status_code == 200, rec_resp.text
+    # ops field edit does not need a remark
+    ok = await client.patch(f"/api/events/{inquiry_id}/inventory-items", headers=auth(token), json={
+        "item_name": "Paneer", "field": "not_received_count", "value": 3
+    })
+    assert ok.status_code == 200, ok.text
 
-    detail = (await client.get(f"/api/events/{inquiry_id}", headers=auth(token))).json()
-    paneer = detail["inventory"][0]
-    assert paneer["received_qty"] == 6
-    assert paneer["received_status"] == "Partial"
-
-    # editing without remark -> 400
-    bad = await client.post(f"/api/events/{inquiry_id}/inventory-items", headers=auth(token), json={
-        "rows": [{"item_name": "Paneer", "received_qty": 10, "transfer_count": None, "returned_qty": None, "remark": None}]
+    # required qty edit without remark -> 400
+    bad = await client.patch(f"/api/events/{inquiry_id}/inventory-items", headers=auth(token), json={
+        "item_name": "Paneer", "field": "required_qty", "value": 12
     })
     assert bad.status_code == 400
 
-    # editing with remark -> ok
-    ok = await client.post(f"/api/events/{inquiry_id}/inventory-items", headers=auth(token), json={
-        "rows": [{"item_name": "Paneer", "received_qty": 10, "transfer_count": None, "returned_qty": None, "remark": "received extra 4kg"}]
+    # required qty edit with remark -> ok
+    ok = await client.patch(f"/api/events/{inquiry_id}/inventory-items", headers=auth(token), json={
+        "item_name": "Paneer", "field": "required_qty", "value": 12, "remark": "kitchen revised requirement"
     })
     assert ok.status_code == 200, ok.text
 
     detail = (await client.get(f"/api/events/{inquiry_id}", headers=auth(token))).json()
     paneer = detail["inventory"][0]
-    assert paneer["received_qty"] == 10
-    assert paneer["received_status"] == "Received"
-    assert paneer["remark"] == "received extra 4kg"
+    assert paneer["required_qty"] == 12
+    assert paneer["not_received_count"] == 3
+
+    # unknown item -> 400
+    bad_item = await client.patch(f"/api/events/{inquiry_id}/inventory-items", headers=auth(token), json={
+        "item_name": "Ghost", "field": "transfer_count", "value": 1
+    })
+    assert bad_item.status_code == 400
+
+    # negative value -> 400
+    neg = await client.patch(f"/api/events/{inquiry_id}/inventory-items", headers=auth(token), json={
+        "item_name": "Paneer", "field": "transfer_count", "value": -1
+    })
+    assert neg.status_code == 400
+
+    # bad field -> 400
+    bad_field = await client.patch(f"/api/events/{inquiry_id}/inventory-items", headers=auth(token), json={
+        "item_name": "Paneer", "field": "nonsense", "value": 1
+    })
+    assert bad_field.status_code == 400
 
 
 async def test_upload_history_versions(client):
