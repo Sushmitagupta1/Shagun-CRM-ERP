@@ -129,7 +129,7 @@ async def save_inventory_items(
     inquiry_id: uuid.UUID,
     data: InventoryItemsSaveRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role("admin", "operations_manager", "warehouse")),
+    current_user: User = Depends(require_role("admin", "operations_manager")),
 ):
     inquiry = await get_inquiry_or_404(db, inquiry_id)
     if inquiry.is_completed:
@@ -147,29 +147,51 @@ async def save_inventory_items(
         if base is None:
             raise HTTPException(status_code=400, detail=f"Item '{row.item_name}' not found in required plan")
         ov = existing.get(row.item_name.strip().lower())
-        current_received = ov.received_qty if ov is not None and ov.received_qty is not None else base["received_qty"]
-        current_transfer = ov.transfer_count if ov is not None and ov.transfer_count is not None else base["transfer_count"]
-        current_returned = ov.returned_qty if ov is not None and ov.returned_qty is not None else base["returned_qty"]
 
-        changed = (
-            (row.received_qty is not None and row.received_qty != current_received)
-            or (row.transfer_count is not None and row.transfer_count != current_transfer)
-            or (row.returned_qty is not None and row.returned_qty != current_returned)
-        )
-        if changed and not (row.remark or "").strip():
+        current_required = ov.required_qty if ov is not None and ov.required_qty is not None else base["required_qty"]
+        current_received = ov.received_qty if ov is not None and ov.received_qty is not None else 0
+        current_not_received = ov.not_received_count if ov is not None and ov.not_received_count is not None else 0
+        current_transfer = ov.transfer_count if ov is not None and ov.transfer_count is not None else 0
+        current_returned = ov.returned_qty if ov is not None and ov.returned_qty is not None else 0
+
+        changes = []
+        if row.required_qty is not None and float(row.required_qty) != float(current_required):
+            changes.append(("required_qty", _fmt_value(current_required), _fmt_value(row.required_qty)))
+        if row.received_qty is not None and float(row.received_qty) != float(current_received):
+            changes.append(("received_qty", _fmt_value(current_received), _fmt_value(row.received_qty)))
+        if row.not_received_count is not None and float(row.not_received_count) != float(current_not_received):
+            changes.append(("not_received_count", _fmt_value(current_not_received), _fmt_value(row.not_received_count)))
+        if row.transfer_count is not None and float(row.transfer_count) != float(current_transfer):
+            changes.append(("transfer_count", _fmt_value(current_transfer), _fmt_value(row.transfer_count)))
+        if row.returned_qty is not None and float(row.returned_qty) != float(current_returned):
+            changes.append(("returned_qty", _fmt_value(current_returned), _fmt_value(row.returned_qty)))
+
+        if changes and not (row.remark or "").strip():
             raise HTTPException(status_code=400, detail=f"Remark is mandatory when changing '{row.item_name}'")
 
         if ov is None:
             ov = EventInventoryItem(inquiry_id=inquiry_id, item_name=base["item_name"])
             db.add(ov)
             existing[row.item_name.strip().lower()] = ov
+        if row.required_qty is not None:
+            ov.required_qty = row.required_qty
         if row.received_qty is not None:
             ov.received_qty = row.received_qty
+        if row.not_received_count is not None:
+            ov.not_received_count = row.not_received_count
         if row.transfer_count is not None:
             ov.transfer_count = row.transfer_count
         if row.returned_qty is not None:
             ov.returned_qty = row.returned_qty
         ov.remark = row.remark
+
+        for field_name, old_v, new_v in changes:
+            await log_event_audit(
+                db, inquiry_id, current_user.id, "edit", "inventory_item",
+                item_name=base["item_name"], field_name=field_name,
+                old_value=old_v, new_value=new_v,
+                remark=(row.remark or "").strip() or None,
+            )
 
     await db.commit()
     return {"ok": True}
