@@ -180,9 +180,15 @@ export default function MenuGenerator() {
       : p)))
   }
 
+  const handleEditDescription = (pageIndex: number, itemKey: string, text: string) => {
+    setEditDraft((prev) => prev.map((p) => (p.pageIndex === pageIndex
+      ? { ...p, items: p.items.map((it) => (it.key === itemKey ? { ...it, description: text } : it)) }
+      : p)))
+  }
+
   const handleAddItem = (pageIndex: number) => {
     setEditDraft((prev) => prev.map((p) => (p.pageIndex === pageIndex
-      ? { ...p, items: [...p.items, { key: `${p.pageIndex}_new_${Date.now()}`, text: '' }] }
+      ? { ...p, items: [...p.items, { key: `${p.pageIndex}_new_${Date.now()}`, text: '', description: '' }] }
       : p)))
   }
 
@@ -542,6 +548,7 @@ export default function MenuGenerator() {
                       ['Title font', 'title'],
                       ['Heading font', 'heading'],
                       ['Item font', 'item'],
+                      ['Description font', 'description'],
                     ] as const).map(([label, key]) => (
                       <div key={key}>
                         <label className="mb-1 block text-[10px] font-medium text-gray-500">{label}</label>
@@ -591,7 +598,10 @@ export default function MenuGenerator() {
                         <div key={item.key} className="flex items-center gap-2">
                           <input value={item.text} onChange={(e) => handleEditItem(page.pageIndex, item.key, e.target.value)}
                             placeholder="Dish name"
-                            className="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-gold/30" />
+                            className="w-1/2 rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-gold/30" />
+                          <input value={item.description ?? ''} onChange={(e) => handleEditDescription(page.pageIndex, item.key, e.target.value)}
+                            placeholder="Description (optional)"
+                            className="w-1/2 rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-400 focus:outline-none focus:ring-2 focus:ring-gold/30" />
                           <button onClick={() => handleRemoveItem(page.pageIndex, item.key)}
                             className="shrink-0 rounded-lg border border-red-100 p-2 text-red-400 transition-colors hover:bg-red-50 hover:text-red-600">
                             <Trash2 size={13} />
