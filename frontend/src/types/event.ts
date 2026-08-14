@@ -15,9 +15,11 @@ export interface EventInventoryRow {
   required_qty: number
   received_qty: number
   not_received_count: number
-  received_status: string
+  received_tag: string
   transfer_count: number
   returned_qty: number
+  breakage_count: number
+  transfer_event: string | null
   unit: string | null
   remark: string | null
 }
@@ -50,6 +52,8 @@ export interface ClosureSummary {
   transferred_qty: number
   returned_thol_qty: number
   wastage_qty: number
+  breakage_qty: number
+  pending_qty: number
 }
 
 export interface FileVersion {
@@ -94,7 +98,9 @@ export interface EventDetail {
 
 export interface InventoryItemSave {
   item_name: string
+  required_qty?: number | null
   received_qty?: number | null
+  not_received_count?: number | null
   transfer_count?: number | null
   returned_qty?: number | null
   remark?: string | null
@@ -145,4 +151,24 @@ export interface TimelineStage {
   status: string
   date: string | null
   description: string | null
+}
+
+export interface InventoryItemPatch {
+  item_name: string
+  field: string
+  value: number | string | null
+  remark?: string | null
+}
+
+export interface EventAuditRow {
+  id: string
+  action: string
+  entity_type: string
+  item_name: string | null
+  field_name: string | null
+  old_value: string | null
+  new_value: string | null
+  remark: string | null
+  created_at: string
+  user_name: string | null
 }
