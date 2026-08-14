@@ -1,3 +1,5 @@
+import { MENU_PALETTES } from './menuDesign'
+
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY as string
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions'
 // flash-lite has no hidden "thinking" tokens, so long HTML outputs are not
@@ -227,11 +229,6 @@ Be specific, data-driven, and actionable. Format with clear headings.`
 }
 
 // ── AI Menu Designer ──
-const DESIGN_THEMES = [
-  'Elegant classic: deep maroon and gold, refined serif headings ("Playfair Display", Georgia), an ornate double-line border frame, traditional celebration feel.',
-  'Modern minimal: clean white card with one strong accent color (deep teal or navy), a thin geometric frame, contemporary sans-serif headings ("Montserrat", "Segoe UI"), generous whitespace.',
-  'Romantic flourish: rose gold and blush tones, a decorative script title ("Great Vibes", "Brush Script MT"), a thin floral/swirl border, soft serif body text.',
-]
 
 // Gemini does not reliably output multiple designs in one response, so each
 // option is generated in its own call (one distinct theme per call) and the
@@ -251,13 +248,18 @@ export async function generateMenuDesign(params: {
   templateImage?: string | null
   count?: number
   previousDesign?: string | null
+  paletteIndex?: number
 }): Promise<AIResponse> {
   const designCount = params.count || 3
   const outputs: string[] = []
   for (let i = 0; i < designCount; i++) {
-    const themeNote = designCount > 1
-      ? `- This is option ${i + 1} of ${designCount}. For THIS option only, apply this theme: ${DESIGN_THEMES[i % DESIGN_THEMES.length]}`
-      : ''
+    const paletteIdx = params.paletteIndex ?? i
+    const palette = MENU_PALETTES[paletteIdx % MENU_PALETTES.length]
+    const themeNote = `- Apply THIS text palette (exact hex colours) for this option, option ${i + 1} of ${designCount}:
+  HEADING colour ${palette.heading} — ALL CAPS, font-family ${palette.headingFont}.
+  DISH NAME colour ${palette.item} — font-family ${palette.itemFont}.
+  DESCRIPTION colour ${palette.desc} — font-family ${palette.descFont}.
+  Use these exact colours and fonts; you may pick very close shades only if they clash badly with the template picture.`
     const prompt = buildMenuDesignPrompt(params, themeNote)
     const res = params.templateImage
       ? await callGeminiVision(prompt, params.templateImage, 40000)
@@ -279,14 +281,15 @@ function buildMenuDesignPrompt(params: {
   previousDesign?: string | null
 }, themeNote: string): string {
   const templateImageNote = params.templateImage
-    ? `\n- I am attaching the actual template picture. Study the attached template image carefully and design the menu to match its border, frame, colors, and style. Place the menu content in the middle of the border shown in the picture, keeping comfortable margin from the border edges. Use fonts and colors that complement the template picture.`
+    ? `\n- I am attaching the actual template picture. Study it carefully and match its border, frame, colours and style.
+- The template picture already has its own border/frame decoration. Do NOT add any extra border or frame of your own — just place the text content in the CLEAR MIDDLE area inside the template's border, with comfortable padding so no text overlaps the border decoration.`
     : ''
   const regenerationNote = params.previousDesign
-    ? `\n- This is a REGENERATION. Keep the same menu items and section labels, but produce a clearly DIFFERENT version from the one shown below: change the color palette, fonts, heading treatment, and layout. Do not just repeat the previous design.\nPREVIOUS VERSION (for reference only):\n${params.previousDesign.slice(0, 1500)}`
+    ? `\n- This is a REGENERATION. Keep the same menu items and section labels, and KEEP the same text palette given below, but produce a clearly DIFFERENT layout: change the arrangement, ornament spacing and heading treatment. Do not just repeat the previous design.\nPREVIOUS VERSION (for reference only):\n${params.previousDesign.slice(0, 1500)}`
     : ''
   const backgroundGuidance = params.templateInfo
-    ? `- Set the template background via CSS on the wrapper div, e.g. <div style="display:flex;align-items:center;justify-content:center;background-image:url('TEMPLATE_URL');background-size:100% 100%;background-position:center;background-repeat:no-repeat;min-height:100vh;padding:40px"> ... </div>. Replace TEMPLATE_URL literally with the given template URL string. The wrapper MUST be display:flex with align-items:center and justify-content:center so the content sits in the MIDDLE of the border.`
-    : `- Use a clean white or very light background on the wrapper div (no background image), with the same flex centering so the content sits in the middle of the page.`
+    ? `- Set the template background via CSS on the wrapper div, e.g. <div style="display:flex;align-items:center;justify-content:center;background-image:url('TEMPLATE_URL');background-size:cover;background-position:center;background-repeat:no-repeat;min-height:100vh;padding:40px"> ... </div>. Replace TEMPLATE_URL literally with the given template URL string. background-size:cover (NOT 100% 100%) so the picture fills the page without distortion. The wrapper MUST be display:flex with align-items:center and justify-content:center so the content sits in the MIDDLE of the border.`
+    : `- Use a clean cream or white wrapper div (no background image), with the same flex centering so the content sits in the middle of the page.`
   return `You are an expert luxury menu card designer for Shagun Caterers (pure veg only).
 Design a beautiful wedding-menu booklet using ONLY the user's menu list and section labels.
 
@@ -295,32 +298,37 @@ CONTENT RULE (very important):
 - If the user's menu already starts with a heading/name/date line, that exact line may be used on the cover. Otherwise use a decorative ornament and the plain word "MENU".
 - A "SPECIAL MENU FOR / AT / Decorator / Event Co-Ordinator / Colour Theme / Crockery & Cutlery / Type of Function / Type of Service / Office Address / Residence Address" block is a DETAILS page — render it exactly as given, leaving values blank when the user left them blank.
 
-DESIGN STYLE (match this elegant wedding-menu look):
-- Warm cream / ivory background (around #F7EBDB to #FEF7EB). NO plain white, no dark backgrounds.
-- Deep maroon (#804231) for the main title and accents; soft charcoal (#231F20) for body text; antique-gold (#C9A227) for thin lines and ornaments.
-- Each page has a thin elegant DOUBLE-LINE border frame (gold outer, maroon inner) inset ~14px from the edges.
-- Title font: elegant serif like 'EB Garamond' / 'Playfair Display', Georgia, serif. Body font: medium sans like 'Montserrat' / 'Lato', 'Segoe UI', Arial, sans-serif.
-- Refined, symmetrical, spacious layout with small compact text. Everything horizontally centered.
+DESIGN STYLE:
+- Warm cream / ivory page background (#F7EBDB to #FEF7EB). NO plain white, no dark page backgrounds.
+- Use the option's text palette (given below) for all text colours and fonts. Only when a template picture is provided, keep its own border and do not add a frame of your own.
+- Refined, symmetrical, spacious layout, everything horizontally centered.
 Template background: ${params.templateInfo || 'No template selected — use the cream wedding style above'}
 
 USER'S MENU LIST (section labels are headings):
 ${params.menuText}
+
+${themeNote}
 
 INSTRUCTIONS:
 - Return exactly 1 design option. Do NOT output "---DESIGN---", "Design Option N:", "Page N:" or any other separator or label text — output only the page markup.
 - Separate pages with "---PAGE---". The separator must appear BETWEEN complete pages, never inside a page's markup.
 - Each page is a COMPLETE, SELF-CONTAINED HTML fragment: a <style> block (scoped inline styles) followed by the page markup wrapped in a single wrapper <div> that is opened AND closed on that same page. Do NOT share one wrapper <div> across pages. No <html>, <head>, doctype, <script>, external images, or absolute URLs.
 - PAGE STRUCTURE, in this exact order:
-  1. COVER page: large decorative title (use the user's top line if present, else "MENU"), small flourish ornament under it, the thin double-line frame, nothing else.
+  1. COVER page: large decorative title (use the user's top line if present, else "MENU"), small flourish ornament under it, nothing else.
   2. DETAILS page: title "PROPOSED MENU" (or "MENU") then "SPECIAL MENU FOR - PAX ON AT:" and the details list (Decorator, Event Co-Ordinator, Colour Theme, Crockery & Cutlery, Type of Function, Type of Service, Office Address, Residence Address) with the user's values after each colon. If the user's menu has no such block, skip this page.
   3. MENU pages: each labeled section of the user's menu becomes its OWN page (e.g. a "High Tea" page, a "Mehandi Dinner" page, a "Reception Dinner" page, then each station/section page). Use the user's exact section label as the <h2>.
-- LIST EVERY DISH, DO NOT SKIP ANYTHING: every dish, drink and line the user wrote MUST appear on its own <li>, exactly as written. Never merge several dishes into one line, never summarise, never drop a dish or a subsection. If the menu is long, simply use more pages (---PAGE---) — but include absolutely everything.
-- Use <h1> for the page title (cover title, PROPOSED MENU), <h2> for section labels, and <ul>/<li> per dish.
-${themeNote || ``}
+- LIST EVERY DISH, DO NOT SKIP ANYTHING: every dish, drink and line the user wrote MUST appear. Never merge several dishes into one line, never summarise, never drop a dish or a subsection. If the menu is long, simply use more pages (---PAGE---) — but include absolutely everything.
+- TYPOGRAPHY HIERARCHY (per menu page, mandatory):
+  1. Section headings (<h2>): LARGE (16-20px), ALL CAPS, bold, in the HEADING colour and HEADING font of the option palette.
+  2. Dish names (<strong class="dish-name"> inside each <li>): MEDIUM (13-15px), in the DISH NAME colour and DISH NAME font of the palette, sentence case (only the first word capitalised).
+  3. Dish descriptions (<span class="dish-desc">, on their own line under the name): SMALL (10-11px), in the DESCRIPTION colour and DESCRIPTION font, sentence case.
+- SPLITTING RULE: if a dish line contains a "-", "–", "—" or ":" separator, the part before it is the dish name and the part after it is the description. Lines without a separator are name-only (no description span).
+- Do NOT capitalise dish names or descriptions — only headings are ALL CAPS.
+- DISH LIST STRUCTURE (mandatory): <ul class="menu-dishes"> with one <li class="menu-dish"> per dish, containing <strong class="dish-name">NAME</strong> followed by <span class="dish-desc">DESCRIPTION</span> (omit the span when there is no description).
+- Use <h1> for the page title (cover title, PROPOSED MENU), <h2> for section labels.
 ${backgroundGuidance}
 - CENTER EACH PAGE: on the wrapper div use display:flex, align-items:center, justify-content:center, min-height:100vh, padding:40px. The inner card is centered (text-align:center) with padding; nothing touches the frame edges.
-- SMALL REFINED FONTS: cover title <h1> 26-34px, "PROPOSED MENU" <h1> 28-36px, section headings <h2> 13-15px, dish names 11-12px, descriptions 9-10px. Compact spacing so the whole card fits A4 portrait.
-- Use <ul>/<li> with one <li> per dish. You MAY add small decorative empty spans inside an <li> (e.g. a veg dot), but keep the dish name as the last visible text.
+- SMALL COMPACT FONTS so the whole menu fits one A4 portrait sheet: cover title <h1> 26-34px, "PROPOSED MENU" <h1> 28-36px, section headings <h2> 16-20px, dish names 13-15px, descriptions 10-11px.
 - Keep all CSS inline in a <style> tag that only targets the page. Use CSS classes, not element selectors that could leak.
 - Content must fit A4 portrait. Each page must be a SINGLE A4 sheet — never let one section spill onto a second page, and never put two sections on one page.
 ${templateImageNote}
