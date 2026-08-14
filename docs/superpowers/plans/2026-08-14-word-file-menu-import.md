@@ -1,12 +1,12 @@
-# Word File Import for Menu Designer — Implementation Plan
+# Word File Menu Import + Word Export — Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Let menu planners upload a `.doc`/`.docx` menu file in the Menu Generator, keep its underline/size/pattern, apply the selected template background with template-matched colours, and get ONE editable design they can download as PDF.
+**Goal:** Let a menu planner upload a `.doc`/`.docx` menu file in the Menu Generator, have Gemini fix only the spelling (content, categories and structure unchanged), see ONE editable preview on the selected template background with template-matched colours, and download a `.docx` where the template picture fills the page background and the text is beautifully formatted on top (page structure like the original Word file — 3-4 categories per page).
 
-**Architecture:** A stateless backend endpoint (`POST /api/menu/parse-word`) converts `.doc`→`.docx` via LibreOffice headless, then parses the `.docx` with `python-docx` into HTML that carries inline formatting (font-size, underline, bold, alignment). The frontend wraps that HTML on the selected template background (single page), extracts a template-matched colour palette from the template image, shows exactly one design, edits it via a line editor that preserves formatting, and downloads via the existing A4 PDF pipeline.
+**Architecture:** A stateless backend endpoint (`POST /api/menu/parse-word`) extracts structured lines (`text`, `is_heading`, `page`) from the uploaded Word file via python-docx (converting `.doc` → `.docx` with LibreOffice headless). The frontend calls Gemini (`polishMenuText`, existing client-side key) for spelling only, groups lines into pages, renders a single template-background preview, and posts the final lines to `POST /api/menu/export-word`, which builds a `.docx` with python-docx (template image in the section header = full-page background; centered text; heading colour/size + dish colour).
 
-**Tech Stack:** FastAPI (backend), python-docx + LibreOffice (word parsing), React 19 + TypeScript (frontend), html2canvas/jsPDF (existing PDF pipeline).
+**Tech Stack:** FastAPI (backend), python-docx + LibreOffice (word parsing/export), React 19 + TypeScript (frontend), Gemini via `frontend/src/lib/ai.ts`.
 
 **Spec:** `docs/superpowers/specs/2026-08-14-word-file-menu-import-design.md`
 
@@ -14,26 +14,31 @@
 
 ## File Structure
 
-- **Create** `backend/app/services/word_parser.py` — `.doc`→`.docx` conversion (`_run_soffice`) + `docx_to_html` (python-docx → inline-styled HTML) + `word_to_html(bytes, filename)` (entry point, validates extension/size).
-- **Create** `backend/app/routers/menu_word.py` — `POST /api/menu/parse-word` (JWT-protected multipart upload).
+- **Create** `backend/app/services/word_parser.py` — `word_to_lines(file_bytes, filename)` (extension/size validation, `.doc`→`.docx` via soffice, heading + page-break detection).
+- **Create** `backend/app/services/word_export.py` — `build_menu_docx(lines, template_path, colors) -> bytes`.
+- **Create** `backend/app/routers/menu_word.py` — `POST /api/menu/parse-word` + `POST /api/menu/export-word` (JWT-protected).
 - **Modify** `backend/app/main.py` — register the router.
-- **Modify** `backend/requirements.txt` — add `python-docx`.
+- **Modify** `backend/app/config.py` — add `TEMPLATES_DIR` setting.
+- **Modify** `backend/requirements.txt` — add `python-docx==1.1.2`.
 - **Modify** `backend/Dockerfile` — install `libreoffice-writer-nogui` + fonts.
-- **Create** `backend/tests/test_word_parser.py` — unit tests for the service (no DB).
-- **Create** `backend/tests/test_menu_word.py` — API tests (login + upload).
-- **Modify** `frontend/src/api/inquiries.ts` — add `parseWordFile`.
-- **Modify** `frontend/src/lib/menuDesign.ts` — add `TemplatePalette`, `WordEditableBlock`, `extractTemplatePalette`, `extractWordEditable`, `applyWordEdits`, `buildWordPageHtml`.
+- **Create** `backend/tests/test_word_parser.py` — unit tests (no DB).
+- **Create** `backend/tests/test_word_export.py` — unit tests (no DB).
+- **Create** `backend/tests/test_menu_word.py` — API tests (needs the test Postgres).
+- **Modify** `frontend/src/lib/ai.ts` — add `polishMenuText`.
+- **Modify** `frontend/src/api/inquiries.ts` — add `parseWordFile`, `downloadWordMenu`.
+- **Modify** `frontend/src/types/inquiry.ts` — add `wordLines?: WordLine[]` to `MenuDesignPayload`.
+- **Modify** `frontend/src/lib/menuDesign.ts` — add `TemplatePalette`, `WordLine`, `extractTemplatePalette`, `wordLinesToHtml`, `groupWordLines`, `extractWordLinesFromHtml`, `buildWordPageHtml`; add `wordLines?` to `MenuDesign`.
 - **Create** `frontend/src/components/menu/WordMenuEditor.tsx` — line editor modal.
-- **Modify** `frontend/src/pages/menu/MenuGenerator.tsx` — upload control, single-design build, word editor wiring, hide Regenerate for word designs.
+- **Modify** `frontend/src/pages/menu/MenuGenerator.tsx` — upload control, polish flow, single preview, edit, Download Word.
 
 ---
 
 ## Task 1: Backend — word parsing service (unit tests)
 
 **Files:**
+- Modify: `backend/requirements.txt`
 - Create: `backend/app/services/word_parser.py`
 - Test: `backend/tests/test_word_parser.py`
-- Modify: `backend/requirements.txt`
 
 - [ ] **Step 1: Add python-docx to requirements**
 
@@ -49,29 +54,32 @@ Create `backend/tests/test_word_parser.py`:
 
 ```python
 import io
-import os
-import tempfile
 import zipfile
 
 import pytest
 
-from app.services.word_parser import docx_to_html, word_to_html
+from app.services.word_parser import word_to_lines
 
 
-def build_docx(paragraphs: list[tuple[str, list[tuple[str, str]]]]) -> bytes:
-    """paragraphs: list of (pPr_xml, [(run_props_xml, text), ...])."""
+def build_docx(paragraphs: list[tuple[str, list[str]]]) -> bytes:
+    """paragraphs: list of (pPr_xml, [run_xml, ...]). Run xml may contain
+    <w:br w:type="page"/> for a page break. Includes a minimal styles.xml so
+    python-docx can resolve paragraph styles."""
     body = []
     for ppr, runs in paragraphs:
-        run_xml = []
-        for props, text in runs:
-            rpr = f"<w:rPr>{props}</w:rPr>" if props else ""
-            run_xml.append(f'<w:r>{rpr}<w:t xml:space="preserve">{text}</w:t></w:r>')
         ppr_xml = f"<w:pPr>{ppr}</w:pPr>" if ppr else ""
-        body.append(f"<w:p>{ppr_xml}{''.join(run_xml)}</w:p>")
+        body.append(f"<w:p>{ppr_xml}{''.join(runs)}</w:p>")
     document_xml = (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
         '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
         f"<w:body>{''.join(body)}</w:body></w:document>"
+    )
+    styles_xml = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+        '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style>'
+        '<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/></w:style>'
+        "</w:styles>"
     )
     content_types = (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
@@ -79,6 +87,7 @@ def build_docx(paragraphs: list[tuple[str, list[tuple[str, str]]]]) -> bytes:
         '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
         '<Default Extension="xml" ContentType="application/xml"/>'
         '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
+        '<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>'
         "</Types>"
     )
     rels = (
@@ -87,57 +96,76 @@ def build_docx(paragraphs: list[tuple[str, list[tuple[str, str]]]]) -> bytes:
         '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>'
         "</Relationships>"
     )
+    doc_rels = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'
+        "</Relationships>"
+    )
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("[Content_Types].xml", content_types)
         zf.writestr("_rels/.rels", rels)
         zf.writestr("word/document.xml", document_xml)
+        zf.writestr("word/_rels/document.xml.rels", doc_rels)
+        zf.writestr("word/styles.xml", styles_xml)
     return buf.getvalue()
 
 
-def _write_temp_docx(data: bytes) -> str:
-    fd, path = tempfile.mkstemp(suffix=".docx")
-    with os.fdopen(fd, "wb") as f:
-        f.write(data)
-    return path
-
-
-def test_docx_to_html_preserves_size_underline_alignment():
+def test_heading_detection():
     data = build_docx([
-        ('<w:jc w:val="center"/>', [('<w:sz w:val="48"/>', "WEDDING MENU")]),
-        ("", [('<w:b/><w:u w:val="single"/><w:sz w:val="28"/>', "STARTERS")]),
-        ("", [("", "Paneer Tikka")]),
-        ("", [("", "Hara Bhara Kebab")]),
+        ("", ['<w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">STARTERS</w:t></w:r>']),
+        ("", ['<w:r><w:t xml:space="preserve">Paneer Tikka</w:t></w:r>']),
+        ("", ['<w:r><w:t xml:space="preserve">MAIN COURSE:</w:t></w:r>']),
+        ('<w:pStyle w:val="Heading1"/>', ['<w:r><w:t xml:space="preserve">DESSERTS</w:t></w:r>']),
     ])
-    path = _write_temp_docx(data)
-    try:
-        html = docx_to_html(path)
-    finally:
-        os.unlink(path)
-
-    assert "text-align:center" in html
-    assert "font-size:24pt" in html  # sz val 48 = 24pt (half-points)
-    assert "<u>" in html
-    assert "<strong>" in html
-    assert "font-size:14pt" in html  # sz val 28 = 14pt
-    assert "Paneer Tikka" in html
-    assert "Hara Bhara Kebab" in html
+    lines = word_to_lines(data, "menu.docx")
+    assert [l["text"] for l in lines] == ["STARTERS", "Paneer Tikka", "MAIN COURSE:", "DESSERTS"]
+    assert [l["is_heading"] for l in lines] == [True, False, True, True]
 
 
-def test_word_to_html_docx_roundtrip():
-    data = build_docx([("", [("", "Shahi Paneer")])])
-    html = word_to_html(data, "menu.docx")
-    assert "Shahi Paneer" in html
+def test_page_breaks_tracked():
+    data = build_docx([
+        ("", ['<w:r><w:t xml:space="preserve">Menu A</w:t></w:r>']),
+        ("", ['<w:r><w:br w:type="page"/><w:t xml:space="preserve">DESSERTS</w:t></w:r>']),
+        ("", ['<w:r><w:t xml:space="preserve">Gulab Jamun</w:t></w:r>']),
+        ("", ['<w:r><w:t xml:space="preserve">Line break</w:t><w:br/><w:t xml:space="preserve">continues</w:t></w:r>']),
+    ])
+    lines = word_to_lines(data, "menu.docx")
+    assert [l["page"] for l in lines] == [0, 1, 1, 1]
+    assert lines[3]["text"] == "Line break continues"
 
 
-def test_word_to_html_rejects_unsupported_extension():
+def test_blank_paragraphs_skipped():
+    data = build_docx([
+        ("", ['<w:r><w:t xml:space="preserve">   </w:t></w:r>']),
+        ("", ['<w:r><w:t xml:space="preserve">Paneer</w:t></w:r>']),
+    ])
+    lines = word_to_lines(data, "menu.docx")
+    assert len(lines) == 1
+    assert lines[0]["text"] == "Paneer"
+
+
+def test_empty_document_raises():
+    data = build_docx([])
     with pytest.raises(ValueError):
-        word_to_html(b"hello", "menu.txt")
+        word_to_lines(data, "menu.docx")
 
 
-def test_word_to_html_rejects_oversize_file():
+def test_rejects_bad_extension():
     with pytest.raises(ValueError):
-        word_to_html(b"x" * (10 * 1024 * 1024 + 1), "menu.docx")
+        word_to_lines(b"hello", "menu.txt")
+
+
+def test_rejects_oversize_file():
+    with pytest.raises(ValueError):
+        word_to_lines(b"x" * (10 * 1024 * 1024 + 1), "menu.docx")
+
+
+def test_doc_without_soffice_raises_runtime_error(monkeypatch):
+    monkeypatch.setattr("app.services.word_parser.shutil.which", lambda name: None)
+    with pytest.raises(RuntimeError):
+        word_to_lines(b"not a real doc", "menu.doc")
 ```
 
 - [ ] **Step 3: Run the tests to verify they fail**
@@ -161,14 +189,15 @@ import subprocess
 import tempfile
 
 from docx import Document
-from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.oxml.ns import qn
 
 MAX_FILE_BYTES = 10 * 1024 * 1024
 ALLOWED_EXTENSIONS = {".doc", ".docx"}
+MAX_HEADING_TEXT_LENGTH = 40
 
 
 def _run_soffice(src_path: str, out_dir: str) -> str:
-    """Convert a legacy .doc to .docx via headless LibreOffice."""
+    """Convert a legacy .doc file to .docx via headless LibreOffice."""
     soffice = shutil.which("soffice")
     if soffice is None:
         raise RuntimeError("LibreOffice (soffice) is not installed on this server — cannot parse .doc files")
@@ -193,63 +222,31 @@ def _run_soffice(src_path: str, out_dir: str) -> str:
     return converted
 
 
-def _escape(text: str) -> str:
-    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+def _paragraph_has_page_break(para) -> bool:
+    for run in para.runs:
+        for br in run._element.findall(qn("w:br")):
+            if br.get(qn("w:type")) == "page":
+                return True
+    return False
 
 
-def _run_html(run) -> str:
-    text = run.text or ""
-    if not text.strip():
-        return ""
-    inner = _escape(text)
-    if run.font.bold:
-        inner = f"<strong>{inner}</strong>"
-    if run.font.italic:
-        inner = f"<em>{inner}</em>"
-    if run.font.underline:
-        inner = f"<u>{inner}</u>"
-    styles = []
-    size = run.font.size
-    if size is not None and size.pt:
-        styles.append(f"font-size:{size.pt:g}pt")
-    color = None
-    try:
-        if run.font.color is not None and run.font.color.type is not None:
-            rgb = run.font.color.rgb
-            if rgb is not None:
-                color = str(rgb)
-    except Exception:
-        color = None
-    if color:
-        styles.append(f"color:#{color}")
-    if styles:
-        inner = f'<span style="{";".join(styles)}">{inner}</span>'
-    return inner
+def _is_heading(para) -> bool:
+    text = "".join(run.text or "" for run in para.runs).strip()
+    if not text:
+        return False
+    style_name = (para.style.name or "").strip()
+    if style_name.lower().startswith("heading"):
+        return True
+    if any(run.font.bold for run in para.runs):
+        return True
+    return len(text) <= MAX_HEADING_TEXT_LENGTH and text.upper() == text and text.endswith(":")
 
 
-def docx_to_html(file_path: str) -> str:
-    """Convert a .docx file to HTML, preserving font size, underline, bold,
-    italic, colour and alignment as inline styles."""
-    doc = Document(file_path)
-    parts = []
-    for para in doc.paragraphs:
-        if not "".join(run.text for run in para.runs).strip():
-            continue
-        styles = []
-        alignment = para.alignment
-        if alignment == WD_ALIGN_PARAGRAPH.CENTER:
-            styles.append("text-align:center")
-        elif alignment == WD_ALIGN_PARAGRAPH.RIGHT:
-            styles.append("text-align:right")
-        elif alignment == WD_ALIGN_PARAGRAPH.JUSTIFY:
-            styles.append("text-align:justify")
-        runs_html = "".join(_run_html(run) for run in para.runs)
-        style_attr = f' style="{";".join(styles)}"' if styles else ""
-        parts.append(f"<p{style_attr}>{runs_html}</p>")
-    return "\n".join(parts)
+def word_to_lines(file_bytes: bytes, filename: str) -> list[dict]:
+    """Parse a .doc/.docx into menu lines: [{text, is_heading, page}].
 
-
-def word_to_html(file_bytes: bytes, filename: str) -> str:
+    Raises ValueError for bad extension / oversize / empty document, and
+    RuntimeError when .doc conversion is impossible or fails."""
     ext = os.path.splitext(filename or "")[1].lower()
     if ext not in ALLOWED_EXTENSIONS:
         raise ValueError("Only .doc and .docx files are supported")
@@ -262,27 +259,241 @@ def word_to_html(file_bytes: bytes, filename: str) -> str:
         target = src_path
         if ext == ".doc":
             target = _run_soffice(src_path, os.path.join(work_dir, "conv"))
-        return docx_to_html(target)
+        doc = Document(target)
+        lines: list[dict] = []
+        page = 0
+        for para in doc.paragraphs:
+            if _paragraph_has_page_break(para):
+                page += 1
+            text = " ".join("".join(run.text or "" for run in para.runs).split())
+            if not text:
+                continue
+            lines.append({"text": text, "is_heading": _is_heading(para), "page": page})
+        if not lines:
+            raise ValueError("No readable text found in the Word file")
+        return lines
 ```
 
 - [ ] **Step 6: Run the tests to verify they pass**
 
 Run: `python -m pytest tests/test_word_parser.py -v` (from `backend`).
-Expected: 4 passed.
+Expected: 7 passed.
 
 - [ ] **Step 7: Commit**
 
 ```bash
 git add backend/requirements.txt backend/tests/test_word_parser.py backend/app/services/word_parser.py
-git commit -m "feat(menu): word parser service preserving docx formatting"
+git commit -m "feat(menu): word parser extracting lines, headings and page breaks"
 ```
 
 ---
 
-## Task 2: Backend — parse-word endpoint (API tests)
+## Task 2: Backend — .docx export builder (unit tests)
+
+**Files:**
+- Create: `backend/app/services/word_export.py`
+- Test: `backend/tests/test_word_export.py`
+
+- [ ] **Step 1: Write the failing unit test**
+
+Create `backend/tests/test_word_export.py`:
+
+```python
+import io
+import os
+
+import pytest
+
+from docx import Document
+
+from app.services.word_export import build_menu_docx
+
+
+def _tiny_png(tmp_path) -> str:
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.new("RGB", (4, 4), (200, 180, 120)).save(buf, format="PNG")
+    path = os.path.join(str(tmp_path), "bg.png")
+    with open(path, "wb") as f:
+        f.write(buf.getvalue())
+    return path
+
+
+def test_build_menu_docx_with_background(tmp_path):
+    img = _tiny_png(tmp_path)
+    data = build_menu_docx(
+        [
+            {"text": "STARTERS", "is_heading": True, "page": 0},
+            {"text": "Paneer Tikka", "is_heading": False, "page": 0},
+        ],
+        img,
+        {"heading": "#5A0016", "item": "#8C6A1F", "desc": "#4B5563"},
+    )
+    doc = Document(io.BytesIO(data))
+    texts = [p.text for p in doc.paragraphs]
+    assert "STARTERS" in texts
+    assert "Paneer Tikka" in texts
+    head = next(p for p in doc.paragraphs if p.text == "STARTERS")
+    assert head.runs[0].bold is True
+    assert head.runs[0].font.size.pt == 16
+    assert str(head.runs[0].font.color.rgb) == "5A0016"
+    header = doc.sections[0].header
+    assert len(header.paragraphs[0].runs) == 1
+    assert "<w:drawing>" in header.paragraphs[0].runs[0]._element.xml
+
+
+def test_build_menu_docx_without_background():
+    data = build_menu_docx(
+        [{"text": "Paneer", "is_heading": False, "page": 0}],
+        None,
+        {"heading": "#5A0016", "item": "#8C6A1F", "desc": "#4B5563"},
+    )
+    doc = Document(io.BytesIO(data))
+    assert doc.paragraphs[0].text == "Paneer"
+    assert len(doc.sections[0].header.paragraphs[0].runs) == 0
+
+
+def test_build_menu_docx_page_breaks():
+    data = build_menu_docx(
+        [
+            {"text": "STARTERS", "is_heading": True, "page": 0},
+            {"text": "Paneer Tikka", "is_heading": False, "page": 0},
+            {"text": "DESSERTS", "is_heading": True, "page": 1},
+        ],
+        None,
+        {"heading": "#5A0016", "item": "#8C6A1F", "desc": "#4B5563"},
+    )
+    doc = Document(io.BytesIO(data))
+    assert 'w:type="page"' in doc.element.xml
+
+
+def test_build_menu_docx_bad_hex_color_falls_back():
+    data = build_menu_docx(
+        [{"text": "Paneer", "is_heading": True, "page": 0}],
+        None,
+        {"heading": "not-a-color", "item": "#8C6A1F", "desc": "#4B5563"},
+    )
+    doc = Document(io.BytesIO(data))
+    assert str(doc.paragraphs[0].runs[0].font.color.rgb) == "5A0016"
+
+
+def test_build_menu_docx_missing_template_path_ignored():
+    data = build_menu_docx(
+        [{"text": "Paneer", "is_heading": False, "page": 0}],
+        "C:/does/not/exist/bg.png",
+        {"heading": "#5A0016", "item": "#8C6A1F", "desc": "#4B5563"},
+    )
+    doc = Document(io.BytesIO(data))
+    assert doc.paragraphs[0].text == "Paneer"
+```
+
+- [ ] **Step 2: Run the tests to verify they fail**
+
+Run: `python -m pytest tests/test_word_export.py -v` (from `backend`).
+Expected: FAIL with `ModuleNotFoundError: No module named 'app.services.word_export'`.
+
+- [ ] **Step 3: Write the minimal implementation**
+
+Create `backend/app/services/word_export.py`:
+
+```python
+import io
+import os
+
+from docx import Document
+from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_BREAK
+from docx.shared import Mm, Pt, RGBColor
+
+PAGE_WIDTH = Mm(210)
+PAGE_HEIGHT = Mm(297)
+
+
+def _hex_color(value: str | None, default: str) -> RGBColor:
+    v = (value or "").strip().lstrip("#")
+    if len(v) == 6:
+        try:
+            return RGBColor(int(v[0:2], 16), int(v[2:4], 16), int(v[4:6], 16))
+        except ValueError:
+            pass
+    return RGBColor(int(default[1:3], 16), int(default[3:5], 16), int(default[5:7], 16))
+
+
+def build_menu_docx(lines: list[dict], template_path: str | None, colors: dict) -> bytes:
+    """Build a .docx: template image as full-page background (in the header,
+    behind the body text) + centered menu text with template-matched colours."""
+    doc = Document()
+    section = doc.sections[0]
+    section.page_width = PAGE_WIDTH
+    section.page_height = PAGE_HEIGHT
+    section.top_margin = Mm(0)
+    section.bottom_margin = Mm(0)
+    section.left_margin = Mm(0)
+    section.right_margin = Mm(0)
+    section.header_distance = Mm(0)
+    section.footer_distance = Mm(0)
+
+    normal = doc.styles["Normal"]
+    normal.font.name = "Georgia"
+    normal.font.size = Pt(12)
+
+    if template_path and os.path.isfile(template_path):
+        header = section.header
+        header.is_linked_to_previous = False
+        hpara = header.paragraphs[0]
+        hpara.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        hpara.paragraph_format.space_before = Pt(0)
+        hpara.paragraph_format.space_after = Pt(0)
+        hpara.add_run().add_picture(template_path, width=PAGE_WIDTH, height=PAGE_HEIGHT)
+
+    heading_color = _hex_color(colors.get("heading"), "#5A0016")
+    item_color = _hex_color(colors.get("item"), "#8C6A1F")
+
+    last_page = 0
+    for i, line in enumerate(lines):
+        if i > 0 and line.get("page", 0) > last_page:
+            doc.add_paragraph().add_run().add_break(WD_BREAK.PAGE)
+        last_page = line.get("page", 0)
+        para = doc.add_paragraph()
+        para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        para.paragraph_format.left_indent = Mm(18)
+        para.paragraph_format.right_indent = Mm(18)
+        run = para.add_run(line.get("text", ""))
+        if line.get("is_heading"):
+            run.bold = True
+            run.font.size = Pt(16)
+            run.font.color.rgb = heading_color
+            para.paragraph_format.space_before = Pt(14)
+            para.paragraph_format.space_after = Pt(6)
+        else:
+            run.font.size = Pt(12)
+            run.font.color.rgb = item_color
+            para.paragraph_format.space_after = Pt(4)
+
+    buf = io.BytesIO()
+    doc.save(buf)
+    return buf.getvalue()
+```
+
+- [ ] **Step 4: Run the tests to verify they pass**
+
+Run: `python -m pytest tests/test_word_export.py -v` (from `backend`).
+Expected: 5 passed.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add backend/app/services/word_export.py backend/tests/test_word_export.py
+git commit -m "feat(menu): docx export builder with template background"
+```
+
+---
+
+## Task 3: Backend — parse-word + export-word endpoints (API tests)
 
 **Files:**
 - Create: `backend/app/routers/menu_word.py`
+- Modify: `backend/app/config.py`
 - Modify: `backend/app/main.py`
 - Test: `backend/tests/test_menu_word.py`
 
@@ -293,25 +504,29 @@ Create `backend/tests/test_menu_word.py`:
 ```python
 import io
 import os
-import tempfile
 import zipfile
 
-import pytest_asyncio
+import pytest
+
+from docx import Document
 
 
-def build_docx(paragraphs: list[tuple[str, list[tuple[str, str]]]]) -> bytes:
+def build_docx(paragraphs: list[tuple[str, list[str]]]) -> bytes:
     body = []
     for ppr, runs in paragraphs:
-        run_xml = []
-        for props, text in runs:
-            rpr = f"<w:rPr>{props}</w:rPr>" if props else ""
-            run_xml.append(f'<w:r>{rpr}<w:t xml:space="preserve">{text}</w:t></w:r>')
         ppr_xml = f"<w:pPr>{ppr}</w:pPr>" if ppr else ""
-        body.append(f"<w:p>{ppr_xml}{''.join(run_xml)}</w:p>")
+        body.append(f"<w:p>{ppr_xml}{''.join(runs)}</w:p>")
     document_xml = (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
         '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
         f"<w:body>{''.join(body)}</w:body></w:document>"
+    )
+    styles_xml = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+        '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style>'
+        "<w:style w:type=\"paragraph\" w:styleId=\"Heading1\"><w:name w:val=\"heading 1\"/></w:style>"
+        "</w:styles>"
     )
     content_types = (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
@@ -319,6 +534,7 @@ def build_docx(paragraphs: list[tuple[str, list[tuple[str, str]]]]) -> bytes:
         '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
         '<Default Extension="xml" ContentType="application/xml"/>'
         '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
+        '<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>'
         "</Types>"
     )
     rels = (
@@ -327,12 +543,37 @@ def build_docx(paragraphs: list[tuple[str, list[tuple[str, str]]]]) -> bytes:
         '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>'
         "</Relationships>"
     )
+    doc_rels = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'
+        "</Relationships>"
+    )
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("[Content_Types].xml", content_types)
         zf.writestr("_rels/.rels", rels)
         zf.writestr("word/document.xml", document_xml)
+        zf.writestr("word/_rels/document.xml.rels", doc_rels)
+        zf.writestr("word/styles.xml", styles_xml)
     return buf.getvalue()
+
+
+def _first_template():
+    base = os.path.join(os.path.dirname(__file__), "..", "templates")
+    if not os.path.isdir(base):
+        return None, None
+    for cat in sorted(os.listdir(base)):
+        cat_dir = os.path.join(base, cat)
+        if not os.path.isdir(cat_dir):
+            continue
+        files = sorted(
+            f for f in os.listdir(cat_dir)
+            if f.lower().endswith((".jpg", ".jpeg", ".png", ".webp", ".jfif"))
+        )
+        if files:
+            return cat, files[0]
+    return None, None
 
 
 async def login(client, username, password):
@@ -345,12 +586,11 @@ def auth(token):
     return {"Authorization": f"Bearer {token}"}
 
 
-async def test_parse_word_docx_returns_html(client):
+async def test_parse_word_docx_returns_lines(client):
     token = await login(client, "admin@shaguncatering.com", "admin123")
     docx = build_docx([
-        ('<w:jc w:val="center"/>', [('<w:sz w:val="48"/>', "WEDDING MENU")]),
-        ("", [('<w:u w:val="single"/>', "STARTERS")]),
-        ("", [("", "Paneer Tikka")]),
+        ("", ['<w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">STARTERS</w:t></w:r>']),
+        ("", ['<w:r><w:t xml:space="preserve">Paneer Tikka</w:t></w:r>']),
     ])
     resp = await client.post(
         "/api/menu/parse-word",
@@ -358,12 +598,12 @@ async def test_parse_word_docx_returns_html(client):
         files={"file": ("menu.docx", docx, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
     )
     assert resp.status_code == 200, resp.text
-    html = resp.json()["html"]
-    assert "WEDDING MENU" in html
-    assert "text-align:center" in html
-    assert "font-size:24pt" in html
-    assert "<u>" in html
-    assert "Paneer Tikka" in html
+    data = resp.json()
+    assert data["file_name"] == "menu.docx"
+    assert data["lines"] == [
+        {"text": "STARTERS", "is_heading": True, "page": 0},
+        {"text": "Paneer Tikka", "is_heading": False, "page": 0},
+    ]
 
 
 async def test_parse_word_rejects_unsupported_file(client):
@@ -377,45 +617,140 @@ async def test_parse_word_requires_auth(client):
     assert resp.status_code in (401, 403)
 
 
-async def test_parse_word_doc_failure_handled(client):
+async def test_export_word_returns_docx(client):
     token = await login(client, "admin@shaguncatering.com", "admin123")
-    # A fake .doc cannot be converted (or soffice is missing) — must be a clean 422, never a crash.
-    resp = await client.post("/api/menu/parse-word", headers=auth(token), files={"file": ("menu.doc", b"not a real doc", "application/msword")})
-    assert resp.status_code == 422
+    cat, file = _first_template()
+    if not file:
+        pytest.skip("No template image available for the export test")
+    resp = await client.post("/api/menu/export-word", headers=auth(token), json={
+        "lines": [
+            {"text": "STARTERS", "is_heading": True, "page": 0},
+            {"text": "Paneer Tikka", "is_heading": False, "page": 0},
+        ],
+        "template_category": cat,
+        "template_file": file,
+        "colors": {"heading": "#5A0016", "item": "#8C6A1F", "desc": "#4B5563"},
+    })
+    assert resp.status_code == 200, resp.text
+    assert "vnd.openxmlformats-officedocument.wordprocessingml" in resp.headers["content-type"]
+    doc = Document(io.BytesIO(resp.content))
+    texts = [p.text for p in doc.paragraphs]
+    assert "STARTERS" in texts
+    assert "Paneer Tikka" in texts
+    head = next(p for p in doc.paragraphs if p.text == "STARTERS")
+    assert head.runs[0].bold is True
+    assert len(doc.sections[0].header.paragraphs[0].runs) == 1
+
+
+async def test_export_word_empty_lines_rejected(client):
+    token = await login(client, "admin@shaguncatering.com", "admin123")
+    resp = await client.post("/api/menu/export-word", headers=auth(token), json={
+        "lines": [],
+        "template_category": "Wedding",
+        "template_file": "x.jpg",
+        "colors": {"heading": "#5A0016", "item": "#8C6A1F", "desc": "#4B5563"},
+    })
+    assert resp.status_code == 400
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `python -m pytest tests/test_menu_word.py -v` (from `backend`).
-Expected: FAIL with 404 (route not registered).
+Expected: FAIL with `404 Not Found` for `/api/menu/parse-word` (router not registered). Requires the test Postgres with seeded users to be up, as with the existing suite.
 
-- [ ] **Step 3: Implement the endpoint and register the router**
+- [ ] **Step 3: Add the TEMPLATES_DIR setting**
+
+In `backend/app/config.py`, after the `UPLOAD_DIR: str = "/app/uploads"` line (line 15), add:
+
+```python
+    TEMPLATES_DIR: str = "/app/templates"
+```
+
+- [ ] **Step 4: Implement the endpoints**
 
 Create `backend/app/routers/menu_word.py`:
 
 ```python
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+import io
+import os
 
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
+
+from app.config import settings
 from app.middleware.auth import get_current_user
 from app.models.user import User
-from app.services.word_parser import word_to_html
+from app.services.word_export import build_menu_docx
+from app.services.word_parser import word_to_lines
 
 router = APIRouter(prefix="/api/menu", tags=["menu-word"])
+
+DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+
+class WordLine(BaseModel):
+    text: str
+    is_heading: bool = False
+    page: int = 0
+
+
+class WordColors(BaseModel):
+    heading: str = "#5A0016"
+    item: str = "#8C6A1F"
+    desc: str = "#4B5563"
+
+
+class WordExportRequest(BaseModel):
+    lines: list[WordLine]
+    template_category: str
+    template_file: str
+    colors: WordColors = Field(default_factory=WordColors)
+
+
+def _template_path(category: str, file: str) -> str:
+    base = settings.TEMPLATES_DIR
+    if not os.path.isdir(base):
+        base = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "templates"))
+    base = os.path.abspath(base)
+    candidate = os.path.abspath(os.path.join(base, category, os.path.basename(file)))
+    if not candidate.startswith(base + os.sep) or not os.path.isfile(candidate):
+        raise HTTPException(status_code=400, detail="Template file not found")
+    return candidate
 
 
 @router.post("/parse-word")
 async def parse_word(file: UploadFile = File(...), _: User = Depends(get_current_user)):
     content = await file.read()
     try:
-        html = word_to_html(content, file.filename or "")
+        lines = word_to_lines(content, file.filename or "")
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except RuntimeError as e:
         raise HTTPException(status_code=422, detail=str(e))
-    return {"html": html, "file_name": file.filename or ""}
+    return {"file_name": file.filename or "", "lines": lines}
+
+
+@router.post("/export-word")
+async def export_word(req: WordExportRequest, _: User = Depends(get_current_user)):
+    if not req.lines:
+        raise HTTPException(status_code=400, detail="No menu content to export")
+    template_path = _template_path(req.template_category, req.template_file)
+    try:
+        data = build_menu_docx(
+            [line.model_dump() for line in req.lines],
+            template_path,
+            req.colors.model_dump(),
+        )
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"Failed to build Word file: {e}")
+    headers = {"Content-Disposition": 'attachment; filename="menu.docx"'}
+    return StreamingResponse(io.BytesIO(data), media_type=DOCX_MIME, headers=headers)
 ```
 
-In `backend/app/main.py`, add the import after the other router imports (line 14, after `events_router` import):
+- [ ] **Step 5: Register the router**
+
+In `backend/app/main.py`, add the import after the other router imports (after line 14, the `events_router` import):
 
 ```python
 from app.routers.menu_word import router as menu_word_router
@@ -427,26 +762,26 @@ and register it after `app.include_router(events_router)` (line 29):
 app.include_router(menu_word_router)
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [ ] **Step 6: Run the tests to verify they pass**
 
 Run: `python -m pytest tests/test_menu_word.py -v` (from `backend`).
-Expected: 4 passed. (Requires the test Postgres with seeded users to be up, as with the existing test suite.)
+Expected: 5 passed.
 
-- [ ] **Step 5: Run the full backend test suite**
+- [ ] **Step 7: Run the full backend test suite**
 
 Run: `python -m pytest -v` (from `backend`).
 Expected: all existing tests still pass.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
-git add backend/app/routers/menu_word.py backend/app/main.py backend/tests/test_menu_word.py
-git commit -m "feat(menu): parse-word endpoint for .doc/.docx menus"
+git add backend/app/routers/menu_word.py backend/app/config.py backend/app/main.py backend/tests/test_menu_word.py
+git commit -m "feat(menu): parse-word and export-word endpoints"
 ```
 
 ---
 
-## Task 3: Backend — LibreOffice in the Docker image
+## Task 4: Backend — LibreOffice in the Docker image
 
 **Files:**
 - Modify: `backend/Dockerfile`
@@ -478,44 +813,22 @@ git commit -m "chore(backend): install LibreOffice for .doc menu conversion"
 
 ---
 
-## Task 4: Frontend — parseWordFile API
-
-**Files:**
-- Modify: `frontend/src/api/inquiries.ts`
-
-- [ ] **Step 1: Add the API function**
-
-In `frontend/src/api/inquiries.ts`, after `downloadMenuSlotFile` (end of file, line 261), add:
-
-```ts
-export async function parseWordFile(file: File): Promise<{ html: string; file_name: string }> {
-  const formData = new FormData()
-  formData.append('file', file)
-  const response = await client.post('/menu/parse-word', formData)
-  return response.data
-}
-```
-
-- [ ] **Step 2: Verify the build**
-
-Run: `npm run build` (from `frontend`).
-Expected: TypeScript compiles and the build succeeds.
-
-- [ ] **Step 3: Commit**
-
-```bash
-git add frontend/src/api/inquiries.ts
-git commit -m "feat(menu): parseWordFile api client"
-```
-
----
-
 ## Task 5: Frontend — menuDesign.ts word-import helpers
 
 **Files:**
 - Modify: `frontend/src/lib/menuDesign.ts`
 
-Add the following code at the end of `frontend/src/lib/menuDesign.ts` (after `downloadMenuDesignPdf`):
+- [ ] **Step 1: Add `wordLines` to the `MenuDesign` interface**
+
+In `frontend/src/lib/menuDesign.ts`, after `paletteIndex?: number` (line 14), add:
+
+```ts
+  wordLines?: WordLine[]
+```
+
+- [ ] **Step 2: Add the helper exports at the end of the file**
+
+Append the following at the end of `frontend/src/lib/menuDesign.ts` (after `downloadMenuDesignPdf`):
 
 ```ts
 export interface TemplatePalette {
@@ -524,11 +837,10 @@ export interface TemplatePalette {
   desc: string
 }
 
-export interface WordEditableBlock {
-  key: string
+export interface WordLine {
   text: string
-  tag: string
-  style: string
+  is_heading: boolean
+  page: number
 }
 
 // Samples the dominant (non-white/non-black) colours of a template image and
@@ -580,61 +892,51 @@ export async function extractTemplatePalette(imageUrl: string): Promise<Template
   }
 }
 
-// True when an element holds visible text directly (its own text nodes) and has
-// no element child that carries text — i.e. the innermost text container.
-function isWordRunElement(el: Element): boolean {
-  if (!el.textContent || !el.textContent.trim()) return false
-  let hasDirectText = false
-  for (const node of Array.from(el.childNodes)) {
-    if (node.nodeType === Node.TEXT_NODE && node.textContent && node.textContent.trim()) {
-      hasDirectText = true
-      break
+const escWord = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+
+// Converts parsed Word lines into simple HTML: one <p> per line, headings get
+// the .word-heading class so the preview and edit styling can target them.
+export function wordLinesToHtml(lines: WordLine[]): string {
+  return lines
+    .map((l) => (l.is_heading ? `<p class="word-heading">${escWord(l.text)}</p>` : `<p>${escWord(l.text)}</p>`))
+    .join('\n')
+}
+
+// If the Word file had explicit page breaks, keep them; otherwise group so
+// each page holds up to `categoriesPerPage` heading sections.
+export function groupWordLines(lines: WordLine[], categoriesPerPage = 4): WordLine[] {
+  if (lines.some((l) => l.page > 0)) return lines
+  const out: WordLine[] = []
+  let page = 0
+  let sectionsOnPage = 0
+  for (const l of lines) {
+    if (l.is_heading) {
+      if (sectionsOnPage >= categoriesPerPage) {
+        page += 1
+        sectionsOnPage = 0
+      }
+      sectionsOnPage += 1
     }
+    out.push({ ...l, page })
   }
-  if (!hasDirectText) return false
-  for (const child of Array.from(el.children)) {
-    if (child.textContent && child.textContent.trim()) return false
-  }
-  return true
+  return out
 }
 
-// Splits a word-imported page into editable lines. Each line is the innermost
-// element holding the visible text directly (e.g. a <u>, <strong> or a <p>
-// holding bare text), so its underline/bold tag and the ancestor spans carrying
-// font-size/alignment all survive an edit.
-export function extractWordEditable(html: string): WordEditableBlock[] {
+// Rebuilds lines from the HTML stored in a design's `raw` (used when a word
+// design was loaded from a saved version and has no wordLines attached).
+export function extractWordLinesFromHtml(html: string): WordLine[] {
   const doc = new DOMParser().parseFromString(html, 'text/html')
-  const runs = Array.from(doc.body.querySelectorAll('*')).filter(
-    (el) => isWordRunElement(el) && el.tagName !== 'STYLE' && el.tagName !== 'SCRIPT'
-  )
-  return runs.map((el, i) => ({
-    key: `w${i}`,
-    text: (el.textContent ?? '').trim().replace(/\s+/g, ' '),
-    tag: el.tagName.toLowerCase(),
-    style: el.getAttribute('style') ?? '',
-  }))
-}
-
-// Re-emits the page with edited line texts. Only the text inside each run
-// element changes; tags and inline styles carrying the Word formatting are kept.
-export function applyWordEdits(html: string, blocks: WordEditableBlock[]): string {
-  const doc = new DOMParser().parseFromString(html, 'text/html')
-  const runs = Array.from(doc.body.querySelectorAll('*')).filter(
-    (el) => isWordRunElement(el) && el.tagName !== 'STYLE' && el.tagName !== 'SCRIPT'
-  )
-  const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-  runs.forEach((el, i) => {
-    const block = blocks[i]
-    if (!block) return
-    const text = block.text.trim()
-    if (text) el.innerHTML = esc(text)
-    else el.remove()
-  })
-  return doc.body.innerHTML
+  return Array.from(doc.body.querySelectorAll('p'))
+    .map((p) => ({
+      text: (p.textContent ?? '').trim(),
+      is_heading: p.classList.contains('word-heading'),
+      page: 0,
+    }))
+    .filter((l) => l.text.length > 0)
 }
 
 // Wraps word-imported HTML on a template background with template-matched text
-// colours. Produces a single page so the existing single-sheet PDF pipeline works.
+// colours. Used only for the on-screen single-page preview.
 export function buildWordPageHtml(contentHtml: string, templateUrl: string, palette: TemplatePalette): string {
   const style = `<style>
     .word-menu-card {
@@ -644,32 +946,126 @@ export function buildWordPageHtml(contentHtml: string, templateUrl: string, pale
       background-size: cover; background-position: center; background-repeat: no-repeat;
     }
     .word-menu-inner { width: 100%; text-align: center; }
-    .word-menu-inner p, .word-menu-inner li, .word-menu-inner td, .word-menu-inner th, .word-menu-inner span {
-      color: ${palette.item} !important; margin: 0.3em 0;
-    }
-    .word-menu-inner p:first-of-type, .word-menu-inner p:first-of-type span {
-      color: ${palette.heading} !important;
+    .word-menu-inner p { color: ${palette.item}; margin: 0.3em 0; font-size: 13px; }
+    .word-menu-inner p.word-heading {
+      color: ${palette.heading}; font-weight: bold; font-size: 18px;
+      text-transform: uppercase; letter-spacing: 0.06em;
+      margin: 0.7em 0 0.3em;
     }
   </style>`
   return `${style}<div class="word-menu-card"><div class="word-menu-inner">${contentHtml}</div></div>`
 }
 ```
 
-- [ ] **Step 1: Verify the build**
+- [ ] **Step 3: Verify the build**
 
 Run: `npm run build` (from `frontend`).
-Expected: TypeScript compiles and the build succeeds (`noUnusedLocals` is on — every export is used only by later tasks, so keep all new symbols exported).
+Expected: TypeScript compiles and the build succeeds. (`WordLine` is now exported in this task, so Task 6's `import type` resolves.)
 
-- [ ] **Step 2: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
 git add frontend/src/lib/menuDesign.ts
-git commit -m "feat(menu): word-import helpers - palette, editable lines, template page"
+git commit -m "feat(menu): word-import helpers - palette, lines, grouping, template page"
 ```
 
 ---
 
-## Task 6: Frontend — WordMenuEditor component
+## Task 6: Frontend — polishMenuText + API functions
+
+**Files:**
+- Modify: `frontend/src/lib/ai.ts`
+- Modify: `frontend/src/api/inquiries.ts`
+- Modify: `frontend/src/types/inquiry.ts`
+
+- [ ] **Step 1: Add `polishMenuText` to ai.ts**
+
+In `frontend/src/lib/ai.ts`, at the end of the file (after `buildMenuDesignPrompt`), add:
+
+```ts
+// ── AI Spelling Polish ──
+
+// Fixes only spelling in a menu text; keeps categories, dish names' meaning,
+// order and line structure unchanged.
+export async function polishMenuText(text: string): Promise<AIResponse> {
+  const prompt = `You are proofreading a catering menu. Fix ONLY spelling and obvious typos in the text below.
+Rules:
+- Do NOT change the categories, the dish names' meaning, the order of lines, or the number of lines.
+- Do NOT add or remove lines, do NOT rephrase, do NOT restructure.
+- Change only misspelled or mistyped words.
+- Return ONLY the corrected text, keeping the exact same line breaks as the input. No extra commentary.
+
+MENU TEXT:
+${text}`
+  return callGemini(prompt)
+}
+```
+
+- [ ] **Step 2: Add `WordLine` to types/inquiry.ts**
+
+In `frontend/src/types/inquiry.ts`, add an import at the top of the file (line 1):
+
+```ts
+import type { WordLine } from '@/lib/menuDesign'
+```
+
+and add `wordLines` to `MenuDesignPayload` (after `paletteIndex?: number`, line 81):
+
+```ts
+  wordLines?: WordLine[]
+```
+
+- [ ] **Step 3: Add `parseWordFile` and `downloadWordMenu` to inquiries.ts**
+
+In `frontend/src/api/inquiries.ts`, add `WordLine` to the import from `@/types/inquiry` (line 3):
+
+```ts
+import type { Inquiry, InquiryCreate, FollowUp, Meeting, MenuVersion, MenuSlot, WordLine } from '@/types/inquiry'
+```
+
+then at the end of the file (after `downloadMenuSlotFile`), add:
+
+```ts
+export async function parseWordFile(file: File): Promise<{ file_name: string; lines: WordLine[] }> {
+  const formData = new FormData()
+  formData.append('file', file)
+  const response = await client.post('/menu/parse-word', formData)
+  return response.data
+}
+
+export async function downloadWordMenu(payload: {
+  lines: WordLine[]
+  template_category: string
+  template_file: string
+  colors: { heading: string; item: string; desc: string }
+}): Promise<void> {
+  const response = await client.post('/menu/export-word', payload, { responseType: 'blob' })
+  const url = window.URL.createObjectURL(new Blob([response.data]))
+  const link = document.createElement('a')
+  link.href = url
+  link.setAttribute('download', 'menu.docx')
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  window.URL.revokeObjectURL(url)
+}
+```
+
+- [ ] **Step 4: Verify the build**
+
+Run: `npm run build` (from `frontend`).
+Expected: TypeScript compiles and the build succeeds. (`WordLine` was exported by `menuDesign.ts` in Task 5, so the `import type` resolves.)
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add frontend/src/lib/ai.ts frontend/src/api/inquiries.ts frontend/src/types/inquiry.ts
+git commit -m "feat(menu): polishMenuText and word parse/export api clients"
+```
+
+---
+
+## Task 7: Frontend — WordMenuEditor component
 
 **Files:**
 - Create: `frontend/src/components/menu/WordMenuEditor.tsx`
@@ -679,44 +1075,20 @@ git commit -m "feat(menu): word-import helpers - palette, editable lines, templa
 Create `frontend/src/components/menu/WordMenuEditor.tsx`:
 
 ```tsx
-import { useEffect, useState } from 'react'
-import type { CSSProperties } from 'react'
+import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { X, Save } from 'lucide-react'
-import { extractWordEditable, applyWordEdits, type WordEditableBlock } from '@/lib/menuDesign'
+import type { WordLine } from '@/lib/menuDesign'
 
-// Converts a CSS style string ("font-size:24pt; color:#123456") to a React style object.
-function styleToObject(style: string): Record<string, string> {
-  const obj: Record<string, string> = {}
-  style.split(';').forEach((pair) => {
-    const idx = pair.indexOf(':')
-    if (idx === -1) return
-    const key = pair.slice(0, idx).trim().replace(/-([a-z])/g, (_, c: string) => c.toUpperCase())
-    const val = pair.slice(idx + 1).trim()
-    if (key && val) obj[key] = val
-  })
-  return obj
-}
-
-function lineStyle(block: WordEditableBlock): Record<string, string> {
-  const obj = styleToObject(block.style)
-  if (block.tag === 'u') obj.textDecoration = 'underline'
-  if (block.tag === 'strong' || block.tag === 'b') obj.fontWeight = 'bold'
-  if (block.tag === 'em' || block.tag === 'i') obj.fontStyle = 'italic'
-  return obj
-}
-
-export default function WordMenuEditor({ html, onClose, onSave }: {
-  html: string
+export default function WordMenuEditor({ lines, onClose, onSave }: {
+  lines: WordLine[]
   onClose: () => void
-  onSave: (html: string) => void
+  onSave: (lines: WordLine[]) => void
 }) {
-  const [blocks, setBlocks] = useState<WordEditableBlock[]>([])
+  const [draft, setDraft] = useState<WordLine[]>(lines.map((l) => ({ ...l })))
 
-  useEffect(() => { setBlocks(extractWordEditable(html)) }, [html])
-
-  const update = (key: string, text: string) => {
-    setBlocks((prev) => prev.map((b) => (b.key === key ? { ...b, text } : b)))
+  const update = (index: number, text: string) => {
+    setDraft((prev) => prev.map((l, i) => (i === index ? { ...l, text } : l)))
   }
 
   return (
@@ -729,20 +1101,19 @@ export default function WordMenuEditor({ html, onClose, onSave }: {
         <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
           <div>
             <h3 className="text-sm font-bold text-gray-900">Edit Word Menu</h3>
-            <p className="text-[11px] text-gray-400">Text edits only — underline, size and layout from the Word file are kept.</p>
+            <p className="text-[11px] text-gray-400">Text edits only — categories and layout from the Word file are kept.</p>
           </div>
           <button onClick={onClose} className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
             <X size={16} />
           </button>
         </div>
         <div className="max-h-[60vh] space-y-2 overflow-y-auto bg-gray-50 p-5">
-          {blocks.map((b) => (
+          {draft.map((l, i) => (
             <input
-              key={b.key}
-              value={b.text}
-              onChange={(e) => update(b.key, e.target.value)}
-              style={lineStyle(b) as CSSProperties}
-              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-gold/30"
+              key={i}
+              value={l.text}
+              onChange={(e) => update(i, e.target.value)}
+              className={`w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-gold/30 ${l.is_heading ? 'font-bold uppercase' : ''}`}
             />
           ))}
         </div>
@@ -751,7 +1122,7 @@ export default function WordMenuEditor({ html, onClose, onSave }: {
             className="flex h-9 items-center rounded-lg border border-gray-200 px-4 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50">
             Cancel
           </button>
-          <button onClick={() => onSave(applyWordEdits(html, blocks))}
+          <button onClick={() => onSave(draft)}
             className="flex h-9 items-center gap-2 rounded-lg bg-maroon px-4 text-xs font-bold text-white transition-colors hover:bg-maroon-dark">
             <Save size={13} /> Save Changes
           </button>
@@ -776,7 +1147,7 @@ git commit -m "feat(menu): word menu line editor modal"
 
 ---
 
-## Task 7: Frontend — Menu Generator upload, single design, edit wiring
+## Task 8: Frontend — Menu Generator upload, polish, single design, edit, download
 
 **Files:**
 - Modify: `frontend/src/pages/menu/MenuGenerator.tsx`
@@ -785,25 +1156,31 @@ git commit -m "feat(menu): word menu line editor modal"
 
 In `frontend/src/pages/menu/MenuGenerator.tsx`:
 
-1. Line 8 — add `parseWordFile` to the `@/api/inquiries` import:
+1. Line 5 — add `polishMenuText` to the `@/lib/ai` import:
 
 ```tsx
-import { getMenuVersions, createMenuVersion, parseWordFile } from '@/api/inquiries'
+import { generateMenuDesign, loadImageAsDataUrl, polishMenuText } from '@/lib/ai'
 ```
 
-2. Line 6 — add `buildWordPageHtml` and `extractTemplatePalette` to the `@/lib/menuDesign` import:
+2. Line 6 — add the new helpers to the `@/lib/menuDesign` import:
 
 ```tsx
-import { parseMenuDesigns, downloadMenuDesignPdf, extractMenuEditable, applyMenuEdits, detectPageFonts, detectPageColors, scopeMenuHtml, buildWordPageHtml, extractTemplatePalette, FONT_OPTIONS, type MenuDesign, type MenuEditablePage, type MenuFonts, type MenuColors } from '@/lib/menuDesign'
+import { parseMenuDesigns, downloadMenuDesignPdf, extractMenuEditable, applyMenuEdits, detectPageFonts, detectPageColors, scopeMenuHtml, sanitizeMenuHtml, buildWordPageHtml, extractTemplatePalette, groupWordLines, wordLinesToHtml, extractWordLinesFromHtml, FONT_OPTIONS, type MenuDesign, type MenuEditablePage, type MenuFonts, type MenuColors, type TemplatePalette, type WordLine } from '@/lib/menuDesign'
 ```
 
-3. Line 12 — add `Upload` to the lucide-react import:
+3. Line 8 — add `parseWordFile` and `downloadWordMenu` to the `@/api/inquiries` import:
+
+```tsx
+import { getMenuVersions, createMenuVersion, parseWordFile, downloadWordMenu } from '@/api/inquiries'
+```
+
+4. Line 12 — add `Upload` to the lucide-react import:
 
 ```tsx
 import { ArrowLeft, Sparkles, RotateCcw, Loader2, Phone, Calendar, DollarSign, MessageSquare, FileText, User, Users, Layout, Palette, FileDown, Save, History, Eye, ChevronDown, ChevronUp, X, Pencil, Plus, Trash2, Upload } from 'lucide-react'
 ```
 
-4. After the `INQUIRY_STATUSES, PAYMENT_STATUSES` import (line 14), add:
+5. After the `INQUIRY_STATUSES, PAYMENT_STATUSES` import (line 14), add:
 
 ```tsx
 import { getErrorMessage } from '@/lib/apiError'
@@ -815,15 +1192,20 @@ import WordMenuEditor from '@/components/menu/WordMenuEditor'
 In the "AI Menu Designer" state block (after line 43 `editColors`), add:
 
 ```tsx
+const [wordLines, setWordLines] = useState<WordLine[]>([])
+const [wordPalette, setWordPalette] = useState<TemplatePalette | null>(null)
 const [uploadingWord, setUploadingWord] = useState(false)
+const [downloadingWord, setDownloadingWord] = useState(false)
 const [editingWordDesignId, setEditingWordDesignId] = useState<string | null>(null)
 ```
 
-- [ ] **Step 3: Add the upload + save-word-edit handlers**
+- [ ] **Step 3: Add the upload, save-word-edit and download handlers**
 
 After `handleLoadVersion` (after line 223), add:
 
 ```tsx
+const isHeadingText = (t: string) => t.length <= 40 && (t === t.toUpperCase() || t.endsWith(':'))
+
 const handleWordUpload = async (file?: File) => {
   if (!file) return
   if (!selectedCat || !selectedFile) {
@@ -832,20 +1214,32 @@ const handleWordUpload = async (file?: File) => {
   }
   setUploadingWord(true)
   try {
-    const { html } = await parseWordFile(file)
-    const cleaned = sanitizeMenuHtml(html)
+    const { lines } = await parseWordFile(file)
+    const res = await polishMenuText(lines.map((l) => l.text).join('\n'))
+    if (res.error) {
+      toast.error('AI error: ' + res.error)
+      return
+    }
+    const polished = (res.text || '').split('\n').map((t) => t.trim()).filter((t) => t.length > 0)
+    const merged: WordLine[] = polished.length === lines.length
+      ? lines.map((l, i) => ({ ...l, text: polished[i] }))
+      : polished.map((t) => ({ text: t, is_heading: isHeadingText(t), page: 0 }))
+    const grouped = groupWordLines(merged)
+    setWordLines(grouped)
+    const cleaned = sanitizeMenuHtml(wordLinesToHtml(grouped))
     const templateUrl = getTemplateUrl(selectedCat, selectedFile)
     const palette = await extractTemplatePalette(templateUrl)
-    const pageHtml = buildWordPageHtml(cleaned, templateUrl, palette)
+    setWordPalette(palette)
     const design: MenuDesign = {
       id: `word_${Date.now()}`,
       name: 'Word Menu',
-      pages: [{ html: pageHtml, index: 0 }],
+      pages: [{ html: buildWordPageHtml(cleaned, templateUrl, palette), index: 0 }],
       raw: cleaned,
+      wordLines: grouped,
     }
     setDesigns([design])
-    setDesignMenuText(cleaned.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim())
-    toast.success('Word menu imported — 1 design ready')
+    setDesignMenuText(grouped.map((l) => l.text).join('\n'))
+    toast.success('Word menu imported — check the preview, edit if needed, then Download Word')
   } catch (err) {
     toast.error(getErrorMessage(err, 'Word file import failed'))
   } finally {
@@ -853,18 +1247,42 @@ const handleWordUpload = async (file?: File) => {
   }
 }
 
-const handleSaveWordEdit = (newHtml: string) => {
-  setDesigns((prev) => prev.map((d) =>
-    d.id === editingWordDesignId
-      ? { ...d, pages: [{ ...d.pages[0], html: newHtml }], raw: newHtml }
-      : d
-  ))
+const handleSaveWordEdit = (newLines: WordLine[]) => {
+  setWordLines(newLines)
+  setDesigns((prev) => prev.map((d) => {
+    if (d.id !== editingWordDesignId) return d
+    const cleaned = sanitizeMenuHtml(wordLinesToHtml(newLines))
+    const templateUrl = getTemplateUrl(selectedCat, selectedFile)
+    const palette = wordPalette ?? { heading: '#5A0016', item: '#8C6A1F', desc: '#4B5563' }
+    return { ...d, pages: [{ ...d.pages[0], html: buildWordPageHtml(cleaned, templateUrl, palette) }], raw: cleaned, wordLines: newLines }
+  }))
   setEditingWordDesignId(null)
   toast.success('Design updated. Click "Save Version" to keep it.')
 }
+
+const handleDownloadWord = async (design: MenuDesign) => {
+  if (!selectedCat || !selectedFile) {
+    toast.error('Select a template first')
+    return
+  }
+  setDownloadingWord(true)
+  try {
+    await downloadWordMenu({
+      lines: design.wordLines ?? extractWordLinesFromHtml(design.raw),
+      template_category: selectedCat,
+      template_file: selectedFile,
+      colors: wordPalette ?? { heading: '#5A0016', item: '#8C6A1F', desc: '#4B5563' },
+    })
+    toast.success('Word file downloaded')
+  } catch (err) {
+    toast.error(getErrorMessage(err, 'Word export failed'))
+  } finally {
+    setDownloadingWord(false)
+  }
+}
 ```
 
-Note: `sanitizeMenuHtml` and `getTemplateUrl` are already imported in this file.
+Note: `getTemplateUrl` is already imported in this file (line 7); `sanitizeMenuHtml` is added in Step 1's `@/lib/menuDesign` import.
 
 - [ ] **Step 4: Add the upload control above the menu textarea**
 
@@ -889,11 +1307,12 @@ with:
         <textarea value={designMenuText} onChange={(e) => setDesignMenuText(e.target.value)}
 ```
 
-- [ ] **Step 5: Branch Edit and hide Regenerate for word designs**
+- [ ] **Step 5: Branch Edit and Download for word designs in the design card**
 
-In the designs grid card (around lines 457-470), replace the two action blocks:
+In the designs grid card, replace the action block (lines 456-471):
 
 ```tsx
+                <div className="p-3">
                   <button onClick={() => handleOpenEdit(design)}
                     className="mb-2 flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-gold/40 bg-gold/10 text-[11px] font-medium text-amber-700 transition-colors hover:bg-gold/20">
                     <Pencil size={12} /> Edit Items
@@ -908,11 +1327,13 @@ In the designs grid card (around lines 457-470), replace the two action blocks:
                       {regeneratingIdx === design.id ? <Loader2 size={12} className="animate-spin" /> : <RotateCcw size={12} />} Regenerate
                     </button>
                   </div>
+                </div>
 ```
 
 with:
 
 ```tsx
+                <div className="p-3">
                   {design.id.startsWith('word_') ? (
                     <button onClick={() => setEditingWordDesignId(design.id)}
                       className="mb-2 flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-gold/40 bg-gold/10 text-[11px] font-medium text-amber-700 transition-colors hover:bg-gold/20">
@@ -925,9 +1346,9 @@ with:
                     </button>
                   )}
                   {design.id.startsWith('word_') ? (
-                    <button onClick={() => handleDownloadDesignPdf(design)} disabled={downloadingPdf === design.id}
+                    <button onClick={() => handleDownloadWord(design)} disabled={downloadingWord}
                       className="flex h-8 w-full items-center justify-center gap-1.5 rounded-lg bg-maroon text-[11px] font-medium text-white transition-colors hover:bg-maroon-dark disabled:opacity-50">
-                      {downloadingPdf === design.id ? <Loader2 size={12} className="animate-spin" /> : <FileDown size={12} />} Download PDF
+                      {downloadingWord ? <Loader2 size={12} className="animate-spin" /> : <FileDown size={12} />} Download Word
                     </button>
                   ) : (
                     <div className="grid grid-cols-2 gap-2">
@@ -941,16 +1362,25 @@ with:
                       </button>
                     </div>
                   )}
+                </div>
 ```
 
-- [ ] **Step 6: Branch Edit/Regenerate in the version viewer for word designs**
+- [ ] **Step 6: Branch Edit / Download / hide Regenerate in the version viewer**
 
-In the version viewer modal (lines 513-524), replace the Edit button:
+In the version viewer modal, replace the three action buttons (lines 513-524):
 
 ```tsx
                           <button onClick={() => { setDesigns(v.designs ?? []); setViewingVersion(null); handleOpenEdit(d) }}
                             className="flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg border border-gold/40 bg-gold/10 text-[11px] font-medium text-amber-700 transition-colors hover:bg-gold/20">
                             <Pencil size={12} /> Edit
+                          </button>
+                          <button onClick={() => handleDownloadDesignPdf(d)} disabled={downloadingPdf === d.id}
+                            className="flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg bg-maroon text-[11px] font-medium text-white transition-colors hover:bg-maroon-dark disabled:opacity-50">
+                            {downloadingPdf === d.id ? <Loader2 size={12} className="animate-spin" /> : <FileDown size={12} />} Download PDF
+                          </button>
+                          <button onClick={() => { setDesigns(v.designs ?? []); setViewingVersion(null); handleRegenerateDesign(d) }} disabled={regeneratingIdx !== null}
+                            className="flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg border border-gray-200 text-[11px] font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50">
+                            {regeneratingIdx === d.id ? <Loader2 size={12} className="animate-spin" /> : <RotateCcw size={12} />} Regenerate
                           </button>
 ```
 
@@ -961,11 +1391,10 @@ with:
                             className="flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg border border-gold/40 bg-gold/10 text-[11px] font-medium text-amber-700 transition-colors hover:bg-gold/20">
                             <Pencil size={12} /> Edit
                           </button>
-```
-
-and wrap the Regenerate button (lines 521-524) so it is hidden for word designs:
-
-```tsx
+                          <button onClick={() => d.id.startsWith('word_') ? handleDownloadWord(d) : handleDownloadDesignPdf(d)} disabled={downloadingWord || downloadingPdf === d.id}
+                            className="flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg bg-maroon text-[11px] font-medium text-white transition-colors hover:bg-maroon-dark disabled:opacity-50">
+                            {downloadingWord || downloadingPdf === d.id ? <Loader2 size={12} className="animate-spin" /> : <FileDown size={12} />} {d.id.startsWith('word_') ? 'Word' : 'PDF'}
+                          </button>
                           {!d.id.startsWith('word_') && (
                             <button onClick={() => { setDesigns(v.designs ?? []); setViewingVersion(null); handleRegenerateDesign(d) }} disabled={regeneratingIdx !== null}
                               className="flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg border border-gray-200 text-[11px] font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50">
@@ -985,7 +1414,7 @@ After the closing of the Edit Design Modal block (after line 649, before the fin
         if (!design) return null
         return (
           <WordMenuEditor
-            html={design.pages[0]?.html ?? ''}
+            lines={design.wordLines ?? extractWordLinesFromHtml(design.raw)}
             onClose={() => setEditingWordDesignId(null)}
             onSave={handleSaveWordEdit}
           />
@@ -1002,34 +1431,34 @@ Expected: both pass with no errors.
 
 ```bash
 git add frontend/src/pages/menu/MenuGenerator.tsx
-git commit -m "feat(menu): word file upload with single template-matched editable design"
+git commit -m "feat(menu): word file upload with gemini polish, single preview and word export"
 ```
 
 ---
 
-## Task 8: End-to-end manual verification
+## Task 9: End-to-end manual verification
 
 - [ ] **Step 1: Start the backend and frontend**
 
-Run the backend (`uvicorn app.main:app --reload --port 8000` from `backend`) and frontend (`npm run dev` from `frontend`), then open the Menu Generator for an inquiry.
+Run the backend (`uvicorn app.main:app --reload --port 8000` from `backend`) and frontend (`npm run dev` from `frontend`), then open the Menu Generator for an inquiry and select a template.
 
 - [ ] **Step 2: Upload a .docx menu**
 
-Create a short `.docx` in Word (centered "WEDDING MENU" title, an underlined section heading like "STARTERS", a few dish lines). Select a template, click **Upload Word File**, pick the file.
-Expected: exactly ONE design card appears; the template picture fills the page; the Word underlines, font sizes and centring are visible; text colour matches the template.
+Create a short `.docx` in Word (e.g. bold "STARTERS", "Paneer Tikka", "Hara Bhara Kebab", then bold "MAIN COURSE:", "Dal Makhani", "Shahi Paneer"). Click **Upload Word File**, pick the file.
+Expected: exactly ONE design card appears; the template picture fills the page; the text keeps its category structure; the spelling-polish has been applied; text colour matches the template.
 
 - [ ] **Step 3: Edit a line**
 
-Click **Edit Items** on the word design → the line editor shows the lines with their Word formatting; change a dish name → **Save Changes** → the preview updates the text but keeps underline/size/layout.
+Click **Edit Items** on the word design → the line editor shows the lines (headings shown bold/uppercase); change a dish name → **Save Changes** → the preview updates the text but keeps headings and layout.
 
-- [ ] **Step 4: Download PDF**
+- [ ] **Step 4: Download Word**
 
-Click **Download PDF**.
-Expected: a single A4 PDF with the template filling the whole sheet and the edited menu centered.
+Click **Download Word**.
+Expected: a `.docx` file downloads; opening it in Word shows the template picture filling every page as background with the centered menu text on top, headings bold and coloured.
 
 - [ ] **Step 5: Save Version and reload**
 
-Click **Save Version**, reopen **Menu History**, **View** the version → Edit still works via the word editor, Download PDF works, and no Regenerate button appears for the word design.
+Click **Save Version**, reopen **Menu History**, **View** the version → Edit still opens the word editor, the download button says Word, and no Regenerate button appears for the word design.
 
 - [ ] **Step 6: Upload a .doc menu (if LibreOffice available)**
 
@@ -1046,8 +1475,9 @@ git commit -m "fix(menu): polish word import flow"
 ---
 
 ## Self-Review Notes
+- Spec coverage: upload + parse (Tasks 1, 3, 5, 8) · spelling-only polish (Task 6 `polishMenuText`, Task 8 merge rule) · template background in Word (Tasks 2, 3 header image) · template-matched colours (Tasks 2, 5 `extractTemplatePalette`) · page structure like the Word file / 3-4 categories per page (Task 1 page breaks + Task 5 `groupWordLines`) · single editable preview (Tasks 7, 8) · Word-only output (Task 8 replaces the PDF button for word designs) · errors (Tasks 1, 3 mappings + Task 8 toasts).
 
-- Spec coverage: upload control (Tasks 4, 7) · format preservation (Tasks 1-3) · template background (Task 5 `buildWordPageHtml`) · template-matched colours (Task 5 `extractTemplatePalette`) · single design (Task 7 `setDesigns([design])`) · editable lines keeping formatting (Tasks 5-7) · PDF download (existing `downloadMenuDesignPdf`, Task 7 keeps the button) · all in the Menu Generator page (Task 7).
-- Type consistency: `TemplatePalette`, `WordEditableBlock`, `extractWordEditable`, `applyWordEdits`, `buildWordPageHtml`, `extractTemplatePalette` are defined in Task 5 and consumed in Tasks 6-7 with identical names/signatures. `parseWordFile` returns `{ html, file_name }` in Task 4 and is destructured as `{ html }` in Task 7.
-- Frontend tests: the repo has no JS test runner (only `tsc` + `vite build`), so frontend verification is via `npm run build` / `npm run lint` plus the manual checks in Task 8.
-- Backend tests need the test Postgres with seeded users, same as the existing suite.
+- Type consistency: `WordLine` is defined in `menuDesign.ts` (Task 5) and type-imported by `types/inquiry.ts` (Task 6), `api/inquiries.ts` (Task 6), `WordMenuEditor.tsx` (Task 7) and `MenuGenerator.tsx` (Task 8) with the same `{ text, is_heading, page }` shape. `TemplatePalette` (Task 5) matches the `colors` payload shape in `downloadWordMenu` (Task 6). `wordLines?: WordLine[]` added to both `MenuDesign` (Task 5) and `MenuDesignPayload` (Task 6) so version-loaded word designs keep their lines.
+- Frontend tests: the repo has no JS test runner (only `tsc` + `vite build`), so frontend verification is via `npm run build` / `npm run lint` plus the manual checks in Task 9.
+- Backend tests need the test Postgres with seeded users (admin@shaguncatering.com / admin123), same as the existing suite. Tasks 1-2 are DB-free.
+- The export test (`_first_template`) uses a real template file from `backend/templates` so the header-image code path is covered; it skips if no image exists.
