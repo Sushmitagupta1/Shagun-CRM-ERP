@@ -12,10 +12,8 @@ import {
   Lock,
   FileText,
   Loader2,
-  Send,
   Truck,
   PackageCheck,
-  ArrowRightLeft,
   Image as ImageIcon,
   Search,
   Eye as EyeIcon,
@@ -26,20 +24,15 @@ import {
   useEventDetail,
   useSaveVendors,
   useCompleteEvent,
-  useCreateWarehouseRequests,
-  useIssueWarehouseRequest,
-  useReceiveWarehouseRequest,
   useUploadEventPhoto,
-  useCreateTransfer,
-  useEvents,
   usePatchInventoryItem,
   useReceiveAllInventory,
   useReturnAllInventory,
   useEventAudit,
 } from '@/hooks/useEvents'
 import { downloadInquiryFile, uploadInquiryFile, viewInquiryFile } from '@/api/inquiries'
-import { downloadUploadVersion, getEventPhotoBlob, downloadEventPhoto } from '@/api/events'
-import type { EventInventoryRow, EventPhotoRow, EventVendorRow, TransferRow } from '@/types/event'
+import { getEventPhotoBlob, downloadEventPhoto } from '@/api/events'
+import type { EventInventoryRow, EventPhotoRow, EventVendorRow } from '@/types/event'
 import { getErrorMessage } from '@/lib/apiError'
 import { INQUIRY_STATUSES } from '@/lib/constants'
 
@@ -205,14 +198,8 @@ export default function EventView() {
   const { data: audit } = useEventAudit(id)
   const saveVendors = useSaveVendors(id)
   const complete = useCompleteEvent(id)
-  const createRequests = useCreateWarehouseRequests(id)
-  const issueRequest = useIssueWarehouseRequest(id)
-  const receiveRequest = useReceiveWarehouseRequest(id)
   const uploadPhoto = useUploadEventPhoto(id)
-  const createTransfer = useCreateTransfer(id)
-  const { data: allEvents } = useEvents()
 
-  const [transferForm, setTransferForm] = useState({ item_name: '', quantity: 0, unit: '', to_inquiry_id: '' })
   const [inventorySearch, setInventorySearch] = useState('')
   const [vendorSearch, setVendorSearch] = useState('')
 
@@ -304,42 +291,12 @@ export default function EventView() {
     })
   }
 
-  const handleSendToTHOL = () => {
-    if (!window.confirm('Send the ingredient plan to THOL as a warehouse request?')) return
-    createRequests.mutate({ from_ingredient: true }, {
-      onSuccess: (res) => toast.success(`Warehouse request sent (${res.created} items)`),
-      onError: (err) => toast.error(getErrorMessage(err, 'Failed to send request')),
-    })
-  }
-
   const handlePhotoUpload = (category: string, file?: File) => {
     if (!file) return
     uploadPhoto.mutate({ category, file }, {
       onSuccess: () => toast.success('Photo uploaded'),
       onError: (err) => toast.error(getErrorMessage(err, 'Upload failed')),
     })
-  }
-
-  const handleCreateTransfer = () => {
-    if (!transferForm.item_name.trim() || !Number.isFinite(transferForm.quantity) || transferForm.quantity <= 0 || !transferForm.to_inquiry_id) {
-      toast.error('Item, quantity, and target event are required')
-      return
-    }
-    createTransfer.mutate(
-      {
-        item_name: transferForm.item_name.trim(),
-        quantity: transferForm.quantity,
-        unit: transferForm.unit || null,
-        to_inquiry_id: transferForm.to_inquiry_id,
-      },
-      {
-        onSuccess: () => {
-          toast.success('Transfer added')
-          setTransferForm({ item_name: '', quantity: 0, unit: '', to_inquiry_id: '' })
-        },
-        onError: (err) => toast.error(getErrorMessage(err, 'Transfer failed')),
-      },
-    )
   }
 
   if (isLoading) {
@@ -657,163 +614,6 @@ export default function EventView() {
         </div>
       </Section>
 
-      {/* 5b. Warehouse Requests */}
-      <Section title="Warehouse Requests">
-        <div className="mb-3 flex flex-wrap items-center gap-2">
-          {canEdit && role === 'operations_manager' && !data.ingredient_file_name && (
-            <p className="w-full text-xs text-amber-600">Upload the Ingredient Excel first, then send it to THOL.</p>
-          )}
-          {OPERATIONS_ROLES.includes(role) && (
-            <button
-              onClick={handleSendToTHOL}
-              disabled={createRequests.isPending || !data.ingredient_file_name}
-              className="flex items-center gap-1 rounded-lg bg-maroon px-3 py-2 text-xs font-semibold text-white hover:bg-maroon-dark disabled:opacity-50"
-            >
-              {createRequests.isPending ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} Send Request to THOL
-            </button>
-          )}
-        </div>
-        {data.warehouse_requests.length === 0 ? (
-          <p className="py-4 text-center text-xs text-gray-400">No warehouse requests yet.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-gray-200 bg-gray-50">
-                  {['Item Name', 'Qty', 'Unit', 'Status', 'Requested By', 'Actions'].map((h) => (
-                    <th key={h} className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-gray-500">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {(data.warehouse_requests ?? []).map((r) => (
-                  <tr key={r.id} className="border-b border-gray-50">
-                    <td className="px-3 py-2.5 text-xs font-medium text-gray-900">{r.item_name}</td>
-                    <td className="px-3 py-2.5 text-xs tabular-nums text-gray-700">{r.quantity}</td>
-                    <td className="px-3 py-2.5 text-xs text-gray-600">{r.unit ?? '—'}</td>
-                    <td className="px-3 py-2.5">
-                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                        r.status === 'received' ? 'bg-emerald-100 text-emerald-700'
-                        : r.status === 'issued' ? 'bg-blue-100 text-blue-700'
-                        : 'bg-amber-100 text-amber-700'
-                      }`}>{r.status}</span>
-                    </td>
-                    <td className="px-3 py-2.5 text-xs text-gray-600">{r.requested_by_name ?? '—'}</td>
-                    <td className="px-3 py-2.5">
-                      <div className="flex items-center gap-1">
-                        {role === 'warehouse' && !data.is_completed && r.status === 'pending' && (
-                          <button
-                            onClick={() => issueRequest.mutate(r.id, {
-                              onSuccess: () => toast.success('Request issued'),
-                              onError: (err) => toast.error(getErrorMessage(err, 'Issue failed')),
-                            })}
-                            disabled={issueRequest.isPending}
-                            className="flex items-center gap-1 rounded border border-blue-200 px-2 py-1 text-[11px] font-medium text-blue-600 hover:bg-blue-50 disabled:opacity-50"
-                          >
-                            <Truck size={11} /> Issue
-                          </button>
-                        )}
-                        {(role === 'operations_manager' || role === 'admin') && !data.is_completed && r.status !== 'received' && (
-                          <button
-                            onClick={() => receiveRequest.mutate(r.id, {
-                              onSuccess: () => toast.success('Items received'),
-                              onError: (err) => toast.error(getErrorMessage(err, 'Receive failed')),
-                            })}
-                            disabled={receiveRequest.isPending}
-                            className="flex items-center gap-1 rounded border border-emerald-200 px-2 py-1 text-[11px] font-medium text-emerald-600 hover:bg-emerald-50 disabled:opacity-50"
-                          >
-                            <PackageCheck size={11} /> Receive
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Section>
-
-      {/* 5c. Transfer Panel */}
-      <Section title="Transfer Panel">
-        {OPERATIONS_ROLES.includes(role) && (
-          <div className="mb-4 rounded-lg border border-gray-100 bg-cream p-3">
-            <h4 className="mb-2 flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-gray-500">
-              <ArrowRightLeft size={11} /> Add Direct Transfer
-            </h4>
-            <div className="flex flex-wrap items-end gap-2">
-              <div>
-                <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Item Name</label>
-                <input value={transferForm.item_name} onChange={(e) => setTransferForm((s) => ({ ...s, item_name: e.target.value }))}
-                  className="mt-1 w-40 rounded border border-blue-300 px-2 py-1 text-xs text-gray-700 focus:border-blue-500 focus:outline-none" />
-              </div>
-              <div>
-                <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Qty</label>
-                <input type="number" value={transferForm.quantity} onChange={(e) => setTransferForm((s) => ({ ...s, quantity: Number(e.target.value) }))}
-                  className="mt-1 w-20 rounded border border-blue-300 px-2 py-1 text-xs text-gray-700 focus:border-blue-500 focus:outline-none" />
-              </div>
-              <div>
-                <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Unit</label>
-                <input value={transferForm.unit} onChange={(e) => setTransferForm((s) => ({ ...s, unit: e.target.value }))}
-                  className="mt-1 w-20 rounded border border-blue-300 px-2 py-1 text-xs text-gray-700 focus:border-blue-500 focus:outline-none" />
-              </div>
-              <div>
-                <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Target Event</label>
-                <select value={transferForm.to_inquiry_id} onChange={(e) => setTransferForm((s) => ({ ...s, to_inquiry_id: e.target.value }))}
-                  className="mt-1 w-48 rounded border border-blue-300 px-2 py-1 text-xs text-gray-700 focus:border-blue-500 focus:outline-none">
-                  <option value="">Select event…</option>
-                  {(allEvents ?? []).filter((ev) => ev.id !== id).map((ev) => (
-                    <option key={ev.id} value={ev.id}>{ev.client_name} — {ev.event_date ?? 'no date'}</option>
-                  ))}
-                </select>
-              </div>
-              <button onClick={handleCreateTransfer} disabled={createTransfer.isPending}
-                className="flex items-center gap-1 rounded-lg bg-maroon px-3 py-2 text-xs font-semibold text-white hover:bg-maroon-dark disabled:opacity-50">
-                {createTransfer.isPending ? <Loader2 size={12} className="animate-spin" /> : <ArrowRightLeft size={12} />} Add
-              </button>
-            </div>
-          </div>
-        )}
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          {[
-            { title: 'Items Returned', rows: data.returns ?? [], cols: ['Item', 'Qty', 'Event', 'Date'] },
-            { title: 'Direct Transfers', rows: data.transfers ?? [], cols: ['Item', 'Qty', 'From', 'To', 'Date'] },
-            { title: 'Wastage', rows: data.wastage_rows ?? [], cols: ['Item', 'Qty', 'Event', 'Date'] },
-          ].map((panel) => (
-            <div key={panel.title} className="rounded-lg border border-gray-100 bg-white">
-              <div className="border-b border-gray-100 px-3 py-2">
-                <h4 className="text-xs font-bold text-gray-900">{panel.title}</h4>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-gray-200 bg-gray-50">
-                      {panel.cols.map((h) => (
-                        <th key={h} className="px-2 py-2 text-left text-[9px] font-bold uppercase tracking-wider text-gray-500">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {panel.rows.length === 0 ? (
-                      <tr><td colSpan={panel.cols.length} className="px-2 py-6 text-center text-[11px] text-gray-400">None</td></tr>
-                    ) : panel.rows.map((row: TransferRow) => (
-                      <tr key={row.id} className="border-b border-gray-50">
-                        <td className="px-2 py-2 text-[11px] font-medium text-gray-900">{row.item_name}</td>
-                        <td className="px-2 py-2 text-[11px] tabular-nums text-gray-700">{row.quantity} {row.unit ?? ''}</td>
-                        <td className="px-2 py-2 text-[11px] text-gray-600">{row.from_event}</td>
-                        {panel.title === 'Direct Transfers' && <td className="px-2 py-2 text-[11px] text-gray-600">{row.to_event ?? '—'}</td>}
-                        <td className="px-2 py-2 text-[11px] text-gray-600">{row.created_at ? new Date(row.created_at).toLocaleDateString('en-IN') : '—'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          ))}
-        </div>
-      </Section>
-
       {/* 5d. Photos */}
       <Section title="Photos">
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -842,36 +642,6 @@ export default function EventView() {
             )
           })}
         </div>
-      </Section>
-
-      {/* 5e. Event Timeline */}
-      <Section title="Event Timeline">
-        <ol className="space-y-0">
-          {(data.timeline ?? []).map((stage, idx) => (
-            <li key={stage.key} className="relative flex gap-3 pb-5">
-              {idx < (data.timeline ?? []).length - 1 && <span className="absolute left-[9px] top-5 h-full w-px bg-gray-200" />}
-              <span className={`mt-0.5 h-[19px] w-[19px] shrink-0 rounded-full border-2 ${
-                stage.status === 'completed' ? 'border-emerald-500 bg-emerald-500'
-                : stage.status === 'active' ? 'border-blue-500 bg-white'
-                : 'border-gray-300 bg-white'
-              }`}>
-                {stage.status === 'completed' && <CheckCircle2 size={14} className="text-white" />}
-              </span>
-              <div className="min-w-0">
-                <p className="text-xs font-bold text-gray-900">
-                  {stage.label}{' '}
-                  <span className={`ml-1 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase ${
-                    stage.status === 'completed' ? 'bg-emerald-100 text-emerald-700'
-                    : stage.status === 'active' ? 'bg-blue-100 text-blue-700'
-                    : 'bg-gray-100 text-gray-500'
-                  }`}>{stage.status}</span>
-                </p>
-                {stage.description && <p className="mt-0.5 text-[11px] text-gray-500">{stage.description}</p>}
-                {stage.date && <p className="mt-0.5 text-[10px] text-gray-400">{new Date(stage.date).toLocaleString('en-IN')}</p>}
-              </div>
-            </li>
-          ))}
-        </ol>
       </Section>
 
       {/* 6. Inventory Closure Summary */}
@@ -927,46 +697,6 @@ export default function EventView() {
                     <td className="px-3 py-2.5 text-[11px] text-gray-600">{a.old_value ?? '—'}</td>
                     <td className="px-3 py-2.5 text-[11px] font-medium text-gray-900">{a.new_value ?? '—'}</td>
                     <td className="px-3 py-2.5 text-[11px] text-gray-600">{a.remark ?? '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Section>
-
-      {/* 7. Upload History */}
-      <Section title="Upload History">
-        {data.upload_history.length === 0 ? (
-          <p className="py-4 text-center text-xs text-gray-400">No inventory movement uploads yet.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-gray-200 bg-gray-50">
-                  {['Version', 'Movement Type', 'File Name', 'Uploaded At', 'Uploaded By', 'Actions'].map((h) => (
-                    <th key={h} className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-gray-500">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {data.upload_history.map((v) => (
-                  <tr key={v.id} className="border-b border-gray-50">
-                    <td className="px-3 py-2.5 text-xs font-medium text-gray-900">V{v.version_no}</td>
-                    <td className="px-3 py-2.5 text-xs capitalize text-gray-700">{v.movement_type}</td>
-                    <td className="px-3 py-2.5 text-xs text-gray-600">{v.file_name}</td>
-                    <td className="px-3 py-2.5 text-xs text-gray-600">{v.uploaded_at ? new Date(v.uploaded_at).toLocaleString('en-IN') : '—'}</td>
-                    <td className="px-3 py-2.5 text-xs text-gray-600">{v.uploaded_by_name ?? '—'}</td>
-                    <td className="px-3 py-2.5">
-                      <button
-                        onClick={() => downloadUploadVersion(id, v.id, v.file_name)}
-                        title={`Download ${v.file_name}`}
-                        aria-label={`Download ${v.file_name}`}
-                        className="flex items-center gap-1 rounded border border-gray-200 px-2 py-1 text-[11px] font-medium hover:bg-gray-50"
-                      >
-                        <Download size={11} /> Download
-                      </button>
-                    </td>
                   </tr>
                 ))}
               </tbody>
