@@ -601,7 +601,7 @@ export default function MenuGenerator() {
                             className="w-1/2 rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-gold/30" />
                           <input value={item.description ?? ''} onChange={(e) => handleEditDescription(page.pageIndex, item.key, e.target.value)}
                             placeholder="Description (optional)"
-                            className="w-1/2 rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-400 focus:outline-none focus:ring-2 focus:ring-gold/30" />
+                            className="w-1/2 rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-500 focus:outline-none focus:ring-2 focus:ring-gold/30" />
                           <button onClick={() => handleRemoveItem(page.pageIndex, item.key)}
                             className="shrink-0 rounded-lg border border-red-100 p-2 text-red-400 transition-colors hover:bg-red-50 hover:text-red-600">
                             <Trash2 size={13} />
