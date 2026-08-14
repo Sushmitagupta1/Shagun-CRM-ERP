@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import * as eventsApi from '@/api/events'
-import type { InventoryItemSave, VendorSave } from '@/types/event'
+import type { InventoryItemSave, InventoryItemPatch, VendorSave } from '@/types/event'
 
 export function useEvents() {
   return useQuery({
@@ -112,5 +112,46 @@ export function useTransfers(id: string) {
   return useQuery({
     queryKey: ['transfers', id],
     queryFn: () => eventsApi.getTransfers(id),
+  })
+}
+
+export function usePatchInventoryItem(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: InventoryItemPatch) => eventsApi.patchInventoryItem(id, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['event-detail', id] })
+      queryClient.invalidateQueries({ queryKey: ['event-audit', id] })
+    },
+  })
+}
+
+export function useReceiveAllInventory(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => eventsApi.receiveAllInventory(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['event-detail', id] })
+      queryClient.invalidateQueries({ queryKey: ['event-audit', id] })
+    },
+  })
+}
+
+export function useReturnAllInventory(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => eventsApi.returnAllInventory(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['event-detail', id] })
+      queryClient.invalidateQueries({ queryKey: ['event-audit', id] })
+    },
+  })
+}
+
+export function useEventAudit(id: string) {
+  return useQuery({
+    queryKey: ['event-audit', id],
+    queryFn: () => eventsApi.getEventAudit(id),
+    enabled: Boolean(id),
   })
 }
