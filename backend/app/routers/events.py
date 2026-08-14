@@ -16,19 +16,32 @@ from app.models.inventory_file_version import InventoryFileVersion
 from app.models.inventory_movement import InventoryMovement
 from app.models.warehouse_request import WarehouseRequest
 from app.models.event_photo import EventPhoto
+from app.models.event_audit_log import EventAuditLog
 from app.schemas.event import (
     EventListItem,
     EventDetail,
+    InventoryItemPatch,
+    EventAuditRow,
     InventoryItemsSaveRequest,
     VendorsSaveRequest,
     WarehouseRequestCreate,
     TransferCreate,
     WarehouseRequestItem,
 )
-from app.services.event_service import build_event_bundle, get_base_inventory_map, _user_name_map, _inquiry_name_map
+from app.services.event_service import (
+    build_event_bundle,
+    get_base_inventory_map,
+    _user_name_map,
+    _inquiry_name_map,
+    _fmt_value,
+    log_event_audit,
+)
 from app.middleware.auth import get_current_user, require_role
 
 router = APIRouter(prefix="/api/events", tags=["events"])
+
+PATCHABLE_FIELDS = {"required_qty", "not_received_count", "transfer_count", "returned_qty", "breakage_count", "transfer_event"}
+NUMERIC_FIELDS = {"required_qty", "not_received_count", "transfer_count", "returned_qty", "breakage_count"}
 
 
 async def get_inquiry_or_404(db: AsyncSession, inquiry_id: uuid.UUID) -> Inquiry:
@@ -162,6 +175,167 @@ async def save_inventory_items(
     return {"ok": True}
 
 
+@router.patch("/{inquiry_id}/inventory-items")
+async def patch_inventory_item(
+    inquiry_id: uuid.UUID,
+    data: InventoryItemPatch,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role("admin", "operations_manager", "warehouse")),
+):
+    inquiry = await get_inquiry_or_404(db, inquiry_id)
+    if inquiry.is_completed:
+        raise HTTPException(status_code=400, detail="Event is completed and locked")
+    if data.field not in PATCHABLE_FIELDS:
+        raise HTTPException(status_code=400, detail=f"field must be one of: {', '.join(sorted(PATCHABLE_FIELDS))}")
+
+    base_map = await get_base_inventory_map(db, inquiry)
+    base = base_map.get(data.item_name.strip().lower())
+    if base is None:
+        raise HTTPException(status_code=400, detail=f"Item '{data.item_name}' not found in required plan")
+
+    result = await db.execute(
+        select(EventInventoryItem).where(
+            EventInventoryItem.inquiry_id == inquiry_id,
+            EventInventoryItem.item_name == base["item_name"],
+        )
+    )
+    ov = result.scalar_one_or_none()
+    if ov is None:
+        ov = EventInventoryItem(inquiry_id=inquiry_id, item_name=base["item_name"], required_qty=base["required_qty"])
+        db.add(ov)
+        await db.flush()
+
+    if data.field in NUMERIC_FIELDS:
+        try:
+            new_val: float | None = None if data.value is None else float(data.value)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail=f"{data.field} must be a number")
+        if new_val is not None and new_val < 0:
+            raise HTTPException(status_code=400, detail=f"{data.field} cannot be negative")
+    else:
+        new_val = data.value
+
+    old_str = _fmt_value(getattr(ov, data.field))
+    new_str = _fmt_value(new_val)
+    if old_str != new_str:
+        if data.field == "required_qty" and not (data.remark or "").strip():
+            raise HTTPException(status_code=400, detail="Remark is mandatory when changing required qty")
+        setattr(ov, data.field, new_val)
+        await log_event_audit(
+            db, inquiry_id, current_user.id, "edit", "inventory_item",
+            item_name=base["item_name"], field_name=data.field,
+            old_value=old_str, new_value=new_str,
+            remark=(data.remark or "").strip() or None,
+        )
+        await db.commit()
+    return {"ok": True}
+
+
+@router.post("/{inquiry_id}/inventory/receive-all")
+async def receive_all_inventory(
+    inquiry_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role("admin", "operations_manager")),
+):
+    inquiry = await get_inquiry_or_404(db, inquiry_id)
+    if inquiry.is_completed:
+        raise HTTPException(status_code=400, detail="Event is completed and locked")
+    base_map = await get_base_inventory_map(db, inquiry)
+    if not base_map:
+        raise HTTPException(status_code=400, detail="No ingredient plan uploaded for this event")
+
+    existing = {
+        o.item_name.strip().lower(): o
+        for o in (await db.execute(select(EventInventoryItem).where(EventInventoryItem.inquiry_id == inquiry_id))).scalars().all()
+    }
+    updated = 0
+    for key, base in base_map.items():
+        ov = existing.get(key)
+        if ov is None:
+            ov = EventInventoryItem(inquiry_id=inquiry_id, item_name=base["item_name"], required_qty=base["required_qty"])
+            db.add(ov)
+            existing[key] = ov
+        not_received = ov.not_received_count if ov.not_received_count is not None else 0
+        target = max(float(base["required_qty"]) - float(not_received), 0)
+        old = ov.received_qty if ov.received_qty is not None else 0
+        if float(old) != target:
+            ov.received_qty = target
+            await log_event_audit(
+                db, inquiry_id, current_user.id, "edit", "inventory_item",
+                item_name=base["item_name"], field_name="received_qty",
+                old_value=_fmt_value(old), new_value=_fmt_value(target),
+                remark="Received All Inventory",
+            )
+            updated += 1
+    await db.commit()
+    return {"ok": True, "updated": updated}
+
+
+@router.post("/{inquiry_id}/inventory/return-all")
+async def return_all_inventory(
+    inquiry_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role("admin", "operations_manager")),
+):
+    inquiry = await get_inquiry_or_404(db, inquiry_id)
+    if inquiry.is_completed:
+        raise HTTPException(status_code=400, detail="Event is completed and locked")
+    base_map = await get_base_inventory_map(db, inquiry)
+    if not base_map:
+        raise HTTPException(status_code=400, detail="No ingredient plan uploaded for this event")
+
+    existing = {
+        o.item_name.strip().lower(): o
+        for o in (await db.execute(select(EventInventoryItem).where(EventInventoryItem.inquiry_id == inquiry_id))).scalars().all()
+    }
+    updated = 0
+    for key, base in base_map.items():
+        ov = existing.get(key)
+        if ov is None:
+            ov = EventInventoryItem(inquiry_id=inquiry_id, item_name=base["item_name"], required_qty=base["required_qty"])
+            db.add(ov)
+            existing[key] = ov
+        not_received = ov.not_received_count if ov.not_received_count is not None else 0
+        transfer = ov.transfer_count if ov.transfer_count is not None else 0
+        target = max(float(base["required_qty"]) - float(not_received) - float(transfer), 0)
+        old = ov.returned_qty if ov.returned_qty is not None else 0
+        if float(old) != target:
+            ov.returned_qty = target
+            await log_event_audit(
+                db, inquiry_id, current_user.id, "edit", "inventory_item",
+                item_name=base["item_name"], field_name="returned_qty",
+                old_value=_fmt_value(old), new_value=_fmt_value(target),
+                remark="All Items Returned to THOL",
+            )
+            updated += 1
+    await db.commit()
+    return {"ok": True, "updated": updated}
+
+
+@router.get("/{inquiry_id}/audit", response_model=list[EventAuditRow])
+async def get_event_audit(
+    inquiry_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    await get_inquiry_or_404(db, inquiry_id)
+    result = await db.execute(
+        select(EventAuditLog, User.full_name)
+        .join(User, EventAuditLog.user_id == User.id, isouter=True)
+        .where(EventAuditLog.inquiry_id == inquiry_id)
+        .order_by(EventAuditLog.created_at.desc())
+    )
+    return [
+        EventAuditRow(
+            id=log.id, action=log.action, entity_type=log.entity_type,
+            item_name=log.item_name, field_name=log.field_name,
+            old_value=log.old_value, new_value=log.new_value,
+            remark=log.remark, created_at=log.created_at, user_name=name,
+        )
+        for log, name in result.all()
+    ]
+
+
 @router.post("/{inquiry_id}/vendors")
 async def save_vendors(
     inquiry_id: uuid.UUID,
@@ -181,17 +355,28 @@ async def save_vendors(
         changed = (
             (row.rate is not None and vendor.rate is not None and float(row.rate) != float(vendor.rate))
             or (row.total_cost is not None and vendor.total_cost is not None and float(row.total_cost) != float(vendor.total_cost))
-            or (row.payment_status is not None and vendor.payment_status != row.payment_status)
+            or (row.payment_status is not None and row.payment_status != vendor.payment_status)
         )
         if changed and not (row.remark or "").strip():
             raise HTTPException(status_code=400, detail=f"Remark is mandatory when changing vendor '{vendor.vendor_name}'")
-        if row.rate is not None:
+        changes = []
+        if row.rate is not None and (vendor.rate is None or float(row.rate) != float(vendor.rate)):
+            changes.append(("rate", _fmt_value(vendor.rate), _fmt_value(row.rate)))
             vendor.rate = row.rate
-        if row.total_cost is not None:
+        if row.total_cost is not None and (vendor.total_cost is None or float(row.total_cost) != float(vendor.total_cost)):
+            changes.append(("total_cost", _fmt_value(vendor.total_cost), _fmt_value(row.total_cost)))
             vendor.total_cost = row.total_cost
-        if row.payment_status is not None:
+        if row.payment_status is not None and row.payment_status != vendor.payment_status:
+            changes.append(("payment_status", _fmt_value(vendor.payment_status), _fmt_value(row.payment_status)))
             vendor.payment_status = row.payment_status
         vendor.remark = row.remark
+        for field_name, old_v, new_v in changes:
+            await log_event_audit(
+                db, inquiry_id, current_user.id, "edit", "vendor",
+                item_name=vendor.vendor_name, field_name=field_name,
+                old_value=old_v, new_value=new_v,
+                remark=(row.remark or "").strip() or None,
+            )
 
     await db.commit()
     return {"ok": True}
@@ -465,5 +650,6 @@ async def complete_event(
         raise HTTPException(status_code=400, detail="Event already completed")
     inquiry.is_completed = True
     inquiry.completed_at = datetime.now(timezone.utc)
+    await log_event_audit(db, inquiry_id, current_user.id, "complete", "event", remark="Event marked as completed")
     await db.commit()
     return {"ok": True}
