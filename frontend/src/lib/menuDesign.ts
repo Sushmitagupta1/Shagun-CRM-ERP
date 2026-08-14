@@ -143,7 +143,7 @@ function fontInRule(style: string, selector: string): string | null {
   const re = new RegExp(selector + '\\s*\\{[^}]*font-family\\s*:\\s*([^;}]+)', 'gi')
   let m: RegExpExecArray | null
   let last: string | null = null
-  while ((m = re.exec(style)) !== null) last = m[1].trim()
+  while ((m = re.exec(style)) !== null) last = cleanValue(m[1])
   return last
 }
 
@@ -152,8 +152,16 @@ function colorInRule(style: string, selector: string): string | null {
   const re = new RegExp(selector + '\\s*\\{[^}]*?(?<!-)color\\s*:\\s*([^;}]+)', 'gi')
   let m: RegExpExecArray | null
   let last: string | null = null
-  while ((m = re.exec(style)) !== null) last = m[1].trim()
+  while ((m = re.exec(style)) !== null) last = cleanValue(m[1])
   return last
+}
+
+// The palette/typography rules we append use "value !important", but detection
+// feeds the value into the edit form and later re-injects it as
+// "value !important", which would double up to invalid "!important !important"
+// CSS. Strip the declaration modifier from the captured value.
+function cleanValue(raw: string): string {
+  return raw.trim().replace(/\s*!important\s*$/i, '')
 }
 
 // Best-effort detection of the current text colours for title/heading/items
@@ -305,9 +313,11 @@ function stripHtml(html: string): string {
 }
 
 // Splits a dish line "Name - description" / "Name: description" / "Name–description"
-// into name + description. Lines without a separator are name-only.
+// into name + description. Lines without a separator are name-only. A plain
+// hyphen only splits when it has whitespace on at least one side, so hyphenated
+// dish names like "Chicken-65" survive intact.
 export function splitMenuLine(text: string): { name: string; description: string } {
-  const m = text.match(/^(.+?)\s*[-–—:]\s*(.+)$/)
+  const m = text.match(/^(.+?)\s*[–—:]\s*(.+)$/) || text.match(/^(.+?)\s+-\s+(.+)$/)
   return m
     ? { name: m[1].trim(), description: m[2].trim() }
     : { name: text, description: '' }
