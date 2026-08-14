@@ -231,8 +231,8 @@ Be specific, data-driven, and actionable. Format with clear headings.`
 // ── AI Menu Designer ──
 
 // Gemini does not reliably output multiple designs in one response, so each
-// option is generated in its own call (one distinct theme per call) and the
-// results are joined with the ---DESIGN--- separator the parser expects.
+// option is generated in its own call (one distinct text palette per call) and
+// the results are joined with the ---DESIGN--- separator the parser expects.
 function cleanSingleDesign(text: string): string {
   let t = text.replace(/---DESIGN---/g, '').trim()
   const lines = t.split('\n')
