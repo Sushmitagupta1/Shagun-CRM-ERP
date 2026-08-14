@@ -17,3 +17,7 @@ class EventInventoryItem(UUIDMixin, TimestampMixin, Base):
     transfer_count: Mapped[float | None] = mapped_column(Float, nullable=True)
     returned_qty: Mapped[float | None] = mapped_column(Float, nullable=True)
     remark: Mapped[str | None] = mapped_column(Text, nullable=True)
+    required_qty: Mapped[float | None] = mapped_column(Float, nullable=True)
+    not_received_count: Mapped[float | None] = mapped_column(Float, nullable=True)
+    breakage_count: Mapped[float | None] = mapped_column(Float, nullable=True)
+    transfer_event: Mapped[str | None] = mapped_column(String(255), nullable=True)

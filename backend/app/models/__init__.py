@@ -10,6 +10,7 @@ from app.models.menu_version import MenuVersion
 from app.models.menu_slot import MenuSlot
 from app.models.inventory_file_version import InventoryFileVersion
 from app.models.event_inventory_item import EventInventoryItem
+from app.models.event_audit_log import EventAuditLog
 from app.models.event_vendor import EventVendor
 from app.models.kitchen_inventory_item import KitchenInventoryItem
 from app.models.warehouse_request import WarehouseRequest
@@ -35,6 +36,7 @@ __all__ = [
     "MenuSlot",
     "InventoryFileVersion",
     "EventInventoryItem",
+    "EventAuditLog",
     "EventVendor",
     "KitchenInventoryItem",
     "WarehouseRequest",
