@@ -20,9 +20,11 @@ class EventInventoryRow(BaseModel):
     required_qty: float = 0
     received_qty: float = 0
     not_received_count: int = 0
-    received_status: str = "Not Received"
+    received_tag: str = "No"
     transfer_count: float = 0
     returned_qty: float = 0
+    breakage_count: float = 0
+    transfer_event: str | None = None
     unit: str | None = None
     remark: str | None = None
 
@@ -55,6 +57,8 @@ class ClosureSummary(BaseModel):
     transferred_qty: float = 0
     returned_thol_qty: float = 0
     wastage_qty: float = 0
+    breakage_qty: float = 0
+    pending_qty: float = 0
 
 
 class FileVersion(BaseModel):
@@ -156,7 +160,9 @@ class EventDetail(BaseModel):
 
 class InventoryItemSave(BaseModel):
     item_name: str
+    required_qty: float | None = None
     received_qty: float | None = None
+    not_received_count: float | None = None
     transfer_count: float | None = None
     returned_qty: float | None = None
     remark: str | None = None
@@ -176,3 +182,23 @@ class VendorSave(BaseModel):
 
 class VendorsSaveRequest(BaseModel):
     rows: list[VendorSave]
+
+
+class InventoryItemPatch(BaseModel):
+    item_name: str
+    field: str
+    value: float | str | None = None
+    remark: str | None = None
+
+
+class EventAuditRow(BaseModel):
+    id: uuid.UUID
+    action: str
+    entity_type: str
+    item_name: str | None = None
+    field_name: str | None = None
+    old_value: str | None = None
+    new_value: str | None = None
+    remark: str | None = None
+    created_at: datetime
+    user_name: str | None = None
