@@ -43,6 +43,7 @@ import { getErrorMessage } from '@/lib/apiError'
 import { INQUIRY_STATUSES } from '@/lib/constants'
 
 const EDITABLE_ROLES = ['admin', 'operations_manager']
+const VENDOR_EDIT_ROLES = ['admin', 'operations_manager', 'warehouse']
 const OPERATIONS_ROLES = ['operations_manager', 'admin']
 const KITCHEN_UPLOAD_ROLES = ['kitchen', 'admin']
 const VENDOR_UPLOAD_ROLES = ['operations_manager', 'admin', 'warehouse']
@@ -215,6 +216,7 @@ export default function EventView() {
   const [inventorySearch, setInventorySearch] = useState('')
 
   const canEdit = !data?.is_completed && EDITABLE_ROLES.includes(role)
+  const canEditVendors = !data?.is_completed && VENDOR_EDIT_ROLES.includes(role)
   const canComplete = !data?.is_completed && (role === 'operations_manager' || role === 'admin')
 
   const [vendorRows, setVendorRows] = useState<EventVendorRow[]>([])
@@ -540,18 +542,18 @@ export default function EventView() {
                   <td className="px-3 py-2.5 text-xs font-medium text-gray-900">{v.vendor_name}</td>
                   <td className="px-3 py-2.5 text-xs text-gray-600">{v.service_name ?? '—'}</td>
                   <td className="px-3 py-2.5">
-                    <input type="number" disabled={!canEdit} value={v.rate ?? ''}
+                    <input type="number" disabled={!canEditVendors} value={v.rate ?? ''}
                       onChange={(e) => updateVendor(v.id, { rate: e.target.value === '' ? null : Number(e.target.value) })}
                       className="w-24 rounded border border-blue-300 px-2 py-1 text-xs text-blue-700 focus:border-blue-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-500" />
                   </td>
                   <td className="px-3 py-2.5">
-                    <input type="number" disabled={!canEdit} value={v.total_cost ?? ''}
+                    <input type="number" disabled={!canEditVendors} value={v.total_cost ?? ''}
                       onChange={(e) => updateVendor(v.id, { total_cost: e.target.value === '' ? null : Number(e.target.value) })}
                       className="w-24 rounded border border-blue-300 px-2 py-1 text-xs text-blue-700 focus:border-blue-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-500" />
                   </td>
                   <td className="px-3 py-2.5">
                     <select
-                      disabled={!canEdit}
+                      disabled={!canEditVendors}
                       value={v.payment_status}
                       onChange={(e) => updateVendor(v.id, { payment_status: e.target.value })}
                       className="rounded border border-blue-300 px-2 py-1 text-xs text-gray-700 focus:border-blue-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-gray-50"
@@ -561,7 +563,7 @@ export default function EventView() {
                     </select>
                   </td>
                   <td className="px-3 py-2.5">
-                    <input value={v.remark ?? ''} disabled={!canEdit}
+                    <input value={v.remark ?? ''} disabled={!canEditVendors}
                       onChange={(e) => updateVendor(v.id, { remark: e.target.value })}
                       placeholder="Remark"
                       className="w-40 rounded border border-blue-300 px-2 py-1 text-xs text-gray-700 focus:border-blue-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-gray-50" />
@@ -586,7 +588,7 @@ export default function EventView() {
               <input type="file" className="hidden" accept=".xlsx,.csv" onChange={(e) => { handleUpload('vendor', e.target.files?.[0]); e.target.value = '' }} />
             </label>
           )}
-          {canEdit && (
+          {canEditVendors && (
             <button onClick={saveVendor} disabled={saveVendors.isPending}
               className="flex items-center gap-1 rounded-lg bg-maroon px-3 py-2 text-xs font-semibold text-white hover:bg-maroon-dark disabled:opacity-50">
               {saveVendors.isPending ? <Loader2 size={12} className="animate-spin" /> : null} Save Vendor Changes
