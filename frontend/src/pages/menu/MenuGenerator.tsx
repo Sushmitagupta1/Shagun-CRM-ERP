@@ -36,7 +36,7 @@ export default function MenuGenerator() {
   const [savingVersion, setSavingVersion] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
   const [viewingVersion, setViewingVersion] = useState<number | null>(null)
-  const [regeneratingIdx, setRegeneratingIdx] = useState<number | null>(null)
+  const [regeneratingIdx, setRegeneratingIdx] = useState<string | null>(null)
   const [editingDesignId, setEditingDesignId] = useState<string | null>(null)
   const [editDraft, setEditDraft] = useState<MenuEditablePage[]>([])
   const [editFonts, setEditFonts] = useState<MenuFonts>({ title: '', heading: '', item: '' })
@@ -125,16 +125,15 @@ export default function MenuGenerator() {
     }
   }
 
-  const handleRegenerateDesign = async (idx: number) => {
+  const handleRegenerateDesign = async (design: MenuDesign) => {
     if (regeneratingIdx !== null) return
-    const current = designs[idx]
-    if (!current) return
-    setRegeneratingIdx(idx)
+    setRegeneratingIdx(design.id)
     try {
       let templateImage: string | null = null
       if (selectedCat && selectedFile) {
         templateImage = await loadImageAsDataUrl(getTemplateUrl(selectedCat, selectedFile))
       }
+      const paletteIdx = design.paletteIndex ?? 0
       const res = await generateMenuDesign({
         menuText: designMenuText,
         eventType: inquiry?.event_type || 'General',
@@ -142,19 +141,23 @@ export default function MenuGenerator() {
         templateInfo: selectedCat && selectedFile ? getTemplateUrl(selectedCat, selectedFile) : '',
         templateImage,
         count: 1,
-        previousDesign: current.raw,
+        previousDesign: design.raw,
+        paletteIndex: paletteIdx,
       })
       if (res.error) {
         toast.error('AI error: ' + res.error)
         return
       }
-      const parsed = parseMenuDesigns(res.text)
+      const parsed = parseMenuDesigns(res.text, paletteIdx)
       if (parsed.error || parsed.designs.length === 0) {
         toast.error(parsed.error || 'AI returned no design. Try again.')
         return
       }
-      const replacement = { ...parsed.designs[0], id: current.id }
-      setDesigns((prev) => prev.map((d, i) => (i === idx ? replacement : d)))
+      const replacement = { ...parsed.designs[0], id: design.id }
+      setDesigns((prev) => {
+        const exists = prev.some((d) => d.id === design.id)
+        return exists ? prev.map((d) => (d.id === design.id ? replacement : d)) : [...prev, replacement]
+      })
       toast.success('Design regenerated')
     } finally {
       setRegeneratingIdx(null)
@@ -460,9 +463,9 @@ export default function MenuGenerator() {
                       className="flex h-8 items-center justify-center gap-1.5 rounded-lg bg-maroon text-[11px] font-medium text-white transition-colors hover:bg-maroon-dark disabled:opacity-50">
                       {downloadingPdf === design.id ? <Loader2 size={12} className="animate-spin" /> : <FileDown size={12} />} Download PDF
                     </button>
-                    <button onClick={() => handleRegenerateDesign(idx)} disabled={regeneratingIdx !== null}
+                    <button onClick={() => handleRegenerateDesign(design)} disabled={regeneratingIdx !== null}
                       className="flex h-8 items-center justify-center gap-1.5 rounded-lg border border-gray-200 text-[11px] font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50">
-                      {regeneratingIdx === idx ? <Loader2 size={12} className="animate-spin" /> : <RotateCcw size={12} />} Regenerate
+                      {regeneratingIdx === design.id ? <Loader2 size={12} className="animate-spin" /> : <RotateCcw size={12} />} Regenerate
                     </button>
                   </div>
                 </div>
@@ -505,6 +508,20 @@ export default function MenuGenerator() {
                               <PagePreview html={page.html} scopeId={`ver${v.version}-d${di}-p${pi}`} />
                             </div>
                           ))}
+                        </div>
+                        <div className="flex gap-2 border-t border-gray-100 p-3">
+                          <button onClick={() => { setDesigns(v.designs ?? []); setViewingVersion(null); handleOpenEdit(d) }}
+                            className="flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg border border-gold/40 bg-gold/10 text-[11px] font-medium text-amber-700 transition-colors hover:bg-gold/20">
+                            <Pencil size={12} /> Edit
+                          </button>
+                          <button onClick={() => handleDownloadDesignPdf(d)} disabled={downloadingPdf === d.id}
+                            className="flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg bg-maroon text-[11px] font-medium text-white transition-colors hover:bg-maroon-dark disabled:opacity-50">
+                            {downloadingPdf === d.id ? <Loader2 size={12} className="animate-spin" /> : <FileDown size={12} />} Download PDF
+                          </button>
+                          <button onClick={() => { setDesigns(v.designs ?? []); setViewingVersion(null); handleRegenerateDesign(d) }} disabled={regeneratingIdx !== null}
+                            className="flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg border border-gray-200 text-[11px] font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50">
+                            {regeneratingIdx === d.id ? <Loader2 size={12} className="animate-spin" /> : <RotateCcw size={12} />} Regenerate
+                          </button>
                         </div>
                       </div>
                     ))}
