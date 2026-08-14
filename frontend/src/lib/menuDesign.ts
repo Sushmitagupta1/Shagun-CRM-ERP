@@ -12,6 +12,7 @@ export interface MenuDesign {
   pages: MenuDesignPage[]
   raw: string
   paletteIndex?: number
+  wordLines?: WordLine[]
 }
 
 export interface ParsedDesigns {
@@ -644,4 +645,129 @@ export async function downloadMenuDesignPdf(design: MenuDesign, fileName: string
     }
   }
   doc.save(fileName)
+}
+
+export interface TemplatePalette {
+  heading: string
+  item: string
+  desc: string
+}
+
+export interface WordLine {
+  text: string
+  is_heading: boolean
+  page: number
+}
+
+// Samples the dominant (non-white/non-black) colours of a template image and
+// returns them as heading/item colours so imported menu text matches the template.
+export async function extractTemplatePalette(imageUrl: string): Promise<TemplatePalette> {
+  const fallback: TemplatePalette = { heading: '#5A0016', item: '#8C6A1F', desc: '#4B5563' }
+  try {
+    const blob = await fetch(imageUrl).then((r) => (r.ok ? r.blob() : null))
+    if (!blob) return fallback
+    const objectUrl = URL.createObjectURL(blob)
+    const img = new Image()
+    img.src = objectUrl
+    await img.decode()
+    URL.revokeObjectURL(objectUrl)
+    const S = 64
+    const canvas = document.createElement('canvas')
+    canvas.width = S
+    canvas.height = S
+    const ctx = canvas.getContext('2d', { willReadFrequently: true })
+    if (!ctx) return fallback
+    ctx.drawImage(img, 0, 0, S, S)
+    const data = ctx.getImageData(0, 0, S, S).data
+    const counts = new Map<string, number>()
+    for (let i = 0; i < data.length; i += 4) {
+      const a = data[i + 3]
+      if (a < 200) continue
+      const r = data[i]
+      const g = data[i + 1]
+      const b = data[i + 2]
+      const brightness = r * 0.299 + g * 0.587 + b * 0.114
+      const max = Math.max(r, g, b)
+      const min = Math.min(r, g, b)
+      if (brightness > 235 && max - min < 25) continue
+      if (brightness < 25) continue
+      const key = `${Math.round(r / 32) * 32},${Math.round(g / 32) * 32},${Math.round(b / 32) * 32}`
+      counts.set(key, (counts.get(key) ?? 0) + 1)
+    }
+    const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1])
+    if (ranked.length === 0) return fallback
+    const hex = (bucket: string): string => {
+      const [r, g, b] = bucket.split(',').map(Number)
+      return '#' + [r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('')
+    }
+    const heading = hex(ranked[0][0])
+    const item = ranked[1] ? hex(ranked[1][0]) : heading
+    return { heading, item, desc: '#4B5563' }
+  } catch {
+    return fallback
+  }
+}
+
+const escWord = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+
+// Converts parsed Word lines into simple HTML: one <p> per line, headings get
+// the .word-heading class so the preview and edit styling can target them.
+export function wordLinesToHtml(lines: WordLine[]): string {
+  return lines
+    .map((l) => (l.is_heading ? `<p class="word-heading">${escWord(l.text)}</p>` : `<p>${escWord(l.text)}</p>`))
+    .join('\n')
+}
+
+// If the Word file had explicit page breaks, keep them; otherwise group so
+// each page holds up to `categoriesPerPage` heading sections.
+export function groupWordLines(lines: WordLine[], categoriesPerPage = 4): WordLine[] {
+  if (lines.some((l) => l.page > 0)) return lines
+  const out: WordLine[] = []
+  let page = 0
+  let sectionsOnPage = 0
+  for (const l of lines) {
+    if (l.is_heading) {
+      if (sectionsOnPage >= categoriesPerPage) {
+        page += 1
+        sectionsOnPage = 0
+      }
+      sectionsOnPage += 1
+    }
+    out.push({ ...l, page })
+  }
+  return out
+}
+
+// Rebuilds lines from the HTML stored in a design's `raw` (used when a word
+// design was loaded from a saved version and has no wordLines attached).
+export function extractWordLinesFromHtml(html: string): WordLine[] {
+  const doc = new DOMParser().parseFromString(html, 'text/html')
+  return Array.from(doc.body.querySelectorAll('p'))
+    .map((p) => ({
+      text: (p.textContent ?? '').trim(),
+      is_heading: p.classList.contains('word-heading'),
+      page: 0,
+    }))
+    .filter((l) => l.text.length > 0)
+}
+
+// Wraps word-imported HTML on a template background with template-matched text
+// colours. Used only for the on-screen single-page preview.
+export function buildWordPageHtml(contentHtml: string, templateUrl: string, palette: TemplatePalette): string {
+  const style = `<style>
+    .word-menu-card {
+      display: flex; align-items: center; justify-content: center;
+      min-height: 100vh; padding: 40px;
+      background-image: url('${templateUrl}');
+      background-size: cover; background-position: center; background-repeat: no-repeat;
+    }
+    .word-menu-inner { width: 100%; text-align: center; }
+    .word-menu-inner p { color: ${palette.item}; margin: 0.3em 0; font-size: 13px; }
+    .word-menu-inner p.word-heading {
+      color: ${palette.heading}; font-weight: bold; font-size: 18px;
+      text-transform: uppercase; letter-spacing: 0.06em;
+      margin: 0.7em 0 0.3em;
+    }
+  </style>`
+  return `${style}<div class="word-menu-card"><div class="word-menu-inner">${contentHtml}</div></div>`
 }
