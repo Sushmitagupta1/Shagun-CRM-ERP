@@ -1,5 +1,5 @@
 import client from './client'
-import type { EventListItem, EventDetail, InventoryItemSave, VendorSave, WarehouseRequestRow, TransferRow } from '@/types/event'
+import type { EventListItem, EventDetail, InventoryItemSave, InventoryItemPatch, VendorSave, WarehouseRequestRow, TransferRow, EventAuditRow } from '@/types/event'
 
 export async function getEvents(): Promise<EventListItem[]> {
   const response = await client.get('/events')
@@ -97,4 +97,24 @@ export async function downloadEventPhoto(id: string, photoId: string, fileName?:
   link.click()
   document.body.removeChild(link)
   window.URL.revokeObjectURL(url)
+}
+
+export async function patchInventoryItem(id: string, payload: InventoryItemPatch): Promise<{ ok: boolean }> {
+  const response = await client.patch(`/events/${id}/inventory-items`, payload)
+  return response.data
+}
+
+export async function receiveAllInventory(id: string): Promise<{ ok: boolean; updated: number }> {
+  const response = await client.post(`/events/${id}/inventory/receive-all`)
+  return response.data
+}
+
+export async function returnAllInventory(id: string): Promise<{ ok: boolean; updated: number }> {
+  const response = await client.post(`/events/${id}/inventory/return-all`)
+  return response.data
+}
+
+export async function getEventAudit(id: string): Promise<EventAuditRow[]> {
+  const response = await client.get(`/events/${id}/audit`)
+  return response.data
 }
