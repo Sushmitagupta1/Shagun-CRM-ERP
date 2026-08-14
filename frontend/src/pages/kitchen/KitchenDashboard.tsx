@@ -19,6 +19,7 @@ import {
   Eye,
   Flame,
 } from 'lucide-react'
+import EventInventoryList from '@/components/events/EventInventoryList'
 
 const ingredientsNeeded = [
   { name: 'Paneer', qty: '45 kg', priority: 'High', source: 'Vendor A' },
@@ -190,6 +191,8 @@ export default function KitchenDashboard() {
           ))}
         </div>
       </motion.div>
+
+      <EventInventoryList />
     </div>
   )
 }

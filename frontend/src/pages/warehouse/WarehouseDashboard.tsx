@@ -15,6 +15,7 @@ import {
   ArrowRight,
   Truck,
 } from 'lucide-react'
+import EventInventoryList from '@/components/events/EventInventoryList'
 
 const pendingDispatches = [
   { id: '1', event: 'Sharma Wedding', client: 'Priya & Rahul', date: '2024-12-20', items: 8, status: 'pending', priority: 'High' },
@@ -190,6 +191,8 @@ export default function WarehouseDashboard() {
           ))}
         </div>
       </motion.div>
+
+      <EventInventoryList />
     </div>
   )
 }
