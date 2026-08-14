@@ -2,16 +2,18 @@ import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getInquiry } from '@/api/inquiries'
-import { generateMenuDesign, loadImageAsDataUrl } from '@/lib/ai'
-import { parseMenuDesigns, downloadMenuDesignPdf, extractMenuEditable, applyMenuEdits, detectPageFonts, detectPageColors, scopeMenuHtml, FONT_OPTIONS, type MenuDesign, type MenuEditablePage, type MenuFonts, type MenuColors } from '@/lib/menuDesign'
+import { generateMenuDesign, loadImageAsDataUrl, polishMenuText } from '@/lib/ai'
+import { parseMenuDesigns, downloadMenuDesignPdf, extractMenuEditable, applyMenuEdits, detectPageFonts, detectPageColors, scopeMenuHtml, sanitizeMenuHtml, buildWordPageHtml, extractTemplatePalette, groupWordLines, wordLinesToHtml, extractWordLinesFromHtml, FONT_OPTIONS, type MenuDesign, type MenuEditablePage, type MenuFonts, type MenuColors, type TemplatePalette, type WordLine } from '@/lib/menuDesign'
 import { getTemplateCategories, getTemplateUrl, getTemplateThumbUrl } from '@/api/templates'
-import { getMenuVersions, createMenuVersion } from '@/api/inquiries'
+import { getMenuVersions, createMenuVersion, parseWordFile, downloadWordMenu } from '@/api/inquiries'
 import PageHeader from '@/components/common/PageHeader'
 import { toast } from 'sonner'
 import { motion } from 'framer-motion'
-import { ArrowLeft, Sparkles, RotateCcw, Loader2, Phone, Calendar, DollarSign, MessageSquare, FileText, User, Users, Layout, Palette, FileDown, Save, History, Eye, ChevronDown, ChevronUp, X, Pencil, Plus, Trash2 } from 'lucide-react'
+import { ArrowLeft, Sparkles, RotateCcw, Loader2, Phone, Calendar, DollarSign, MessageSquare, FileText, User, Users, Layout, Palette, FileDown, Save, History, Eye, ChevronDown, ChevronUp, X, Pencil, Plus, Trash2, Upload } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
 import { INQUIRY_STATUSES, PAYMENT_STATUSES } from '@/lib/constants'
+import { getErrorMessage } from '@/lib/apiError'
+import WordMenuEditor from '@/components/menu/WordMenuEditor'
 
 // Renders one design page with its <style> scoped to a unique container, so
 // multiple previews on screen cannot leak styles or fonts onto each other.
@@ -41,6 +43,10 @@ export default function MenuGenerator() {
   const [editDraft, setEditDraft] = useState<MenuEditablePage[]>([])
   const [editFonts, setEditFonts] = useState<MenuFonts>({ title: '', heading: '', item: '' })
   const [editColors, setEditColors] = useState<MenuColors>({ title: '', heading: '', item: '' })
+  const [wordPalette, setWordPalette] = useState<TemplatePalette | null>(null)
+  const [uploadingWord, setUploadingWord] = useState(false)
+  const [downloadingWord, setDownloadingWord] = useState(false)
+  const [editingWordDesignId, setEditingWordDesignId] = useState<string | null>(null)
 
   // Template selection
   const [selectedCat, setSelectedCat] = useState('')
@@ -222,6 +228,81 @@ export default function MenuGenerator() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
+  const isHeadingText = (t: string) => t.length <= 40 && (t === t.toUpperCase() || t.endsWith(':'))
+
+  const handleWordUpload = async (file?: File) => {
+    if (!file) return
+    if (!selectedCat || !selectedFile) {
+      toast.error('Select a template first')
+      return
+    }
+    setUploadingWord(true)
+    try {
+      const { lines } = await parseWordFile(file)
+      const res = await polishMenuText(lines.map((l) => l.text).join('\n'))
+      if (res.error) {
+        toast.error('AI error: ' + res.error)
+        return
+      }
+      const polished = (res.text || '').split('\n').map((t) => t.trim()).filter((t) => t.length > 0)
+      const merged: WordLine[] = polished.length === lines.length
+        ? lines.map((l, i) => ({ ...l, text: polished[i] }))
+        : polished.map((t) => ({ text: t, is_heading: isHeadingText(t), page: 0 }))
+      const grouped = groupWordLines(merged)
+      const cleaned = sanitizeMenuHtml(wordLinesToHtml(grouped))
+      const templateUrl = getTemplateUrl(selectedCat, selectedFile)
+      const palette = await extractTemplatePalette(templateUrl)
+      setWordPalette(palette)
+      const design: MenuDesign = {
+        id: `word_${Date.now()}`,
+        name: 'Word Menu',
+        pages: [{ html: buildWordPageHtml(cleaned, templateUrl, palette), index: 0 }],
+        raw: cleaned,
+        wordLines: grouped,
+      }
+      setDesigns([design])
+      setDesignMenuText(grouped.map((l) => l.text).join('\n'))
+      toast.success('Word menu imported — check the preview, edit if needed, then Download Word')
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Word file import failed'))
+    } finally {
+      setUploadingWord(false)
+    }
+  }
+
+  const handleSaveWordEdit = (newLines: WordLine[]) => {
+    setDesigns((prev) => prev.map((d) => {
+      if (d.id !== editingWordDesignId) return d
+      const cleaned = sanitizeMenuHtml(wordLinesToHtml(newLines))
+      const templateUrl = getTemplateUrl(selectedCat, selectedFile)
+      const palette = wordPalette ?? { heading: '#5A0016', item: '#8C6A1F', desc: '#4B5563' }
+      return { ...d, pages: [{ ...d.pages[0], html: buildWordPageHtml(cleaned, templateUrl, palette) }], raw: cleaned, wordLines: newLines }
+    }))
+    setEditingWordDesignId(null)
+    toast.success('Design updated. Click "Save Version" to keep it.')
+  }
+
+  const handleDownloadWord = async (design: MenuDesign) => {
+    if (!selectedCat || !selectedFile) {
+      toast.error('Select a template first')
+      return
+    }
+    setDownloadingWord(true)
+    try {
+      await downloadWordMenu({
+        lines: design.wordLines ?? extractWordLinesFromHtml(design.raw),
+        template_category: selectedCat,
+        template_file: selectedFile,
+        colors: wordPalette ?? { heading: '#5A0016', item: '#8C6A1F', desc: '#4B5563' },
+      })
+      toast.success('Word file downloaded')
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Word export failed'))
+    } finally {
+      setDownloadingWord(false)
+    }
+  }
+
   if (!inquiry) {
     return <div className="flex h-64 items-center justify-center"><Loader2 size={24} className="animate-spin text-gold" /></div>
   }
@@ -361,7 +442,14 @@ export default function MenuGenerator() {
           </div>
           <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500">AI Menu Designer — Design on Template</h3>
         </div>
-        <label className="mb-2 block text-[11px] font-bold uppercase text-gray-500">Labeled Menu List</label>
+        <div className="mb-2 flex items-center justify-between">
+          <label className="block text-[11px] font-bold uppercase text-gray-500">Labeled Menu List</label>
+          <label className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-[11px] font-medium text-gray-600 transition-colors hover:bg-gray-50">
+            <Upload size={12} /> {uploadingWord ? 'Importing…' : 'Upload Word File (.doc / .docx)'}
+            <input type="file" className="hidden" accept=".doc,.docx" disabled={uploadingWord}
+              onChange={(e) => { handleWordUpload(e.target.files?.[0]); e.target.value = '' }} />
+          </label>
+        </div>
         <textarea value={designMenuText} onChange={(e) => setDesignMenuText(e.target.value)}
           placeholder={'STARTERS:\nPaneer Tikka\nHara Bhara Kebab\n\nMAIN COURSE:\nDal Makhani\nShahi Paneer\n\nDESSERTS:\nGulab Jamun\nRasmalai'}
           className="h-40 w-full rounded-lg border border-gray-200 p-3 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-gold/30" />
@@ -454,20 +542,34 @@ export default function MenuGenerator() {
                   ))}
                 </div>
                 <div className="p-3">
-                  <button onClick={() => handleOpenEdit(design)}
-                    className="mb-2 flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-gold/40 bg-gold/10 text-[11px] font-medium text-amber-700 transition-colors hover:bg-gold/20">
-                    <Pencil size={12} /> Edit Items
-                  </button>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button onClick={() => handleDownloadDesignPdf(design)} disabled={downloadingPdf === design.id}
-                      className="flex h-8 items-center justify-center gap-1.5 rounded-lg bg-maroon text-[11px] font-medium text-white transition-colors hover:bg-maroon-dark disabled:opacity-50">
-                      {downloadingPdf === design.id ? <Loader2 size={12} className="animate-spin" /> : <FileDown size={12} />} Download PDF
+                  {design.id.startsWith('word_') ? (
+                    <button onClick={() => setEditingWordDesignId(design.id)}
+                      className="mb-2 flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-gold/40 bg-gold/10 text-[11px] font-medium text-amber-700 transition-colors hover:bg-gold/20">
+                      <Pencil size={12} /> Edit Items
                     </button>
-                    <button onClick={() => handleRegenerateDesign(design)} disabled={regeneratingIdx !== null}
-                      className="flex h-8 items-center justify-center gap-1.5 rounded-lg border border-gray-200 text-[11px] font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50">
-                      {regeneratingIdx === design.id ? <Loader2 size={12} className="animate-spin" /> : <RotateCcw size={12} />} Regenerate
+                  ) : (
+                    <button onClick={() => handleOpenEdit(design)}
+                      className="mb-2 flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-gold/40 bg-gold/10 text-[11px] font-medium text-amber-700 transition-colors hover:bg-gold/20">
+                      <Pencil size={12} /> Edit Items
                     </button>
-                  </div>
+                  )}
+                  {design.id.startsWith('word_') ? (
+                    <button onClick={() => handleDownloadWord(design)} disabled={downloadingWord}
+                      className="flex h-8 w-full items-center justify-center gap-1.5 rounded-lg bg-maroon text-[11px] font-medium text-white transition-colors hover:bg-maroon-dark disabled:opacity-50">
+                      {downloadingWord ? <Loader2 size={12} className="animate-spin" /> : <FileDown size={12} />} Download Word
+                    </button>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-2">
+                      <button onClick={() => handleDownloadDesignPdf(design)} disabled={downloadingPdf === design.id}
+                        className="flex h-8 items-center justify-center gap-1.5 rounded-lg bg-maroon text-[11px] font-medium text-white transition-colors hover:bg-maroon-dark disabled:opacity-50">
+                        {downloadingPdf === design.id ? <Loader2 size={12} className="animate-spin" /> : <FileDown size={12} />} Download PDF
+                      </button>
+                      <button onClick={() => handleRegenerateDesign(design)} disabled={regeneratingIdx !== null}
+                        className="flex h-8 items-center justify-center gap-1.5 rounded-lg border border-gray-200 text-[11px] font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50">
+                        {regeneratingIdx === design.id ? <Loader2 size={12} className="animate-spin" /> : <RotateCcw size={12} />} Regenerate
+                      </button>
+                    </div>
+                  )}
                 </div>
               </motion.div>
             ))}
@@ -510,18 +612,20 @@ export default function MenuGenerator() {
                           ))}
                         </div>
                         <div className="flex gap-2 border-t border-gray-100 p-3">
-                          <button onClick={() => { setDesigns(v.designs ?? []); setViewingVersion(null); handleOpenEdit(d) }}
+                          <button onClick={() => { setDesigns(v.designs ?? []); setViewingVersion(null); if (d.id.startsWith('word_')) setEditingWordDesignId(d.id); else handleOpenEdit(d) }}
                             className="flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg border border-gold/40 bg-gold/10 text-[11px] font-medium text-amber-700 transition-colors hover:bg-gold/20">
                             <Pencil size={12} /> Edit
                           </button>
-                          <button onClick={() => handleDownloadDesignPdf(d)} disabled={downloadingPdf === d.id}
+                          <button onClick={() => d.id.startsWith('word_') ? handleDownloadWord(d) : handleDownloadDesignPdf(d)} disabled={downloadingWord || downloadingPdf === d.id}
                             className="flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg bg-maroon text-[11px] font-medium text-white transition-colors hover:bg-maroon-dark disabled:opacity-50">
-                            {downloadingPdf === d.id ? <Loader2 size={12} className="animate-spin" /> : <FileDown size={12} />} Download PDF
+                            {downloadingWord || downloadingPdf === d.id ? <Loader2 size={12} className="animate-spin" /> : <FileDown size={12} />} {d.id.startsWith('word_') ? 'Word' : 'PDF'}
                           </button>
-                          <button onClick={() => { setDesigns(v.designs ?? []); setViewingVersion(null); handleRegenerateDesign(d) }} disabled={regeneratingIdx !== null}
-                            className="flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg border border-gray-200 text-[11px] font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50">
-                            {regeneratingIdx === d.id ? <Loader2 size={12} className="animate-spin" /> : <RotateCcw size={12} />} Regenerate
-                          </button>
+                          {!d.id.startsWith('word_') && (
+                            <button onClick={() => { setDesigns(v.designs ?? []); setViewingVersion(null); handleRegenerateDesign(d) }} disabled={regeneratingIdx !== null}
+                              className="flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg border border-gray-200 text-[11px] font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50">
+                              {regeneratingIdx === d.id ? <Loader2 size={12} className="animate-spin" /> : <RotateCcw size={12} />} Regenerate
+                            </button>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -645,6 +749,19 @@ export default function MenuGenerator() {
               </div>
             </motion.div>
           </motion.div>
+        )
+      })()}
+
+      {/* Word Import Edit Modal */}
+      {editingWordDesignId !== null && (() => {
+        const design = designs.find((d) => d.id === editingWordDesignId)
+        if (!design) return null
+        return (
+          <WordMenuEditor
+            lines={design.wordLines ?? extractWordLinesFromHtml(design.raw)}
+            onClose={() => setEditingWordDesignId(null)}
+            onSave={handleSaveWordEdit}
+          />
         )
       })()}
     </div>

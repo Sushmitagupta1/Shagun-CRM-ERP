@@ -1483,6 +1483,8 @@ git add frontend/src/pages/menu/MenuGenerator.tsx
 git commit -m "feat(menu): word file upload with gemini polish, single preview and word export"
 ```
 
+- **Task 8 execution notes:** The plan's `wordLines` state was **removed** — nothing reads it (the lines live on the design object via `design.wordLines`, with `extractWordLinesFromHtml` as the fallback), so `tsc -b` failed with `TS6133: 'wordLines' is declared but its value is never read`. All four remaining states (`wordPalette`, `uploadingWord`, `downloadingWord`, `editingWordDesignId`) are used. Build (`npm run build`) and lint (`npm run lint`) both pass; the 5 oxlint warnings are pre-existing (`useAuth.ts`, etc.).
+
 ---
 
 ## Task 9: End-to-end manual verification
