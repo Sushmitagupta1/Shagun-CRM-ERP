@@ -17,17 +17,32 @@ import {
   PackageCheck,
   ArrowRightLeft,
   Image as ImageIcon,
+  Search,
 } from 'lucide-react'
 import PageHeader from '@/components/common/PageHeader'
 import { useAuth } from '@/hooks/useAuth'
-import { useEventDetail, useSaveInventoryItems, useSaveVendors, useCompleteEvent, useCreateWarehouseRequests, useIssueWarehouseRequest, useReceiveWarehouseRequest, useUploadEventPhoto, useCreateTransfer, useEvents } from '@/hooks/useEvents'
-import { downloadInquiryFile, uploadInquiryFile } from '@/api/inquiries'
+import {
+  useEventDetail,
+  useSaveVendors,
+  useCompleteEvent,
+  useCreateWarehouseRequests,
+  useIssueWarehouseRequest,
+  useReceiveWarehouseRequest,
+  useUploadEventPhoto,
+  useCreateTransfer,
+  useEvents,
+  usePatchInventoryItem,
+  useReceiveAllInventory,
+  useReturnAllInventory,
+  useEventAudit,
+} from '@/hooks/useEvents'
+import { downloadInquiryFile, uploadInquiryFile, viewInquiryFile } from '@/api/inquiries'
 import { downloadUploadVersion, getEventPhotoBlob, downloadEventPhoto } from '@/api/events'
 import type { EventInventoryRow, EventPhotoRow, EventVendorRow, TransferRow } from '@/types/event'
 import { getErrorMessage } from '@/lib/apiError'
 import { INQUIRY_STATUSES } from '@/lib/constants'
 
-const EDITABLE_ROLES = ['operations_manager', 'admin', 'warehouse']
+const EDITABLE_ROLES = ['admin', 'operations_manager']
 const OPERATIONS_ROLES = ['operations_manager', 'admin']
 const KITCHEN_UPLOAD_ROLES = ['kitchen', 'admin']
 const VENDOR_UPLOAD_ROLES = ['operations_manager', 'admin', 'warehouse']
@@ -48,6 +63,96 @@ function Section({ title, defaultOpen = true, children }: { title: string; defau
       </button>
       {open && <div className="border-t border-gray-100 px-5 py-4">{children}</div>}
     </motion.div>
+  )
+}
+
+function NumberCell({ value, disabled, onSave, allowEmpty }: { value: number | null; disabled: boolean; onSave: (v: number | null) => void; allowEmpty?: boolean }) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState<string>(String(value ?? ''))
+  useEffect(() => { setDraft(String(value ?? '')) }, [value])
+
+  if (disabled || !editing) {
+    return (
+      <button disabled={disabled} onClick={() => setEditing(true)}
+        className="w-20 rounded border border-transparent px-2 py-1 text-left text-xs tabular-nums text-gray-700 hover:border-blue-200 hover:bg-blue-50 disabled:cursor-not-allowed disabled:hover:border-transparent disabled:hover:bg-transparent">
+        {value ?? '—'}
+      </button>
+    )
+  }
+  const commit = () => {
+    const trimmed = draft.trim()
+    setEditing(false)
+    if (allowEmpty && trimmed === '') { onSave(null); return }
+    const num = Number(trimmed)
+    if (!Number.isFinite(num)) return
+    if (num === value) return
+    onSave(num)
+  }
+  return (
+    <input autoFocus type="number" value={draft} onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit} onKeyDown={(e) => { if (e.key === 'Enter') commit() }}
+      className="w-20 rounded border border-blue-300 px-2 py-1 text-xs text-blue-700 focus:border-blue-500 focus:outline-none" />
+  )
+}
+
+function TextCell({ value, disabled, onSave }: { value: string | null; disabled: boolean; onSave: (v: string | null) => void }) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState<string>(value ?? '')
+  useEffect(() => { setDraft(value ?? '') }, [value])
+
+  if (disabled || !editing) {
+    return (
+      <button disabled={disabled} onClick={() => setEditing(true)}
+        className="w-28 rounded border border-transparent px-2 py-1 text-left text-xs text-gray-700 hover:border-blue-200 hover:bg-blue-50 disabled:cursor-not-allowed disabled:hover:border-transparent disabled:hover:bg-transparent">
+        {value ?? '—'}
+      </button>
+    )
+  }
+  const commit = () => {
+    setEditing(false)
+    const trimmed = draft.trim()
+    if (trimmed === (value ?? '')) return
+    onSave(trimmed === '' ? null : trimmed)
+  }
+  return (
+    <input autoFocus value={draft} onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit} onKeyDown={(e) => { if (e.key === 'Enter') commit() }}
+      className="w-28 rounded border border-blue-300 px-2 py-1 text-xs text-blue-700 focus:border-blue-500 focus:outline-none" />
+  )
+}
+
+function RequiredQtyCell({ value, disabled, onSave }: { value: number; disabled: boolean; onSave: (v: number, remark: string) => void }) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(String(value))
+  const [remark, setRemark] = useState('')
+  useEffect(() => { setDraft(String(value)) }, [value])
+
+  if (disabled || !editing) {
+    return (
+      <button disabled={disabled} onClick={() => setEditing(true)}
+        className="w-20 rounded border border-transparent px-2 py-1 text-left text-xs tabular-nums text-gray-700 hover:border-blue-200 hover:bg-blue-50 disabled:cursor-not-allowed disabled:hover:border-transparent disabled:hover:bg-transparent">
+        {value}
+      </button>
+    )
+  }
+  const commit = () => {
+    const num = Number(draft)
+    if (!Number.isFinite(num)) return
+    if (num === value && !remark.trim()) { setEditing(false); return }
+    if (!remark.trim()) { toast.error('Remark is mandatory when changing required qty'); return }
+    setEditing(false)
+    setRemark('')
+    onSave(num, remark.trim())
+  }
+  return (
+    <div className="flex items-center gap-1">
+      <input autoFocus type="number" value={draft} onChange={(e) => setDraft(e.target.value)}
+        className="w-16 rounded border border-blue-300 px-2 py-1 text-xs text-blue-700 focus:outline-none" />
+      <input placeholder="Remark (required)" value={remark} onChange={(e) => setRemark(e.target.value)}
+        onKeyDown={(e) => { if (e.key === 'Enter') commit() }}
+        className="w-32 rounded border border-blue-300 px-2 py-1 text-xs text-gray-700 focus:outline-none" />
+      <button onClick={commit} className="rounded bg-maroon px-2 py-1 text-[10px] font-bold text-white">Save</button>
+    </div>
   )
 }
 
@@ -92,7 +197,11 @@ export default function EventView() {
   const { user } = useAuth()
   const role = user?.role?.name ?? ''
   const { data, isLoading, refetch } = useEventDetail(id)
-  const saveItems = useSaveInventoryItems(id)
+  const patchItem = usePatchInventoryItem(id)
+  const receiveAll = useReceiveAllInventory(id)
+  const returnAll = useReturnAllInventory(id)
+  const { data: audit } = useEventAudit(id)
+  void audit
   const saveVendors = useSaveVendors(id)
   const complete = useCompleteEvent(id)
   const createRequests = useCreateWarehouseRequests(id)
@@ -103,27 +212,21 @@ export default function EventView() {
   const { data: allEvents } = useEvents()
 
   const [transferForm, setTransferForm] = useState({ item_name: '', quantity: 0, unit: '', to_inquiry_id: '' })
+  const [inventorySearch, setInventorySearch] = useState('')
 
   const canEdit = !data?.is_completed && EDITABLE_ROLES.includes(role)
   const canComplete = !data?.is_completed && (role === 'operations_manager' || role === 'admin')
 
-  const [inventoryRows, setInventoryRows] = useState<EventInventoryRow[]>([])
   const [vendorRows, setVendorRows] = useState<EventVendorRow[]>([])
-  const [savedInventory, setSavedInventory] = useState<EventInventoryRow[]>([])
   const [savedVendors, setSavedVendors] = useState<EventVendorRow[]>([])
 
   useEffect(() => {
     if (data) {
-      setInventoryRows(data.inventory)
       setVendorRows(data.vendors)
-      setSavedInventory(JSON.parse(JSON.stringify(data.inventory)))
       setSavedVendors(JSON.parse(JSON.stringify(data.vendors)))
     }
   }, [data])
 
-  const updateRow = (itemName: string, patch: Partial<EventInventoryRow>) => {
-    setInventoryRows((prev) => prev.map((r) => (r.item_name === itemName ? { ...r, ...patch } : r)))
-  }
   const updateVendor = (vid: string, patch: Partial<EventVendorRow>) => {
     setVendorRows((prev) => prev.map((v) => (v.id === vid ? { ...v, ...patch } : v)))
   }
@@ -139,29 +242,37 @@ export default function EventView() {
     }
   }
 
-  const saveInventory = () => {
-    const payload = inventoryRows.map((r) => {
-      const orig = savedInventory.find((s) => s.item_name === r.item_name)
-      const changed =
-        (orig && r.received_qty !== orig.received_qty) ||
-        (orig && r.transfer_count !== orig.transfer_count) ||
-        (orig && r.returned_qty !== orig.returned_qty)
-      return {
-        item_name: r.item_name,
-        received_qty: changed ? r.received_qty : null,
-        transfer_count: changed ? r.transfer_count : null,
-        returned_qty: changed ? r.returned_qty : null,
-        remark: r.remark,
-      }
-    })
-    const missing = payload.filter((p) => (p.received_qty !== null || p.transfer_count !== null || p.returned_qty !== null) && !(p.remark || '').trim())
-    if (missing.length > 0) {
-      toast.error(`Remark is mandatory for: ${missing.map((m) => m.item_name).join(', ')}`)
-      return
-    }
-    saveItems.mutate(payload, {
-      onSuccess: () => toast.success('Inventory saved'),
+  const saveField = (row: EventInventoryRow, field: string, value: number | string | null, remark?: string) => {
+    patchItem.mutate({ item_name: row.item_name, field, value, remark: remark ?? null }, {
+      onSuccess: () => toast.success('Saved'),
       onError: (err) => toast.error(getErrorMessage(err, 'Save failed')),
+    })
+  }
+
+  const handleIngredientUpload = async (file?: File) => {
+    if (!file) return
+    try {
+      await uploadInquiryFile(id, 'ingredient', file)
+      toast.success('Ingredient excel uploaded')
+      refetch()
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Upload failed'))
+    }
+  }
+
+  const handleReceiveAll = () => {
+    if (!window.confirm('Mark all inventory items as received? Items with a Not Received count are adjusted automatically.')) return
+    receiveAll.mutate(undefined, {
+      onSuccess: () => toast.success('All inventory marked as received'),
+      onError: (err) => toast.error(getErrorMessage(err, 'Action failed')),
+    })
+  }
+
+  const handleReturnAll = () => {
+    if (!window.confirm('Mark all items as returned to THOL? Returned Qty = Required - Not Received - Transferred.')) return
+    returnAll.mutate(undefined, {
+      onSuccess: () => toast.success('All items marked as returned to THOL'),
+      onError: (err) => toast.error(getErrorMessage(err, 'Action failed')),
     })
   }
 
@@ -234,8 +345,6 @@ export default function EventView() {
   if (!data) {
     return <div className="flex h-64 items-center justify-center text-sm text-gray-400">Event not found</div>
   }
-
-  const invCols = ['Sr No', 'Item Name', 'Required Qty', 'Received Qty', 'Not Received Item Count', 'Received Status', 'Transfer Item Count', 'Returned to THOL Qty', 'Remark']
 
   return (
     <div className="space-y-5">
@@ -315,78 +424,100 @@ export default function EventView() {
 
       {/* 3. Inventory List */}
       <Section title="Inventory List">
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <div className="relative min-w-[220px] flex-1">
+            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              value={inventorySearch}
+              onChange={(e) => setInventorySearch(e.target.value)}
+              placeholder="Search items…"
+              className="w-full rounded-lg border border-gray-200 py-2 pl-8 pr-3 text-xs text-gray-700 focus:border-blue-500 focus:outline-none"
+            />
+          </div>
+          {OPERATIONS_ROLES.includes(role) && !data.is_completed && (
+            <>
+              <button onClick={handleReceiveAll} disabled={receiveAll.isPending}
+                className="flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">
+                {receiveAll.isPending ? <Loader2 size={12} className="animate-spin" /> : <PackageCheck size={12} />} Received All Inventory
+              </button>
+              <button onClick={handleReturnAll} disabled={returnAll.isPending}
+                className="flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+                {returnAll.isPending ? <Loader2 size={12} className="animate-spin" /> : <Truck size={12} />} All Items Returned to THOL
+              </button>
+            </>
+          )}
+          {data.ingredient_file_name && (
+            <button onClick={() => viewInquiryFile(id, 'ingredient')}
+              className="flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50">
+              <FileText size={12} /> View Excel
+            </button>
+          )}
+          {data.ingredient_file_name && (
+            <button onClick={() => downloadInquiryFile(id, 'ingredient', data.ingredient_file_name)}
+              className="flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50">
+              <Download size={12} /> Download Excel
+            </button>
+          )}
+          {KITCHEN_UPLOAD_ROLES.includes(role) && !data.is_completed && (
+            <label className="flex cursor-pointer items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-100">
+              <Upload size={12} /> Upload Excel
+              <input type="file" className="hidden" accept=".xlsx,.csv" onChange={(e) => { handleIngredientUpload(e.target.files?.[0]); e.target.value = '' }} />
+            </label>
+          )}
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="border-b border-gray-200 bg-gray-50">
-                {invCols.map((h) => (
+                {['Sr No', 'Item Name', 'Required Qty', 'Received Qty', 'Not Received Item Count', 'Received Status', 'Transfer Item Count', 'Transfer Event Name', 'Returned to THOL Qty', 'Breakage / Missing', 'Remark'].map((h) => (
                   <th key={h} className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-gray-500">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {inventoryRows.length === 0 ? (
-                <tr><td colSpan={invCols.length} className="px-3 py-10 text-center text-xs text-gray-400">No inventory yet — upload the kitchen's Ingredient Excel to populate Required Qty.</td></tr>
-              ) : inventoryRows.map((row) => (
-                <tr key={row.item_name} className="border-b border-gray-50">
-                  <td className="px-3 py-2.5 text-xs text-gray-500">{row.sr_no}</td>
-                  <td className="px-3 py-2.5 text-xs font-medium text-gray-900">{row.item_name}</td>
-                  <td className="px-3 py-2.5 text-xs tabular-nums text-gray-700">{row.required_qty} {row.unit ?? ''}</td>
-                  <td className="px-3 py-2.5">
-                    <input
-                      type="number"
-                      disabled={!canEdit}
-                      value={row.received_qty}
-                      onChange={(e) => updateRow(row.item_name, { received_qty: Number(e.target.value) })}
-                      className="w-20 rounded border border-blue-300 px-2 py-1 text-xs text-blue-700 focus:border-blue-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-500"
-                    />
-                  </td>
-                  <td className="px-3 py-2.5 text-xs tabular-nums text-gray-600">{row.not_received_count}</td>
-                  <td className="px-3 py-2.5">
-                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                      row.received_status === 'Received' ? 'bg-emerald-100 text-emerald-700'
-                      : row.received_status === 'Partial' ? 'bg-amber-100 text-amber-700'
-                      : 'bg-red-100 text-red-700'
-                    }`}>{row.received_status}</span>
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <input
-                      type="number"
-                      disabled={!canEdit}
-                      value={row.transfer_count}
-                      onChange={(e) => updateRow(row.item_name, { transfer_count: Number(e.target.value) })}
-                      className="w-20 rounded border border-blue-300 px-2 py-1 text-xs text-blue-700 focus:border-blue-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-500"
-                    />
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <input
-                      type="number"
-                      disabled={!canEdit}
-                      value={row.returned_qty}
-                      onChange={(e) => updateRow(row.item_name, { returned_qty: Number(e.target.value) })}
-                      className="w-20 rounded border border-blue-300 px-2 py-1 text-xs text-blue-700 focus:border-blue-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-500"
-                    />
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <input
-                      value={row.remark ?? ''}
-                      disabled={!canEdit}
-                      onChange={(e) => updateRow(row.item_name, { remark: e.target.value })}
-                      placeholder="Remark"
-                      className="w-40 rounded border border-blue-300 px-2 py-1 text-xs text-gray-700 focus:border-blue-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-gray-50"
-                    />
-                  </td>
-                </tr>
-              ))}
+              {data.inventory.length === 0 ? (
+                <tr><td colSpan={11} className="px-3 py-10 text-center text-xs text-gray-400">No inventory yet — upload the kitchen's Ingredient Excel to populate Required Qty.</td></tr>
+              ) : data.inventory
+                .filter((row) => row.item_name.toLowerCase().includes(inventorySearch.toLowerCase()))
+                .map((row) => (
+                  <tr key={row.item_name} className="border-b border-gray-50">
+                    <td className="px-3 py-2.5 text-xs text-gray-500">{row.sr_no}</td>
+                    <td className="px-3 py-2.5 text-xs font-medium text-gray-900">{row.item_name}</td>
+                    <td className="px-3 py-2.5">
+                      <RequiredQtyCell value={row.required_qty} disabled={!canEdit}
+                        onSave={(v, remark) => saveField(row, 'required_qty', v, remark)} />
+                    </td>
+                    <td className="px-3 py-2.5 text-xs font-semibold tabular-nums text-gray-700">{row.received_qty} {row.unit ?? ''}</td>
+                    <td className="px-3 py-2.5">
+                      <NumberCell value={row.not_received_count} disabled={!canEdit}
+                        onSave={(v) => saveField(row, 'not_received_count', v)} />
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                        row.received_tag === 'Yes' ? 'bg-emerald-100 text-emerald-700'
+                        : row.received_tag === 'Half' ? 'bg-amber-100 text-amber-700'
+                        : 'bg-red-100 text-red-700'
+                      }`}>{row.received_tag}</span>
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <NumberCell value={row.transfer_count} disabled={!canEdit}
+                        onSave={(v) => saveField(row, 'transfer_count', v)} />
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <TextCell value={row.transfer_event} disabled={!canEdit}
+                        onSave={(v) => saveField(row, 'transfer_event', v)} />
+                    </td>
+                    <td className="px-3 py-2.5 text-xs font-semibold tabular-nums text-gray-700">{row.returned_qty}</td>
+                    <td className="px-3 py-2.5">
+                      <NumberCell value={row.breakage_count} disabled={!canEdit}
+                        onSave={(v) => saveField(row, 'breakage_count', v)} />
+                    </td>
+                    <td className="px-3 py-2.5 text-xs text-gray-600">{row.remark ?? '—'}</td>
+                  </tr>
+                ))}
             </tbody>
           </table>
         </div>
-        {canEdit && (
-          <button onClick={saveInventory} disabled={saveItems.isPending}
-            className="mt-4 flex items-center gap-1 rounded-lg bg-maroon px-3 py-2 text-xs font-semibold text-white hover:bg-maroon-dark disabled:opacity-50">
-            {saveItems.isPending ? <Loader2 size={12} className="animate-spin" /> : null} Save Inventory Changes
-          </button>
-        )}
       </Section>
 
       {/* 4. Vendor Details */}
