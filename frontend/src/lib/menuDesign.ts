@@ -590,9 +590,7 @@ function normalizePage(page: string, designStyle: string | null, designBg: strin
 
 export async function downloadMenuDesignPdf(design: MenuDesign, fileName: string): Promise<void> {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
-  // A4 at 96dpi = 794 x 1123 px. Each design page is rendered onto exactly one
-  // such sheet (content is fit-scaled down or vertically centered) so the PDF
-  // is always clean A4 pages, never one long page.
+  // A4 at 96dpi = 794 x 1123 px. Every page is rendered onto exactly one sheet.
   const PAGE_W = 794
   const PAGE_H = 1123
   for (let i = 0; i < design.pages.length; i++) {
@@ -607,8 +605,16 @@ export async function downloadMenuDesignPdf(design: MenuDesign, fileName: string
     container.setAttribute('data-menu-scope', 'pdf-scope')
     const inner = document.createElement('div')
     inner.style.width = `${PAGE_W}px`
+    inner.style.height = `${PAGE_H}px`
     inner.style.transformOrigin = 'top left'
-    inner.innerHTML = scopeMenuHtml(design.pages[i].html, 'pdf-scope')
+    // Full-A4 fix: min-height:100vh resolves to the BROWSER window height (not
+    // the sheet), which pushed the content to the wrong place and left the
+    // picture not covering the page. Pin the page height and cover-fill the
+    // template so the picture spans the whole A4 edge-to-edge with no stretch.
+    const fixed = scopeMenuHtml(design.pages[i].html, 'pdf-scope')
+      .replace(/min-height\s*:\s*100vh/gi, `height:${PAGE_H}px`)
+      .replace(/background-size\s*:\s*100%\s*100%/gi, 'background-size:cover;background-position:center')
+    inner.innerHTML = fixed
     container.appendChild(inner)
     document.body.appendChild(container)
     try {
@@ -618,8 +624,6 @@ export async function downloadMenuDesignPdf(design: MenuDesign, fileName: string
       const naturalH = inner.offsetHeight
       if (naturalH > PAGE_H) {
         inner.style.transform = `scale(${(PAGE_H / naturalH).toFixed(4)})`
-      } else {
-        inner.style.transform = `translateY(${Math.round((PAGE_H - naturalH) / 2)}px)`
       }
 
       const canvas = await html2canvas(container, {
