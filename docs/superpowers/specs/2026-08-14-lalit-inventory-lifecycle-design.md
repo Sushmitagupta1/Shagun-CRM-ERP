@@ -16,8 +16,8 @@ Bring the Operations Manager (Lalit) inventory workflow in line with the approve
 ## Assumptions (approved by user)
 
 1. Full feature: DB + backend + frontend (Operations, Chef, Store) + audit trail, deployed to Railway.
-2. `received_qty` is **computed** = `required_qty − not_received_count`. Never manually entered.
-3. `received_tag` is **computed**: `Yes` when `not_received_count = 0`, `No` when `not_received_count ≥ required_qty`, else `Half`.
+2. `received_qty` is **system-derived, stored**: default `0`. It is set only by the **Received All Inventory** button to `max(required_qty − not_received_count, 0)` per item. Not manually typed in the UI (single source of truth).
+3. `received_tag` is **computed** from `received_qty` vs `required_qty`: `Yes` when `received_qty ≥ required_qty`, `No` when `received_qty ≤ 0`, else `Half`.
 4. Transfer Item Count + Transfer Event Name are **manual** columns entered by Lalit; independent of the existing Direct Transfers panel/movements.
 5. Breakage/Missing Items Count is a **manual** per-item column; feeds closure Wastage/Missing total. Existing wastage movements are unaffected.
 6. Audit trail is a single **Audit Trail section** on the Event Details page; visible even after completion.
