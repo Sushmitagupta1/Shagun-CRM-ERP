@@ -180,7 +180,7 @@ async def patch_inventory_item(
     inquiry_id: uuid.UUID,
     data: InventoryItemPatch,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role("admin", "operations_manager", "warehouse")),
+    current_user: User = Depends(require_role("admin", "operations_manager")),
 ):
     inquiry = await get_inquiry_or_404(db, inquiry_id)
     if inquiry.is_completed:
