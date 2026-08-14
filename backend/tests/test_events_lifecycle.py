@@ -96,6 +96,12 @@ async def test_receive_all_and_return_all(client):
     assert closure["wastage_qty"] == 0
     assert closure["pending_qty"] == 170  # 450 - 280 - 0
 
+    # bulk actions write audit rows with their distinguishing remarks
+    audit = (await client.get(f"/api/events/{inquiry_id}/audit", headers=auth(token))).json()
+    bulk_actions = [(a["field_name"], a["remark"]) for a in audit if a["action"] == "edit"]
+    assert ("received_qty", "Received All Inventory") in bulk_actions
+    assert ("returned_qty", "All Items Returned to THOL") in bulk_actions
+
     # kitchen cannot run bulk actions
     kitchen_token = await login(client, "kitchen@shaguncatering.com", "kitchen123")
     forbidden = await client.post(f"/api/events/{inquiry_id}/inventory/receive-all", headers=auth(kitchen_token))
