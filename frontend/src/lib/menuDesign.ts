@@ -22,6 +22,7 @@ export interface ParsedDesigns {
 export interface MenuEditableItem {
   key: string
   text: string
+  description?: string
 }
 
 export interface MenuEditableHeading {
@@ -39,12 +40,14 @@ export interface MenuFonts {
   title: string
   heading: string
   item: string
+  description?: string
 }
 
 export interface MenuColors {
   title: string
   heading: string
   item: string
+  description?: string
 }
 
 export const FONT_OPTIONS: { label: string; value: string }[] = [
@@ -113,6 +116,7 @@ const DEFAULT_FONTS: MenuFonts = {
   title: "'Playfair Display', Georgia, serif",
   heading: "'Playfair Display', Georgia, serif",
   item: "'Lato', 'Segoe UI', Arial, sans-serif",
+  description: "'Lato', 'Segoe UI', Arial, sans-serif",
 }
 
 function normalizeFont(value: string): string {
@@ -162,6 +166,7 @@ export function detectPageColors(html: string): MenuColors {
     title: pick('h1', '\\.\\w[\\w-]*title[\\w-]*'),
     heading: pick('h2', '\\.\\w[\\w-]*heading[\\w-]*') || colorInRule(style, '\\.\\w[\\w-]*section[\\w-]*') || '',
     item: pick('ul\\s+li', '\\.\\w[\\w-]*item[\\w-]*') || colorInRule(style, 'li') || '',
+    description: colorInRule(style, '\\.dish-desc') || colorInRule(style, '\\.\\w[\\w-]*desc[\\w-]*') || '',
   }
 }
 
@@ -173,7 +178,8 @@ export function detectPageFonts(html: string): MenuFonts {
   const title = fontInRule(style, 'h1') || fontInRule(style, '\\.\\w[\\w-]*title[\\w-]*') || DEFAULT_FONTS.title
   const heading = fontInRule(style, 'h2') || fontInRule(style, '\\.\\w[\\w-]*heading[\\w-]*') || fontInRule(style, '\\.\\w[\\w-]*section[\\w-]*') || DEFAULT_FONTS.heading
   const item = fontInRule(style, 'ul\\s+li') || fontInRule(style, '\\.\\w[\\w-]*item[\\w-]*') || fontInRule(style, 'li') || DEFAULT_FONTS.item
-  return { title: matchFontOption(title), heading: matchFontOption(heading), item: matchFontOption(item) }
+  const description = fontInRule(style, '\\.dish-desc') || fontInRule(style, '\\.\\w[\\w-]*desc[\\w-]*') || DEFAULT_FONTS.description
+  return { title: matchFontOption(title), heading: matchFontOption(heading), item: matchFontOption(item), description: matchFontOption(description) }
 }
 
 const FONT_OVERRIDE_MARK = '/* user-font-overrides */'
@@ -195,12 +201,14 @@ export function applyTextOverrides(html: string, fonts?: MenuFonts, colors?: Men
   if (fonts) {
     rules.push(`h1, [class*="title"] { font-family: ${fonts.title} !important; }`)
     rules.push(`h2, [class*="heading"], [class*="section"] { font-family: ${fonts.heading} !important; }`)
-    rules.push(`ul li, [class*="item"] { font-family: ${fonts.item} !important; }`)
+    rules.push(`ul li, ul li .dish-name, [class*="item"] { font-family: ${fonts.item} !important; }`)
+    if (fonts.description) rules.push(`.dish-desc, [class*="desc"] { font-family: ${fonts.description} !important; }`)
   }
   if (colors) {
     rules.push(`h1, [class*="title"] { color: ${colors.title} !important; }`)
     rules.push(`h2, [class*="heading"], [class*="section"] { color: ${colors.heading} !important; }`)
-    rules.push(`ul li, [class*="item"] { color: ${colors.item} !important; }`)
+    rules.push(`ul li, ul li .dish-name, [class*="item"] { color: ${colors.item} !important; }`)
+    if (colors.description) rules.push(`.dish-desc, [class*="desc"] { color: ${colors.description} !important; }`)
   }
   const overrides = `\n${FONT_OVERRIDE_MARK}\n${rules.join('\n')}\n`
   return html.replace(sm[0], `<style>${base}${overrides}</style>`)
@@ -296,6 +304,15 @@ function stripHtml(html: string): string {
   return html.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
 }
 
+// Splits a dish line "Name - description" / "Name: description" / "Name–description"
+// into name + description. Lines without a separator are name-only.
+export function splitMenuLine(text: string): { name: string; description: string } {
+  const m = text.match(/^(.+?)\s*[-–—:]\s*(.+)$/)
+  return m
+    ? { name: m[1].trim(), description: m[2].trim() }
+    : { name: text, description: '' }
+}
+
 function countLis(ul: Element): number {
   return Array.from(ul.children).filter((el) => el.tagName === 'LI').length
 }
@@ -322,7 +339,7 @@ function liDisplayText(li: HTMLElement): string {
 
 // Replaces only the dish text inside an <li>, keeping leading decorative
 // elements (veg dots, markers) so the rendered look stays intact.
-function editLiText(li: HTMLElement, text: string) {
+function editLiText(li: HTMLElement, item: MenuEditableItem) {
   let prefixHtml = ''
   for (const node of Array.from(li.childNodes)) {
     if (node.nodeType === Node.TEXT_NODE) {
@@ -335,14 +352,30 @@ function editLiText(li: HTMLElement, text: string) {
       prefixHtml += el.outerHTML
     }
   }
-  const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-  li.innerHTML = prefixHtml + escaped
+  const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  const desc = item.description?.trim()
+  const inner = desc
+    ? `<strong class="dish-name">${esc(item.text)}</strong><span class="dish-desc">${esc(desc)}</span>`
+    : `<strong class="dish-name">${esc(item.text)}</strong>`
+  li.innerHTML = prefixHtml + inner
 }
 
 // All heading lines (h1/h2/h3) of a page in document order, as plain text.
 function pageHeadings(html: string): string[] {
   const doc = new DOMParser().parseFromString(html, 'text/html')
   return Array.from(doc.body.querySelectorAll('h1, h2, h3')).map((el) => stripHtml((el as HTMLElement).innerHTML))
+}
+
+function liNameDesc(li: HTMLElement): { name: string; description: string } {
+  const strong = li.querySelector('.dish-name')
+  const span = li.querySelector('.dish-desc')
+  if (strong) {
+    return {
+      name: strong.textContent?.trim() ?? '',
+      description: span?.textContent?.trim() ?? '',
+    }
+  }
+  return splitMenuLine(liDisplayText(li))
 }
 
 // Pulls out the headings and item texts of each page so they can be edited in
@@ -356,7 +389,10 @@ export function extractMenuEditable(design: MenuDesign): MenuEditablePage[] {
     return {
       pageIndex: pi,
       headings: headingEls.map((el, hi) => ({ key: `p${pi}_h${hi}`, text: stripHtml(el.innerHTML) })),
-      items: lis.map((li, i) => ({ key: `p${pi}_i${i}`, text: liDisplayText(li) })),
+      items: lis.map((li, i) => {
+        const { name, description } = liNameDesc(li)
+        return { key: `p${pi}_i${i}`, text: name, description }
+      }),
     }
   })
 }
@@ -406,27 +442,27 @@ export function applyMenuEdits(design: MenuDesign, pages: MenuEditablePage[], op
         if (newText) el.textContent = newText
       })
 
-      const texts = edits.items.map((it) => it.text).filter((t) => t.trim() !== '')
+      const items = edits.items.filter((it) => it.text.trim() !== '')
       const ul = mainUl(doc)
       if (ul) {
         const lis = Array.from(ul.children).filter((el) => el.tagName === 'LI') as HTMLElement[]
         lis.forEach((li, i) => {
-          if (i < texts.length) editLiText(li, texts[i])
+          if (i < items.length) editLiText(li, items[i])
           else li.remove()
         })
-        if (texts.length > lis.length) {
+        if (items.length > lis.length) {
           const template = lis[lis.length - 1] || doc.createElement('li')
-          for (let i = lis.length; i < texts.length; i++) {
+          for (let i = lis.length; i < items.length; i++) {
             const clone = template.cloneNode(true) as HTMLElement
-            editLiText(clone, texts[i])
+            editLiText(clone, items[i])
             ul.appendChild(clone)
           }
         }
-      } else if (texts.length > 0) {
+      } else if (items.length > 0) {
         const newUl = doc.createElement('ul')
-        texts.forEach((t) => {
+        items.forEach((it) => {
           const li = doc.createElement('li')
-          li.textContent = t
+          editLiText(li, it)
           newUl.appendChild(li)
         })
         doc.body.appendChild(newUl)
