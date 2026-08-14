@@ -12,6 +12,7 @@ from app.routers.templates import router as templates_router
 from app.routers.settings import router as settings_router
 from app.routers.menu_versions import router as menu_versions_router
 from app.routers.events import router as events_router
+from app.routers.menu_word import router as menu_word_router
 
 app = FastAPI(title="Shagun Caterers ERP API", version="1.0.0", docs_url="/api/docs", redoc_url="/api/redoc")
 app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origins_list, allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
@@ -27,6 +28,7 @@ app.include_router(templates_router)
 app.include_router(settings_router)
 app.include_router(menu_versions_router)
 app.include_router(events_router)
+app.include_router(menu_word_router)
 
 from fastapi.responses import FileResponse
 import os

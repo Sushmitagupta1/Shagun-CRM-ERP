@@ -85,3 +85,37 @@ def test_build_menu_docx_missing_template_path_ignored():
     )
     doc = Document(io.BytesIO(data))
     assert doc.paragraphs[0].text == "Paneer"
+
+
+def _first_template():
+    base = os.path.join(os.path.dirname(__file__), "..", "templates")
+    if not os.path.isdir(base):
+        return None
+    for cat in sorted(os.listdir(base)):
+        cat_dir = os.path.join(base, cat)
+        if not os.path.isdir(cat_dir):
+            continue
+        files = sorted(
+            f for f in os.listdir(cat_dir)
+            if f.lower().endswith((".jpg", ".jpeg", ".png", ".webp", ".jfif"))
+        )
+        if files:
+            return os.path.join(cat_dir, files[0])
+    return None
+
+
+def test_build_menu_docx_with_real_template_image():
+    """Real template images (incl. EXIF-heavy .jfif and .webp) must not break
+    the export — python-docx cannot parse some of them directly, so the builder
+    re-encodes the image via PIL first."""
+    path = _first_template()
+    if not path:
+        pytest.skip("No template image available for the export test")
+    data = build_menu_docx(
+        [{"text": "STARTERS", "is_heading": True, "page": 0}],
+        path,
+        {"heading": "#5A0016", "item": "#8C6A1F", "desc": "#4B5563"},
+    )
+    doc = Document(io.BytesIO(data))
+    assert doc.paragraphs[0].text == "STARTERS"
+    assert len(doc.sections[0].header.paragraphs[0].runs) == 1

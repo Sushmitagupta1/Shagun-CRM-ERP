@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     CORS_ORIGINS: str = '["http://localhost:5173"]'
     ENVIRONMENT: str = "development"
     UPLOAD_DIR: str = "/app/uploads"
+    TEMPLATES_DIR: str = "/app/templates"
     MAX_UPLOAD_SIZE: int = 20 * 1024 * 1024  # 20 MB
     MAX_CALL_RECORDING_SIZE: int = 100 * 1024 * 1024  # 100 MB
     ALLOWED_EXTENSIONS: list[str] = [

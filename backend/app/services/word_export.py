@@ -19,6 +19,19 @@ def _hex_color(value: str | None, default: str) -> RGBColor:
     return RGBColor(int(default[1:3], 16), int(default[3:5], 16), int(default[5:7], 16))
 
 
+def _load_template_image(template_path: str) -> io.BytesIO:
+    """Re-encode the template to a clean PNG so python-docx can always embed
+    it. python-docx cannot parse some real-world images (EXIF-heavy .jfif files
+    from WhatsApp, .webp, etc.), so we normalize them through PIL first."""
+    from PIL import Image
+
+    buf = io.BytesIO()
+    with Image.open(template_path) as img:
+        img.convert("RGB").save(buf, format="PNG")
+    buf.seek(0)
+    return buf
+
+
 def build_menu_docx(lines: list[dict], template_path: str | None, colors: dict) -> bytes:
     """Build a .docx: template image as full-page background (in the header,
     behind the body text) + centered menu text with template-matched colours."""
@@ -44,7 +57,7 @@ def build_menu_docx(lines: list[dict], template_path: str | None, colors: dict) 
         hpara.alignment = WD_ALIGN_PARAGRAPH.CENTER
         hpara.paragraph_format.space_before = Pt(0)
         hpara.paragraph_format.space_after = Pt(0)
-        hpara.add_run().add_picture(template_path, width=PAGE_WIDTH, height=PAGE_HEIGHT)
+        hpara.add_run().add_picture(_load_template_image(template_path), width=PAGE_WIDTH, height=PAGE_HEIGHT)
 
     heading_color = _hex_color(colors.get("heading"), "#5A0016")
     item_color = _hex_color(colors.get("item"), "#8C6A1F")

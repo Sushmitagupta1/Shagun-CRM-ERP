@@ -386,6 +386,40 @@ def test_build_menu_docx_missing_template_path_ignored():
     )
     doc = Document(io.BytesIO(data))
     assert doc.paragraphs[0].text == "Paneer"
+
+
+def _first_template():
+    base = os.path.join(os.path.dirname(__file__), "..", "templates")
+    if not os.path.isdir(base):
+        return None
+    for cat in sorted(os.listdir(base)):
+        cat_dir = os.path.join(base, cat)
+        if not os.path.isdir(cat_dir):
+            continue
+        files = sorted(
+            f for f in os.listdir(cat_dir)
+            if f.lower().endswith((".jpg", ".jpeg", ".png", ".webp", ".jfif"))
+        )
+        if files:
+            return os.path.join(cat_dir, files[0])
+    return None
+
+
+def test_build_menu_docx_with_real_template_image():
+    """Real template images (incl. EXIF-heavy .jfif and .webp) must not break
+    the export — python-docx cannot parse some of them directly, so the builder
+    re-encodes the image via PIL first."""
+    path = _first_template()
+    if not path:
+        pytest.skip("No template image available for the export test")
+    data = build_menu_docx(
+        [{"text": "STARTERS", "is_heading": True, "page": 0}],
+        path,
+        {"heading": "#5A0016", "item": "#8C6A1F", "desc": "#4B5563"},
+    )
+    doc = Document(io.BytesIO(data))
+    assert doc.paragraphs[0].text == "STARTERS"
+    assert len(doc.sections[0].header.paragraphs[0].runs) == 1
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
@@ -419,6 +453,19 @@ def _hex_color(value: str | None, default: str) -> RGBColor:
     return RGBColor(int(default[1:3], 16), int(default[3:5], 16), int(default[5:7], 16))
 
 
+def _load_template_image(template_path: str) -> io.BytesIO:
+    """Re-encode the template to a clean PNG so python-docx can always embed
+    it. python-docx cannot parse some real-world images (EXIF-heavy .jfif files
+    from WhatsApp, .webp, etc.), so we normalize them through PIL first."""
+    from PIL import Image
+
+    buf = io.BytesIO()
+    with Image.open(template_path) as img:
+        img.convert("RGB").save(buf, format="PNG")
+    buf.seek(0)
+    return buf
+
+
 def build_menu_docx(lines: list[dict], template_path: str | None, colors: dict) -> bytes:
     """Build a .docx: template image as full-page background (in the header,
     behind the body text) + centered menu text with template-matched colours."""
@@ -444,7 +491,7 @@ def build_menu_docx(lines: list[dict], template_path: str | None, colors: dict) 
         hpara.alignment = WD_ALIGN_PARAGRAPH.CENTER
         hpara.paragraph_format.space_before = Pt(0)
         hpara.paragraph_format.space_after = Pt(0)
-        hpara.add_run().add_picture(template_path, width=PAGE_WIDTH, height=PAGE_HEIGHT)
+        hpara.add_run().add_picture(_load_template_image(template_path), width=PAGE_WIDTH, height=PAGE_HEIGHT)
 
     heading_color = _hex_color(colors.get("heading"), "#5A0016")
     item_color = _hex_color(colors.get("item"), "#8C6A1F")
@@ -478,7 +525,7 @@ def build_menu_docx(lines: list[dict], template_path: str | None, colors: dict) 
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `python -m pytest tests/test_word_export.py -v` (from `backend`).
-Expected: 5 passed.
+Expected: 6 passed. (Includes the real-template regression test — `python-docx` cannot parse EXIF-heavy `.jfif`/`.webp` images directly, so `build_menu_docx` re-encodes the template to PNG via PIL.)
 
 - [ ] **Step 5: Commit**
 
@@ -1480,4 +1527,4 @@ git commit -m "fix(menu): polish word import flow"
 - Type consistency: `WordLine` is defined in `menuDesign.ts` (Task 5) and type-imported by `types/inquiry.ts` (Task 6), `api/inquiries.ts` (Task 6), `WordMenuEditor.tsx` (Task 7) and `MenuGenerator.tsx` (Task 8) with the same `{ text, is_heading, page }` shape. `TemplatePalette` (Task 5) matches the `colors` payload shape in `downloadWordMenu` (Task 6). `wordLines?: WordLine[]` added to both `MenuDesign` (Task 5) and `MenuDesignPayload` (Task 6) so version-loaded word designs keep their lines.
 - Frontend tests: the repo has no JS test runner (only `tsc` + `vite build`), so frontend verification is via `npm run build` / `npm run lint` plus the manual checks in Task 9.
 - Backend tests need the test Postgres with seeded users (admin@shaguncatering.com / admin123), same as the existing suite. Tasks 1-2 are DB-free.
-- The export test (`_first_template`) uses a real template file from `backend/templates` so the header-image code path is covered; it skips if no image exists.
+- The export test (`_first_template`) uses a real template file from `backend/templates` so the header-image code path is covered; it skips if no image exists. During execution this found that `python-docx` cannot parse some real templates (EXIF-heavy `.jfif`, `.webp`), so `build_menu_docx` re-encodes the template to PNG via PIL (`_load_template_image`) before embedding it.
