@@ -205,7 +205,7 @@ export async function getMenuVersions(inquiryId: string): Promise<MenuVersion[]>
 
 export async function createMenuVersion(
   inquiryId: string,
-  data: { menu_text: string | null; designs: { id: string; name: string; pages: { html: string; index: number }[]; raw: string }[]; template_category: string | null; template_file: string | null }
+  data: { menu_text: string | null; designs: { id: string; name: string; pages: { html: string; index: number }[]; raw: string; paletteIndex?: number }[]; template_category: string | null; template_file: string | null }
 ): Promise<MenuVersion> {
   const response = await client.post(`/inquiries/${inquiryId}/menu-versions`, data)
   return response.data

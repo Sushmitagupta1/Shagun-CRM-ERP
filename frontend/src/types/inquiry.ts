@@ -78,6 +78,7 @@ export interface MenuDesignPayload {
   name: string
   pages: { html: string; index: number }[]
   raw: string
+  paletteIndex?: number
 }
 
 export interface MenuVersion {
