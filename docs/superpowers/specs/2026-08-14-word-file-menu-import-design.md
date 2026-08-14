@@ -1,103 +1,161 @@
-# Menu Designer — Word File Import (.doc / .docx)
+# Word File Menu Import & Word Export — Design Spec
 
-**Date:** 2026-08-14
-**Status:** Draft
+> Status: Approved (2026-08-14) · Owner: Menu Generator
+> Replaces the earlier "preserve formatting + PDF" version of this spec. The user's requirements changed during brainstorming: the Word file's visual formatting is no longer preserved as-is; Gemini only fixes spelling, the content is beautified on the selected template, and the deliverable is a Word (.docx) file — not a PDF.
 
-## Problem
+## Goal
 
-Menu planners already design menus inside Microsoft Word with specific formatting — underlines under headings, chosen font sizes, and a fixed layout pattern. Today the Menu Generator only accepts pasted labeled text and runs it through the AI designer, which:
+Let a menu planner upload a `.doc`/`.docx` menu file in the Menu Generator, have Gemini fix only the spelling (content, categories, and structure unchanged), see ONE editable preview on the selected template background with template-matched colours, and download the result as a `.docx` where the template picture fills the page background and the text is beautifully formatted on top — keeping the page structure of the original Word file (3-4 categories per page).
 
-1. Never reproduces the user's own Word formatting (underline, size, pattern).
-2. Always produces 3 options when the user wants a single result.
-3. Keeps a plain white page instead of applying the selected template picture as the page design.
+## Requirements (from brainstorming)
 
-The user wants: upload the Word file, keep its underline/size/pattern exactly, put the selected template's design on the page, match text colours to the template, and end up with ONE editable design that can be downloaded as PDF — all in one go inside the Menu Generator.
+1. Upload a Word file (`.doc` and `.docx`).
+2. Gemini fixes **only spelling** — "spelling thik karega". Content, categories, and structure stay exactly as in the Word file.
+3. Apply the selected template: the template picture becomes the page background ("word ka background ko template se replace kar do"), and the text is beautified on it ("template laga ke beautify").
+4. The page structure follows the original Word file — "jesa word me hoga ka page me 3-4 category" (3-4 categories per page).
+5. Show a preview in the browser before download, with an edit step ("Preview + edit, phir download").
+6. Deliverable is a **Word file only** ("Sirf Word") — no PDF for this feature.
 
-## Requirements
+## Superseded requirements
 
-- "Upload Word File" button in the Menu Generator accepting both `.doc` and `.docx`.
-- The menu text and its formatting (underline, font size, bold/italic, alignment, colour) are preserved from the Word file — no AI restyling.
-- The selected template picture is applied as the page background (white page gets the template's design).
-- Text colours are matched to the template (dominant colours extracted from the template image), not hard-coded.
-- Exactly ONE design is produced (no 3 options) when importing from a Word file.
-- The imported design is editable: each text line can be edited while its formatting is kept.
-- The imported design downloads as a single A4 PDF via the existing `downloadMenuDesignPdf` pipeline.
-- Everything happens in the Menu Generator page — no navigation to another screen.
+- Preserving the Word file's underline/font-size/pattern as-is — dropped; Gemini polish + template beautify take over the visual styling.
+- PDF download for word-imported menus — dropped (output is `.docx` only).
+- The existing AI flow (pasted text → Gemini → 3 design options → PDF) is **unchanged**; the Word import is a separate path.
 
-## Approach
+## Architecture
 
-### Backend
+- **Backend** parses the uploaded Word file into structured lines (`text`, `is_heading`, `page`) and builds the final `.docx` (template background + formatted text). Stateless — no DB writes.
+- **Frontend** calls Gemini (existing client-side integration in `frontend/src/lib/ai.ts`) for the spelling-fix, renders the preview on the template, lets the user edit line texts, and posts the final lines to the backend for the Word export.
+- Template images are already served and stored by the backend (`/app/templates/<category>/<file>` in Docker; `backend/templates` in local dev).
 
-#### Dependencies
-- `mammoth` (Python) added to `backend/requirements.txt` — converts `.docx` → HTML preserving inline formatting.
-- `libreoffice-writer` installed in the backend Docker image (headless) — converts legacy `.doc` → `.docx` so formatting survives.
-
-#### Endpoint: `POST /api/menu/parse-word`
-- Multipart file upload, JWT-protected (reuse the existing auth middleware).
-- Accepts `.doc` and `.docx` (validated by extension + content sniff).
-- For `.doc`: convert to `.docx` first via `soffice --headless --convert-to docx --outdir <tmp>`.
-- Run `mammoth.convert_to_html` on the resulting `.docx`.
-- Return `{ html, file_name }` where `html` is the mammoth HTML with inline formatting.
-- Temp files cleaned up in a `finally`.
-- No DB writes — this is a stateless conversion endpoint.
-
-#### Dockerfile
-- Add `libreoffice-writer-nogui` (Debian package) with `--no-install-recommends`; include common fonts so text renders correctly after conversion.
-
-### Frontend
-
-#### API (`frontend/src/api/inquiries.ts` — the Menu Generator already imports menu-version functions from here)
-- New `parseWordFile(file: File): Promise<{ html: string }>` posting to `/menu/parse-word`.
-
-#### Menu Generator (`frontend/src/pages/menu/MenuGenerator.tsx`)
-- New "Upload Word File" control next to the "Labeled Menu List" textarea (`accept=".doc,.docx"`).
-- On upload: call `parseWordFile`, then build a single `MenuDesign`:
-  - Sanitize the mammoth HTML with the existing `sanitizeMenuHtml`.
-  - Wrap it in the menu-card page structure using the selected template picture as a full-page `background-image` (`background-size:cover`), mirroring `normalizePage`'s wrapper approach so the existing PDF path renders it edge-to-edge.
-  - Set `designs` to exactly one design (`{ id, name: 'Word Menu', pages: [{ html, index: 0 }], raw }`).
-- The single design shows in the existing preview grid, with Edit + Download PDF actions.
-
-#### Template-matched colours
-- New helper in `frontend/src/lib/menuDesign.ts` (or `ai.ts`): `extractTemplatePalette(imageUrl)` using a canvas to downscale the template image and sample dominant colours, producing `{ heading, item, desc }`.
-- The imported design's `<style>` gets a palette block (heading / dish / description colours from the dominant template colours, with sensible fallbacks) via a `withMenuTypography`-style injection — colours match the template, not Word's colours.
-
-#### Editable word design
-- New `extractWordEditable(html)` / `applyWordEdits(html, lines)` helpers in `frontend/src/lib/menuDesign.ts`:
-  - Walk the block elements (`p`, `h1`–`h6`, `li`) that carry text.
-  - Each block becomes an editable line: `{ key, text, tag, style }` where `style` preserves the original font-size, font-family, underline, colour and alignment.
-  - The Edit modal lists each line as a styled text input; editing changes only the text, re-emitting `<tag style="...">text</tag>` so underline/size/pattern are kept.
-- The existing Edit modal (or a small variant) hosts this line editor for the word-imported design.
-
-### Data flow summary
+## Data flow
 
 ```
-Word file (.doc/.docx)
-  → POST /api/menu/parse-word        (LibreOffice .doc→.docx, mammoth → HTML)
-  → sanitize + wrap with template bg
-  → extractTemplatePalette(template) → text colours
-  → ONE MenuDesign with template-matched colours
-  → preview + Edit (line editor keeps formatting)
-  → downloadMenuDesignPdf (existing A4 pipeline)
+User picks template
+   │
+   ▼
+Upload Word file → POST /api/menu/parse-word
+   │  (python-docx; .doc → .docx via LibreOffice headless)
+   ▼
+{ file_name, lines: [{ text, is_heading, page }] }
+   │
+   ▼
+Frontend: polishMenuText(text) → Gemini spelling fix (structure kept)
+   │
+   ▼
+Frontend: group lines into pages (Word page breaks, else 3-4 categories/page)
+   │
+   ▼
+Browser: single design preview on template (extractTemplatePalette colours)
+   │
+   ▼
+Edit: line editor (text only, heading flag preserved)
+   │
+   ▼
+POST /api/menu/export-word { lines, template_category, template_file, colors }
+   │  (python-docx: A4, template image in header = full-page background, centered text)
+   ▼
+.docx file download
 ```
 
-## Files touched
+## Backend
 
-- `backend/requirements.txt` — add `mammoth`.
-- `backend/Dockerfile` — install `libreoffice-writer-nogui` + fonts.
-- `backend/app/routers/menu.py` (or new `menu_word.py`) — `POST /api/menu/parse-word`.
-- `backend/app/services/file_parsers.py` (or new service) — word→HTML conversion helper.
-- `frontend/src/api/inquiries.ts` — `parseWordFile`.
-- `frontend/src/lib/menuDesign.ts` — `extractTemplatePalette`, `extractWordEditable`, `applyWordEdits`.
-- `frontend/src/pages/menu/MenuGenerator.tsx` — upload control, single-design build, line-editor modal.
+### `app/services/word_parser.py` (new)
 
-## Testing / verification
+`word_to_lines(file_bytes: bytes, filename: str) -> list[dict]`:
 
-- Backend: `pytest` for the new endpoint using a small `.docx` fixture and (if available) a `.doc` fixture; assert the returned HTML contains expected text and inline formatting.
-- `npx tsc -b` and `npm run build` from `frontend` must pass (`noUnusedLocals` is on).
-- Manual: upload a `.docx` and a `.doc` in the Menu Generator → one design appears with the template background, Word's underlines/sizes intact, colours matching the template; Edit a line → text changes, formatting stays; Download PDF → single full-A4 page with the template filling the sheet.
+- Validates extension (`.doc`/`.docx`) and size (max 10 MB). Errors raise `ValueError` (client error) or `RuntimeError` (conversion/parse failure).
+- `.doc` → `.docx` via `soffice --headless --convert-to docx --outdir <tmp>` (same `_run_soffice` helper as before). If `soffice` is missing, `RuntimeError("LibreOffice ... not installed")`.
+- Reads paragraphs with python-docx; produces one line per non-empty paragraph:
+  - `text`: the paragraph text, trimmed, whitespace collapsed.
+  - `is_heading`: true when the paragraph style name starts with `Heading`, or its runs are bold, or it is a short ALL-CAPS line ending with `:`.
+  - `page`: page index. Explicit page breaks in the document (runs containing `<w:br w:type="page"/>`) increment the page. Defaults to `0` when the file has no explicit breaks.
 
-## Non-goals
+### `app/routers/menu_word.py` (new)
 
-- No changes to the AI designer flow (pasted text still uses the 3-option AI path).
-- No persistence of the uploaded Word file itself (only the generated design is saved via the existing Save Version).
-- No server-side template colour extraction (done client-side on the template image).
+- `POST /api/menu/parse-word` — JWT-protected (`get_current_user`), multipart `file`. Calls `word_to_lines`. Returns `{ "file_name": ..., "lines": [...] }`. Maps `ValueError` → 400, `RuntimeError` → 422.
+- `POST /api/menu/export-word` — JWT-protected, JSON body:
+  ```json
+  {
+    "lines": [{ "text": "...", "is_heading": true, "page": 0 }],
+    "template_category": "Wedding",
+    "template_file": "gold-border.jpg",
+    "colors": { "heading": "#5A0016", "item": "#8C6A1F", "desc": "#4B5563" }
+  }
+  ```
+  Builds a `.docx` in memory:
+  - A4 portrait; all margins and header/footer distances set to 0 so the background can bleed to the edge.
+  - Template image added to the section header at exactly 210 mm × 297 mm → a full-page background on every page (Word renders header content behind body text).
+  - Body: centered paragraphs. Headings: bold, ALL-CAPS, in `colors.heading`, larger font (e.g. 18pt). Dish lines: in `colors.item` (e.g. 12pt). Descriptions not special-cased — the menu text is rendered as-is per line. Left/right indents give comfortable padding inside the template's border; spacing before/after headings.
+  - Page breaks: a paragraph run `add_break(WD_BREAK.PAGE)` whenever the `page` field increases (or from the grouping done client-side).
+  - Returns `StreamingResponse` with `Content-Disposition: attachment; filename="menu.docx"` and the docx MIME type.
+  - 400 when `lines` is empty or the template file is missing.
+
+### `backend/requirements.txt`
+
+Add `python-docx==1.1.2`.
+
+### `backend/Dockerfile`
+
+Add `libreoffice-writer-nogui` and `fonts-dejavu-core` to the apt install list (for `.doc` conversion).
+
+### `backend/app/config.py`
+
+Add a `TEMPLATES_DIR` setting (default `/app/templates`). The word parser / export router resolves the template file via this setting, falling back to `backend/templates` (project root) for local Windows dev.
+
+## Frontend
+
+### `frontend/src/lib/ai.ts`
+
+Add `polishMenuText(text: string): Promise<AIResponse>` — a text-only Gemini call (reuses `callGemini`). Prompt: "Fix spelling and obvious typos in the menu text below. Do NOT change the categories, dish names' meaning, the order, or the line structure. Change only misspelled words. Return the corrected text with the same line breaks."
+
+**Polish merge rule (in `MenuGenerator`):** split the polished text into lines; if the count matches the parsed lines, apply each polished line in order to the original lines (keeps every `is_heading` flag). If the count differs, rebuild the lines from the polished text and re-detect headings with the ALL-CAPS-short-line heuristic (`is_heading` = short line that is ALL-CAPS or ends with `:`).
+
+### `frontend/src/api/inquiries.ts`
+
+- `parseWordFile(file: File)` → `POST /menu/parse-word` (multipart) → `{ file_name, lines }`.
+- `downloadWordMenu(payload: { lines, template_category, template_file, colors })` → `POST /menu/export-word` (JSON) → downloads the returned `.docx` (read the response as a Blob).
+
+### `frontend/src/lib/menuDesign.ts`
+
+- `extractTemplatePalette(imageUrl)` — samples the dominant (non-white/non-black) colours of the template image (64×64 canvas) → `{ heading, item, desc }` with a sensible fallback. Existing helper ported from the earlier plan.
+- `buildWordPageHtml(contentHtml, templateUrl, palette)` — wraps the polished text (as `<p>` lines) on the template background with `background-size: cover`, template-matched text colours, first line as heading colour. Used only for the on-screen preview.
+- `wordLinesToHtml(lines)` — converts parsed lines to simple HTML (`<p>` per line, heading lines get a heading class / style).
+- `groupWordLines(lines, categoriesPerPage = 4)` — if the Word file had no explicit page breaks, groups the lines so each page holds up to 4 category sections; returns lines with a computed `page`. If explicit page breaks exist, they are kept.
+
+### `frontend/src/components/menu/WordMenuEditor.tsx` (new)
+
+Line editor modal: one input per line, styled to reflect heading vs dish line. Editing text only; heading flags preserved. Save → returns updated lines.
+
+### `frontend/src/pages/menu/MenuGenerator.tsx`
+
+- Upload control next to the "Labeled Menu List" textarea: "Upload Word File (.doc / .docx)".
+- On upload: require a selected template, call `parseWordFile`, then `polishMenuText` on the joined line texts, then `groupWordLines`, then `buildWordPageHtml` → a single design card (`id` prefix `word_`). Errors → toast via `getErrorMessage`.
+- Design card for word designs: **Edit Items** (opens `WordMenuEditor`) and **Download Word** button. No **Regenerate**, no **Download PDF** for word designs.
+- Version viewer: word designs edit via `WordMenuEditor`, no Regenerate button.
+- Save Version flow unchanged (designs are saved with the version).
+
+## Error handling
+
+| Condition | Behaviour |
+| --- | --- |
+| Unsupported extension | 400 "Only .doc and .docx files are supported" |
+| File > 10 MB | 400 "File too large (max 10MB)" |
+| Empty file / no readable text | 400 "No readable text found" |
+| `.doc` and `soffice` missing / conversion fails | 422 with message |
+| Gemini rate limit | existing retry (3 attempts) then error toast |
+| No template selected at upload | toast "Select a template first" |
+| Template file missing at export | 400 |
+
+## Testing
+
+- `backend/tests/test_word_parser.py` — unit tests: lines/heading/page extraction from an in-memory-built `.docx` (minimal OOXML zip), extension/size validation, `.doc` without soffice → RuntimeError.
+- `backend/tests/test_menu_word.py` — API tests (reuse the session `client` fixture + seeded `admin@shaguncatering.com`): parse-word returns lines; unsupported file → 400; missing auth → 401/403; export-word returns a readable `.docx` (re-open the response bytes with python-docx and assert heading text/colours); empty lines → 400.
+- Frontend: `npm run build` and `npm run lint` (no JS test runner in the repo).
+- Manual E2E: upload a short `.docx`, confirm spelling-fix + single preview + edit + Word download with template background.
+
+## Out of scope
+
+- PDF export for word-imported menus.
+- AI redesign/regeneration of word-imported content (Gemini must not change structure).
+- Editing the template background inside the Word file (image is fixed full-page behind the text).
