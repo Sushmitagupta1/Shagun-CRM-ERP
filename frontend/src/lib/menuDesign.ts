@@ -596,11 +596,14 @@ export interface InquiryDetails {
   event_date?: string
   pax?: number
   venue?: string
+  session?: string
+  source?: string
+  inquiry_date?: string
+  remarks?: string
   per_plate_rate?: number
   add_on?: number
   advance_amount?: number
   total_amount?: number
-  remarks?: string
 }
 
 export async function downloadMenuDesignPdf(
@@ -677,7 +680,7 @@ function buildInquiryCoverPage(inquiry: InquiryDetails, templateUrl?: string): s
     .cover-page {
       position: relative;
       min-height: 100vh;
-      padding: 48px 56px;
+      padding: 56px 64px;
       ${bg}
       box-sizing: border-box;
       font-family: 'Cormorant Garamond', Georgia, serif;
@@ -686,82 +689,107 @@ function buildInquiryCoverPage(inquiry: InquiryDetails, templateUrl?: string): s
       content: '';
       position: absolute;
       inset: 0;
-      background: rgba(255,252,245,0.92);
+      background: rgba(255,255,255,0.95);
       z-index: 0;
     }
     .cover-inner {
       position: relative;
       z-index: 1;
-      max-width: 640px;
+      max-width: 660px;
       margin: 0 auto;
+    }
+    .cover-header {
       text-align: center;
+      margin-bottom: 40px;
     }
     .cover-title {
       font-family: 'Playfair Display', Georgia, serif;
-      font-size: 32px;
+      font-size: 28px;
       font-weight: 900;
-      color: #3D0C11;
+      color: #2D2D2D;
       text-transform: uppercase;
-      letter-spacing: 0.14em;
+      letter-spacing: 0.1em;
       margin: 0 0 4px;
     }
     .cover-subtitle {
-      font-size: 15px;
+      font-size: 13px;
       font-weight: 600;
       color: #8C6A1F;
       text-transform: uppercase;
-      letter-spacing: 0.22em;
-      margin: 0 0 24px;
+      letter-spacing: 0.2em;
+      margin: 0 0 20px;
     }
     .cover-divider {
-      width: 140px;
+      width: 100px;
       height: 1px;
-      background: linear-gradient(90deg, transparent, #3D0C11, transparent);
-      margin: 0 auto 28px;
+      background: linear-gradient(90deg, transparent, #C5B992, transparent);
+      margin: 0 auto;
+    }
+    .cover-section-title {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: 17px;
+      font-weight: 700;
+      color: #3D0C11;
+      margin: 0 0 20px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #E8E2D6;
     }
     .cover-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 16px 32px;
-      text-align: left;
-      margin: 0 auto;
+      gap: 0;
     }
     .cover-field {
-      border-bottom: 1px solid #E5DDD0;
-      padding-bottom: 8px;
+      padding: 12px 0;
+      border-bottom: 1px solid #F0EDE6;
+    }
+    .cover-field:nth-child(odd) {
+      padding-right: 24px;
+    }
+    .cover-field:nth-child(even) {
+      padding-left: 24px;
     }
     .cover-label {
       font-size: 10px;
-      font-weight: 700;
-      color: #8C6A1F;
+      font-weight: 600;
+      color: #9CA3AF;
       text-transform: uppercase;
-      letter-spacing: 0.12em;
-      margin: 0 0 2px;
+      letter-spacing: 0.08em;
+      margin: 0 0 3px;
     }
     .cover-value {
-      font-size: 16px;
+      font-size: 14px;
       font-weight: 600;
-      color: #3D0C11;
+      color: #1F2937;
       margin: 0;
+      line-height: 1.4;
     }
     .cover-remarks {
-      margin-top: 20px;
-      text-align: center;
+      margin-top: 16px;
+      padding: 12px 0;
+      border-top: 1px solid #E8E2D6;
     }
     .cover-remarks .cover-label {
-      text-align: center;
+      margin-bottom: 4px;
     }
     .cover-remarks .cover-value {
       font-size: 13px;
       font-weight: 400;
+      color: #4B5563;
       font-style: italic;
+      line-height: 1.5;
     }
   </style>
   <div class="cover-page">
     <div class="cover-inner">
-      <h1 class="cover-title">SHAGUN CATERERS</h1>
-      <p class="cover-subtitle">Event Details</p>
-      <div class="cover-divider"></div>
+      <div class="cover-header">
+        <h1 class="cover-title">SHAGUN CATERERS</h1>
+        <p class="cover-subtitle">Luxury Catering Menu</p>
+        <div class="cover-divider"></div>
+      </div>
+
+      <h2 class="cover-section-title">Stage 1 — Basic Information</h2>
+
       <div class="cover-grid">
         <div class="cover-field">
           <p class="cover-label">Client Name</p>
@@ -780,30 +808,27 @@ function buildInquiryCoverPage(inquiry: InquiryDetails, templateUrl?: string): s
           <p class="cover-value">${inquiry.event_date || '—'}</p>
         </div>
         <div class="cover-field">
-          <p class="cover-label">Guests</p>
-          <p class="cover-value">${inquiry.pax ? inquiry.pax + ' PAX' : '—'}</p>
-        </div>
-        <div class="cover-field">
           <p class="cover-label">Venue</p>
           <p class="cover-value">${inquiry.venue || '—'}</p>
         </div>
         <div class="cover-field">
-          <p class="cover-label">Per Plate Rate</p>
-          <p class="cover-value">${inquiry.per_plate_rate ? '₹' + inquiry.per_plate_rate.toLocaleString('en-IN') : '—'}</p>
+          <p class="cover-label">Pax</p>
+          <p class="cover-value">${inquiry.pax ? inquiry.pax + ' Guests' : '—'}</p>
         </div>
         <div class="cover-field">
-          <p class="cover-label">Add On</p>
-          <p class="cover-value">${inquiry.add_on ? '₹' + inquiry.add_on.toLocaleString('en-IN') : '—'}</p>
+          <p class="cover-label">Inquiry Date</p>
+          <p class="cover-value">${inquiry.inquiry_date || '—'}</p>
         </div>
         <div class="cover-field">
-          <p class="cover-label">Advance Amount</p>
-          <p class="cover-value">${inquiry.advance_amount ? '₹' + inquiry.advance_amount.toLocaleString('en-IN') : '—'}</p>
+          <p class="cover-label">Session</p>
+          <p class="cover-value">${inquiry.session || '—'}</p>
         </div>
         <div class="cover-field">
-          <p class="cover-label">Total Amount</p>
-          <p class="cover-value">${inquiry.total_amount ? '₹' + inquiry.total_amount.toLocaleString('en-IN') : '—'}</p>
+          <p class="cover-label">Source</p>
+          <p class="cover-value">${inquiry.source || '—'}</p>
         </div>
       </div>
+
       ${inquiry.remarks ? `<div class="cover-remarks">
         <p class="cover-label">Remarks</p>
         <p class="cover-value">${inquiry.remarks}</p>

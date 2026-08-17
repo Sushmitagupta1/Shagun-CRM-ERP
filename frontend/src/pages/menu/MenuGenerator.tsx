@@ -130,11 +130,14 @@ export default function MenuGenerator() {
         event_date: inquiry.event_date,
         pax: inquiry.pax,
         venue: inquiry.venue,
+        session: inquiry.session,
+        source: inquiry.source,
+        inquiry_date: inquiry.inquiry_date,
+        remarks: inquiry.remarks,
         per_plate_rate: inquiry.per_plate_rate,
         add_on: inquiry.add_on,
         advance_amount: inquiry.advance_amount,
         total_amount: inquiry.total_amount,
-        remarks: inquiry.remarks,
       } : undefined
       await downloadMenuDesignPdf(design, `${design.name.replace(/[^\w\d]+/g, '_')}.pdf`, inquiryData, templateUrl)
       toast.success('PDF downloaded')
