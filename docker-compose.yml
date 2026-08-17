@@ -21,7 +21,7 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://shagun:${DB_PASSWORD}@postgres:5432/shagun_erp
       JWT_SECRET_KEY: ${JWT_SECRET_KEY}
-      CORS_ORIGINS: '["http://localhost","http://localhost:80"]'
+      CORS_ORIGINS: '["http://localhost","http://localhost:80","http://122.179.157.252"]'
       ENVIRONMENT: production
     volumes:
       - ./uploads:/app/uploads
