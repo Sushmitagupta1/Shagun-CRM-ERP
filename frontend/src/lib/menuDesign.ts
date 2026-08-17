@@ -952,12 +952,9 @@ export function extractWordLinesFromHtml(html: string): WordLine[] {
 
 // Wraps word-imported HTML on a template background with template-matched text
 // colours. Produces a premium full-page A4 layout with large typography.
-export function buildWordPageHtml(contentHtml: string, templateUrl: string, palette: TemplatePalette, fonts?: { heading: string; item: string; desc: string }): string {
-  const hf = fonts?.heading ?? "'Playfair Display', Georgia, serif"
-  const ef = fonts?.item ?? "'Cormorant Garamond', Georgia, serif"
-  const df = fonts?.desc ?? "'Lato', 'Segoe UI', Arial, sans-serif"
+export function buildWordPageHtml(contentHtml: string, templateUrl: string, palette: TemplatePalette): string {
   const style = `<style>
-    @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=Cormorant+Garamond:wght@400;600;700&family=Montserrat:wght@400;500;600;700&family=Lato:wght@300;400;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=Cormorant+Garamond:wght@400;600;700&display=swap');
     .word-menu-card {
       position: relative;
       min-height: 100vh;
@@ -984,7 +981,7 @@ export function buildWordPageHtml(contentHtml: string, templateUrl: string, pale
       text-align: center;
     }
     .word-menu-title {
-      font-family: ${hf};
+      font-family: 'Playfair Display', Georgia, serif;
       font-size: 28px;
       font-weight: 900;
       color: ${palette.heading};
@@ -994,7 +991,7 @@ export function buildWordPageHtml(contentHtml: string, templateUrl: string, pale
       line-height: 1.2;
     }
     .word-menu-subtitle {
-      font-family: ${ef};
+      font-family: 'Cormorant Garamond', Georgia, serif;
       font-size: 14px;
       font-weight: 600;
       color: ${palette.item};
@@ -1012,13 +1009,13 @@ export function buildWordPageHtml(contentHtml: string, templateUrl: string, pale
       color: ${palette.item};
       margin: 0.25em 0;
       font-size: 14px;
-      font-family: ${ef};
+      font-family: 'Cormorant Garamond', Georgia, serif;
       font-weight: 400;
       line-height: 1.5;
     }
     .word-menu-inner p.word-heading {
       color: ${palette.heading};
-      font-family: ${hf};
+      font-family: 'Playfair Display', Georgia, serif;
       font-weight: 700;
       font-size: 20px;
       text-transform: uppercase;
@@ -1031,8 +1028,7 @@ export function buildWordPageHtml(contentHtml: string, templateUrl: string, pale
       margin-top: 0;
     }
     .word-menu-inner p.word-desc {
-      color: ${palette.desc};
-      font-family: ${df};
+      color: #6B5C3E;
       font-size: 11px;
       font-style: italic;
       margin: 0 0 0.3em;

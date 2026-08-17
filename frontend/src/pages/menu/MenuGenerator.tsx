@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getInquiry } from '@/api/inquiries'
 import { generateMenuDesign, loadImageAsDataUrl, polishMenuText } from '@/lib/ai'
-import { parseMenuDesigns, downloadMenuDesignPdf, extractMenuEditable, applyMenuEdits, detectPageFonts, detectPageColors, scopeMenuHtml, sanitizeMenuHtml, buildWordPageHtml, extractTemplatePalette, groupWordLines, wordLinesToHtml, extractWordLinesFromHtml, FONT_OPTIONS, MENU_PALETTES, type MenuDesign, type MenuEditablePage, type MenuFonts, type MenuColors, type TemplatePalette, type WordLine } from '@/lib/menuDesign'
+import { parseMenuDesigns, downloadMenuDesignPdf, extractMenuEditable, applyMenuEdits, detectPageFonts, detectPageColors, scopeMenuHtml, sanitizeMenuHtml, buildWordPageHtml, extractTemplatePalette, groupWordLines, wordLinesToHtml, extractWordLinesFromHtml, FONT_OPTIONS, type MenuDesign, type MenuEditablePage, type MenuFonts, type MenuColors, type TemplatePalette, type WordLine } from '@/lib/menuDesign'
 import { getTemplateCategories, getTemplateUrl, getTemplateThumbUrl } from '@/api/templates'
 import { getMenuVersions, createMenuVersion, parseWordFile, downloadWordMenu } from '@/api/inquiries'
 import PageHeader from '@/components/common/PageHeader'
@@ -268,21 +268,18 @@ export default function MenuGenerator() {
       const grouped = groupWordLines(merged)
       const cleaned = sanitizeMenuHtml(wordLinesToHtml(grouped))
       const templateUrl = getTemplateUrl(selectedCat, selectedFile)
-
-      // Create 3 designs with different palettes
-      const { MENU_PALETTES } = await import('@/lib/menuDesign')
-      const newDesigns: MenuDesign[] = MENU_PALETTES.map((p, idx) => ({
-        id: `word_${Date.now()}_${idx}`,
-        name: p.name,
-        pages: [{ html: buildWordPageHtml(cleaned, templateUrl, { heading: p.heading, item: p.item, desc: p.desc }, { heading: p.headingFont, item: p.itemFont, desc: p.descFont }), index: 0 }],
+      const palette = await extractTemplatePalette(templateUrl)
+      setWordPalette(palette)
+      const design: MenuDesign = {
+        id: `word_${Date.now()}`,
+        name: 'Word Menu',
+        pages: [{ html: buildWordPageHtml(cleaned, templateUrl, palette), index: 0 }],
         raw: cleaned,
         wordLines: grouped,
-        paletteIndex: idx,
-      }))
-      setDesigns(newDesigns)
-      setWordPalette({ heading: MENU_PALETTES[0].heading, item: MENU_PALETTES[0].item, desc: MENU_PALETTES[0].desc })
+      }
+      setDesigns([design])
       setDesignMenuText(grouped.map((l) => l.text).join('\n'))
-      toast.success('Word menu imported — 3 design options ready')
+      toast.success('Word menu imported — check the preview, edit if needed, then Download')
     } catch (err) {
       toast.error(getErrorMessage(err, 'Word file import failed'))
     } finally {
@@ -295,11 +292,8 @@ export default function MenuGenerator() {
       if (d.id !== editingWordDesignId) return d
       const cleaned = sanitizeMenuHtml(wordLinesToHtml(newLines))
       const templateUrl = getTemplateUrl(selectedCat, selectedFile)
-      const idx = d.paletteIndex ?? 0
-      const p = MENU_PALETTES[idx]
-      const palette = { heading: p.heading, item: p.item, desc: p.desc }
-      const fonts = { heading: p.headingFont, item: p.itemFont, desc: p.descFont }
-      return { ...d, pages: [{ ...d.pages[0], html: buildWordPageHtml(cleaned, templateUrl, palette, fonts) }], raw: cleaned, wordLines: newLines }
+      const palette = wordPalette ?? { heading: '#5A0016', item: '#8C6A1F', desc: '#4B5563' }
+      return { ...d, pages: [{ ...d.pages[0], html: buildWordPageHtml(cleaned, templateUrl, palette) }], raw: cleaned, wordLines: newLines }
     }))
     setEditingWordDesignId(null)
     toast.success('Design updated. Click "Save Version" to keep it.')
@@ -312,12 +306,11 @@ export default function MenuGenerator() {
     }
     setDownloadingWord(true)
     try {
-      const idx = design.paletteIndex ?? 0
       await downloadWordMenu({
         lines: design.wordLines ?? extractWordLinesFromHtml(design.raw),
         template_category: selectedCat,
         template_file: selectedFile,
-        colors: { heading: MENU_PALETTES[idx].heading, item: MENU_PALETTES[idx].item, desc: MENU_PALETTES[idx].desc },
+        colors: wordPalette ?? { heading: '#5A0016', item: '#8C6A1F', desc: '#4B5563' },
       })
       toast.success('Word file downloaded')
     } catch (err) {
