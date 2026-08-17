@@ -122,7 +122,21 @@ export default function MenuGenerator() {
   const handleDownloadDesignPdf = async (design: MenuDesign) => {
     setDownloadingPdf(design.id)
     try {
-      await downloadMenuDesignPdf(design, `${design.name.replace(/[^\w\d]+/g, '_')}.pdf`)
+      const templateUrl = selectedCat && selectedFile ? getTemplateUrl(selectedCat, selectedFile) : undefined
+      const inquiryData = inquiry ? {
+        client_name: inquiry.client_name,
+        client_phone: inquiry.client_phone,
+        event_type: inquiry.event_type,
+        event_date: inquiry.event_date,
+        pax: inquiry.pax,
+        venue: inquiry.venue,
+        per_plate_rate: inquiry.per_plate_rate,
+        add_on: inquiry.add_on,
+        advance_amount: inquiry.advance_amount,
+        total_amount: inquiry.total_amount,
+        remarks: inquiry.remarks,
+      } : undefined
+      await downloadMenuDesignPdf(design, `${design.name.replace(/[^\w\d]+/g, '_')}.pdf`, inquiryData, templateUrl)
       toast.success('PDF downloaded')
     } catch {
       toast.error('Failed to generate PDF')
@@ -554,19 +568,29 @@ export default function MenuGenerator() {
                     </button>
                   )}
                   {design.id.startsWith('word_') ? (
-                    <button onClick={() => handleDownloadWord(design)} disabled={downloadingWord}
-                      className="flex h-8 w-full items-center justify-center gap-1.5 rounded-lg bg-maroon text-[11px] font-medium text-white transition-colors hover:bg-maroon-dark disabled:opacity-50">
-                      {downloadingWord ? <Loader2 size={12} className="animate-spin" /> : <FileDown size={12} />} Download Word
-                    </button>
-                  ) : (
                     <div className="grid grid-cols-2 gap-2">
                       <button onClick={() => handleDownloadDesignPdf(design)} disabled={downloadingPdf === design.id}
                         className="flex h-8 items-center justify-center gap-1.5 rounded-lg bg-maroon text-[11px] font-medium text-white transition-colors hover:bg-maroon-dark disabled:opacity-50">
-                        {downloadingPdf === design.id ? <Loader2 size={12} className="animate-spin" /> : <FileDown size={12} />} Download PDF
+                        {downloadingPdf === design.id ? <Loader2 size={12} className="animate-spin" /> : <FileDown size={12} />} PDF
+                      </button>
+                      <button onClick={() => handleDownloadWord(design)} disabled={downloadingWord}
+                        className="flex h-8 items-center justify-center gap-1.5 rounded-lg border border-maroon text-[11px] font-medium text-maroon transition-colors hover:bg-maroon/5 disabled:opacity-50">
+                        {downloadingWord ? <Loader2 size={12} className="animate-spin" /> : <FileDown size={12} />} Word
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-3 gap-2">
+                      <button onClick={() => handleDownloadDesignPdf(design)} disabled={downloadingPdf === design.id}
+                        className="flex h-8 items-center justify-center gap-1.5 rounded-lg bg-maroon text-[11px] font-medium text-white transition-colors hover:bg-maroon-dark disabled:opacity-50">
+                        {downloadingPdf === design.id ? <Loader2 size={12} className="animate-spin" /> : <FileDown size={12} />} PDF
+                      </button>
+                      <button onClick={() => handleDownloadWord(design)} disabled={downloadingWord}
+                        className="flex h-8 items-center justify-center gap-1.5 rounded-lg border border-maroon text-[11px] font-medium text-maroon transition-colors hover:bg-maroon/5 disabled:opacity-50">
+                        {downloadingWord ? <Loader2 size={12} className="animate-spin" /> : <FileDown size={12} />} Word
                       </button>
                       <button onClick={() => handleRegenerateDesign(design)} disabled={regeneratingIdx !== null}
                         className="flex h-8 items-center justify-center gap-1.5 rounded-lg border border-gray-200 text-[11px] font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50">
-                        {regeneratingIdx === design.id ? <Loader2 size={12} className="animate-spin" /> : <RotateCcw size={12} />} Regenerate
+                        {regeneratingIdx === design.id ? <Loader2 size={12} className="animate-spin" /> : <RotateCcw size={12} />} Re-gen
                       </button>
                     </div>
                   )}

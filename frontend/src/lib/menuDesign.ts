@@ -589,12 +589,39 @@ function normalizePage(page: string, designStyle: string | null, designBg: strin
   return `${baseStyle}\n<div ${bgStyle} class="menu-card">\n  ${html}\n</div>`
 }
 
-export async function downloadMenuDesignPdf(design: MenuDesign, fileName: string): Promise<void> {
+export interface InquiryDetails {
+  client_name?: string
+  client_phone?: string
+  event_type?: string
+  event_date?: string
+  pax?: number
+  venue?: string
+  per_plate_rate?: number
+  add_on?: number
+  advance_amount?: number
+  total_amount?: number
+  remarks?: string
+}
+
+export async function downloadMenuDesignPdf(
+  design: MenuDesign,
+  fileName: string,
+  inquiry?: InquiryDetails,
+  templateUrl?: string
+): Promise<void> {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
-  // A4 at 96dpi = 794 x 1123 px. Every page is rendered onto exactly one sheet.
   const PAGE_W = 794
   const PAGE_H = 1123
-  for (let i = 0; i < design.pages.length; i++) {
+
+  // Build inquiry details cover page if inquiry data provided
+  const pagesToRender: MenuDesignPage[] = []
+  if (inquiry) {
+    const coverHtml = buildInquiryCoverPage(inquiry, templateUrl)
+    pagesToRender.push({ html: coverHtml, index: -1 })
+  }
+  pagesToRender.push(...design.pages)
+
+  for (let i = 0; i < pagesToRender.length; i++) {
     const container = document.createElement('div')
     container.style.position = 'absolute'
     container.style.left = '-9999px'
@@ -607,13 +634,7 @@ export async function downloadMenuDesignPdf(design: MenuDesign, fileName: string
     const inner = document.createElement('div')
     inner.style.width = `${PAGE_W}px`
     inner.style.transformOrigin = 'top left'
-    // Full-A4 fix: min-height:100vh resolves to the BROWSER window height (not
-    // the sheet), which pushed the content to the wrong place and left the
-    // picture not covering the page. Pin the page to the sheet height and
-    // cover-fill the template so the picture spans the whole A4 edge-to-edge
-    // with no stretch. min-height (not height) lets a page taller than one
-    // sheet grow so it can be measured and scaled to fit instead of clipped.
-    const fixed = scopeMenuHtml(design.pages[i].html, 'pdf-scope')
+    const fixed = scopeMenuHtml(pagesToRender[i].html, 'pdf-scope')
       .replace(/min-height\s*:\s*100vh/gi, `min-height:${PAGE_H}px`)
       .replace(/background-size\s*:\s*100%\s*100%/gi, 'background-size:cover;background-position:center')
     inner.innerHTML = fixed
@@ -645,6 +666,150 @@ export async function downloadMenuDesignPdf(design: MenuDesign, fileName: string
     }
   }
   doc.save(fileName)
+}
+
+function buildInquiryCoverPage(inquiry: InquiryDetails, templateUrl?: string): string {
+  const bg = templateUrl
+    ? `background-image:url('${templateUrl}');background-size:cover;background-position:center;`
+    : ''
+  return `<style>
+    @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=Cormorant+Garamond:wght@400;600;700&display=swap');
+    .cover-page {
+      position: relative;
+      min-height: 100vh;
+      padding: 48px 56px;
+      ${bg}
+      box-sizing: border-box;
+      font-family: 'Cormorant Garamond', Georgia, serif;
+    }
+    .cover-page::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: rgba(255,252,245,0.92);
+      z-index: 0;
+    }
+    .cover-inner {
+      position: relative;
+      z-index: 1;
+      max-width: 640px;
+      margin: 0 auto;
+      text-align: center;
+    }
+    .cover-title {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: 32px;
+      font-weight: 900;
+      color: #3D0C11;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      margin: 0 0 4px;
+    }
+    .cover-subtitle {
+      font-size: 15px;
+      font-weight: 600;
+      color: #8C6A1F;
+      text-transform: uppercase;
+      letter-spacing: 0.22em;
+      margin: 0 0 24px;
+    }
+    .cover-divider {
+      width: 140px;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, #3D0C11, transparent);
+      margin: 0 auto 28px;
+    }
+    .cover-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px 32px;
+      text-align: left;
+      margin: 0 auto;
+    }
+    .cover-field {
+      border-bottom: 1px solid #E5DDD0;
+      padding-bottom: 8px;
+    }
+    .cover-label {
+      font-size: 10px;
+      font-weight: 700;
+      color: #8C6A1F;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      margin: 0 0 2px;
+    }
+    .cover-value {
+      font-size: 16px;
+      font-weight: 600;
+      color: #3D0C11;
+      margin: 0;
+    }
+    .cover-remarks {
+      margin-top: 20px;
+      text-align: center;
+    }
+    .cover-remarks .cover-label {
+      text-align: center;
+    }
+    .cover-remarks .cover-value {
+      font-size: 13px;
+      font-weight: 400;
+      font-style: italic;
+    }
+  </style>
+  <div class="cover-page">
+    <div class="cover-inner">
+      <h1 class="cover-title">SHAGUN CATERERS</h1>
+      <p class="cover-subtitle">Event Details</p>
+      <div class="cover-divider"></div>
+      <div class="cover-grid">
+        <div class="cover-field">
+          <p class="cover-label">Client Name</p>
+          <p class="cover-value">${inquiry.client_name || '—'}</p>
+        </div>
+        <div class="cover-field">
+          <p class="cover-label">Phone</p>
+          <p class="cover-value">${inquiry.client_phone || '—'}</p>
+        </div>
+        <div class="cover-field">
+          <p class="cover-label">Event Type</p>
+          <p class="cover-value">${inquiry.event_type || '—'}</p>
+        </div>
+        <div class="cover-field">
+          <p class="cover-label">Event Date</p>
+          <p class="cover-value">${inquiry.event_date || '—'}</p>
+        </div>
+        <div class="cover-field">
+          <p class="cover-label">Guests</p>
+          <p class="cover-value">${inquiry.pax ? inquiry.pax + ' PAX' : '—'}</p>
+        </div>
+        <div class="cover-field">
+          <p class="cover-label">Venue</p>
+          <p class="cover-value">${inquiry.venue || '—'}</p>
+        </div>
+        <div class="cover-field">
+          <p class="cover-label">Per Plate Rate</p>
+          <p class="cover-value">${inquiry.per_plate_rate ? '₹' + inquiry.per_plate_rate.toLocaleString('en-IN') : '—'}</p>
+        </div>
+        <div class="cover-field">
+          <p class="cover-label">Add On</p>
+          <p class="cover-value">${inquiry.add_on ? '₹' + inquiry.add_on.toLocaleString('en-IN') : '—'}</p>
+        </div>
+        <div class="cover-field">
+          <p class="cover-label">Advance Amount</p>
+          <p class="cover-value">${inquiry.advance_amount ? '₹' + inquiry.advance_amount.toLocaleString('en-IN') : '—'}</p>
+        </div>
+        <div class="cover-field">
+          <p class="cover-label">Total Amount</p>
+          <p class="cover-value">${inquiry.total_amount ? '₹' + inquiry.total_amount.toLocaleString('en-IN') : '—'}</p>
+        </div>
+      </div>
+      ${inquiry.remarks ? `<div class="cover-remarks">
+        <p class="cover-label">Remarks</p>
+        <p class="cover-value">${inquiry.remarks}</p>
+      </div>` : ''}
+    </div>
+  </div>`
 }
 
 export interface TemplatePalette {
@@ -714,13 +879,22 @@ const escWord = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&
 // the .word-heading class so the preview and edit styling can target them.
 export function wordLinesToHtml(lines: WordLine[]): string {
   return lines
-    .map((l) => (l.is_heading ? `<p class="word-heading">${escWord(l.text)}</p>` : `<p>${escWord(l.text)}</p>`))
+    .map((l) => {
+      if (l.is_heading) {
+        return `<p class="word-heading">${escWord(l.text)}</p>`
+      }
+      // Detect descriptions (lines starting with lowercase or containing commas/descriptions)
+      const isDesc = /^[a-z]/.test(l.text) || l.text.length > 60
+      return isDesc
+        ? `<p class="word-desc">${escWord(l.text)}</p>`
+        : `<p>${escWord(l.text)}</p>`
+    })
     .join('\n')
 }
 
 // If the Word file had explicit page breaks, keep them; otherwise group so
-// each page holds up to `categoriesPerPage` heading sections.
-export function groupWordLines(lines: WordLine[], categoriesPerPage = 4): WordLine[] {
+// each page holds up to `categoriesPerPage` heading sections (aiming for 3 pages).
+export function groupWordLines(lines: WordLine[], categoriesPerPage = 3): WordLine[] {
   if (lines.some((l) => l.page > 0)) return lines
   const out: WordLine[] = []
   let page = 0
@@ -752,21 +926,87 @@ export function extractWordLinesFromHtml(html: string): WordLine[] {
 }
 
 // Wraps word-imported HTML on a template background with template-matched text
-// colours. Used only for the on-screen single-page preview.
+// colours. Produces a premium full-page A4 layout with large typography.
 export function buildWordPageHtml(contentHtml: string, templateUrl: string, palette: TemplatePalette): string {
   const style = `<style>
+    @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=Cormorant+Garamond:wght@400;600;700&display=swap');
     .word-menu-card {
-      display: flex; align-items: center; justify-content: center;
-      min-height: 100vh; padding: 40px;
+      position: relative;
+      min-height: 100vh;
+      padding: 36px 48px;
       background-image: url('${templateUrl}');
-      background-size: cover; background-position: center; background-repeat: no-repeat;
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+      box-sizing: border-box;
     }
-    .word-menu-inner { width: 100%; text-align: center; }
-    .word-menu-inner p { color: ${palette.item}; margin: 0.3em 0; font-size: 13px; }
+    .word-menu-card::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: rgba(255,252,245,0.88);
+      z-index: 0;
+    }
+    .word-menu-inner {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      max-width: 680px;
+      margin: 0 auto;
+      text-align: center;
+    }
+    .word-menu-title {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: 28px;
+      font-weight: 900;
+      color: ${palette.heading};
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      margin: 0 0 4px;
+      line-height: 1.2;
+    }
+    .word-menu-subtitle {
+      font-family: 'Cormorant Garamond', Georgia, serif;
+      font-size: 14px;
+      font-weight: 600;
+      color: ${palette.item};
+      text-transform: uppercase;
+      letter-spacing: 0.2em;
+      margin: 0 0 16px;
+    }
+    .word-menu-divider {
+      width: 120px;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, ${palette.heading}, transparent);
+      margin: 0 auto 20px;
+    }
+    .word-menu-inner p {
+      color: ${palette.item};
+      margin: 0.25em 0;
+      font-size: 14px;
+      font-family: 'Cormorant Garamond', Georgia, serif;
+      font-weight: 400;
+      line-height: 1.5;
+    }
     .word-menu-inner p.word-heading {
-      color: ${palette.heading}; font-weight: bold; font-size: 18px;
-      text-transform: uppercase; letter-spacing: 0.06em;
-      margin: 0.7em 0 0.3em;
+      color: ${palette.heading};
+      font-family: 'Playfair Display', Georgia, serif;
+      font-weight: 700;
+      font-size: 20px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin: 1.2em 0 0.4em;
+      padding-bottom: 6px;
+      border-bottom: 1px solid ${palette.heading}33;
+    }
+    .word-menu-inner p.word-heading:first-child {
+      margin-top: 0;
+    }
+    .word-menu-inner p.word-desc {
+      color: #6B5C3E;
+      font-size: 11px;
+      font-style: italic;
+      margin: 0 0 0.3em;
     }
   </style>`
   return `${style}<div class="word-menu-card"><div class="word-menu-inner">${contentHtml}</div></div>`
