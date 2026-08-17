@@ -831,8 +831,8 @@ export default function InquiryDetail() {
         )}
       </div>
 
-      {/* Stage 2: Client Confirmation & Payment Details */}
-      {!isKitchen && (isStage2Reached || (isAdmin && inquiry.method)) && (
+      {/* Stage 2: Client Confirmation & Payment Details — visible only to Admin and Sales Head */}
+      {(isAdmin || isSalesHead) && (isStage2Reached || inquiry.method) && (
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
           className="rounded-xl border border-gray-100 bg-white p-6 shadow-md">
           <div className="mb-4 flex items-center justify-between">

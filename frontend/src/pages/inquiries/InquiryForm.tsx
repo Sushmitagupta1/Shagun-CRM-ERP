@@ -35,9 +35,11 @@ type Stage2Data = z.infer<typeof stage2Schema>
 interface InquiryFormProps {
   onStage1Submit: (data: Stage1Data) => Promise<string>
   onStage2Submit: (id: string, data: Stage2Data) => Promise<void>
+  showStage2?: boolean
+  onStage1Complete?: () => void
 }
 
-export function InquiryForm({ onStage1Submit, onStage2Submit }: InquiryFormProps) {
+export function InquiryForm({ onStage1Submit, onStage2Submit, showStage2 = true, onStage1Complete }: InquiryFormProps) {
   const [step, setStep] = useState(1)
   const [stage1Data, setStage1Data] = useState<Stage1Data | null>(null)
   const [createdId, setCreatedId] = useState<string | null>(null)
@@ -69,6 +71,11 @@ export function InquiryForm({ onStage1Submit, onStage2Submit }: InquiryFormProps
     setStage1Loading(true)
     try {
       const id = await onStage1Submit(cleanPayload(data) as Stage1Data)
+      if (!showStage2) {
+        stage1Form.reset()
+        onStage1Complete?.()
+        return
+      }
       setStage1Data(data)
       setCreatedId(id)
       setStep(2)

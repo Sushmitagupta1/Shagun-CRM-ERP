@@ -19,6 +19,8 @@ export default function InquiryList() {
   const queryClient = useQueryClient()
   const { user } = useAuth()
   const role = user?.role.name ?? ''
+  const isAdmin = role === 'admin'
+  const isSalesHead = role === 'sales_head'
   const isMenuPlanner = role === 'menu_planner'
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
@@ -216,6 +218,8 @@ export default function InquiryList() {
         <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-md">
           <h3 className="mb-4 text-sm font-semibold text-gray-900">New Inquiry</h3>
           <InquiryForm
+            showStage2={isAdmin || isSalesHead}
+            onStage1Complete={() => { setShowCreate(false); queryClient.invalidateQueries({ queryKey: ['inquiries'] }) }}
             onStage1Submit={async (data) => {
               const created = await createMutation.mutateAsync(data)
               return created.id

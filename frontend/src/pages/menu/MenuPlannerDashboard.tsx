@@ -26,6 +26,9 @@ export default function MenuPlannerDashboard() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { user } = useAuth()
+  const role = user?.role.name ?? ''
+  const isAdmin = role === 'admin'
+  const isSalesHead = role === 'sales_head'
   const firstName = user?.full_name?.split(' ')[0] ?? 'Menu Planner'
   const { data: kpis, isLoading } = useMenuPlannerKPIs()
   const { data: inquiriesData } = useInquiries({ per_page: 10 })
@@ -107,6 +110,8 @@ export default function MenuPlannerDashboard() {
                 <button onClick={() => setShowCreate(false)} className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600"><X size={18} /></button>
               </div>
               <InquiryForm
+                showStage2={isAdmin || isSalesHead}
+                onStage1Complete={() => { setShowCreate(false); queryClient.invalidateQueries({ queryKey: ['inquiries'] }) }}
                 onStage1Submit={async (data) => {
                   const created = await createMutation.mutateAsync(data)
                   return created.id
