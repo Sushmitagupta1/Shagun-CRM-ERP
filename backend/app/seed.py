@@ -17,17 +17,18 @@ ROLES = [
 
 DEFAULT_ADMIN = {
     "email": "admin@shaguncatering.com",
+    "username": "Aditya Dsouza",
     "password": "AdityaD#2026",
     "full_name": "Aditya Dsouza",
 }
 
 TEST_USERS = [
-    {"email": "vinod@shaguncatering.com", "password": "Makachiki@1991", "full_name": "Vinod Kalal", "role": RoleName.SALES_HEAD},
-    {"email": "vishal@shaguncatering.com", "password": "VISHAL##439", "full_name": "Vishal Raval", "role": RoleName.MENU_PLANNER},
-    {"email": "shayank@shaguncatering.com", "password": "shayank@uc1819", "full_name": "Shayank Sharma", "role": RoleName.PRESENTATION_EXEC},
-    {"email": "lalit@shaguncatering.com", "password": "LalitK@2026", "full_name": "Lalit Kalal", "role": RoleName.OPERATIONS_MANAGER},
-    {"email": "harshvardhan@shaguncatering.com", "password": "HarshvardhanS@2026", "full_name": "Harshvardhan Singh", "role": RoleName.KITCHEN},
-    {"email": "ranjay@shaguncatering.com", "password": "RanjayS@2026", "full_name": "Ranjay Saroj", "role": RoleName.WAREHOUSE},
+    {"email": "vinod@shaguncatering.com", "username": "Vinod Kalal", "password": "Makachiki@1991", "full_name": "Vinod Kalal", "role": RoleName.SALES_HEAD},
+    {"email": "vishal@shaguncatering.com", "username": "Vishal Raval", "password": "VISHAL##439", "full_name": "Vishal Raval", "role": RoleName.MENU_PLANNER},
+    {"email": "shayank@shaguncatering.com", "username": "Shayank Sharma", "password": "shayank@uc1819", "full_name": "Shayank Sharma", "role": RoleName.PRESENTATION_EXEC},
+    {"email": "lalit@shaguncatering.com", "username": "Lalit Kalal", "password": "LalitK@2026", "full_name": "Lalit Kalal", "role": RoleName.OPERATIONS_MANAGER},
+    {"email": "harshvardhan@shaguncatering.com", "username": "Harshvardhan Singh", "password": "HarshvardhanS@2026", "full_name": "Harshvardhan Singh", "role": RoleName.KITCHEN},
+    {"email": "ranjay@shaguncatering.com", "username": "Ranjay Saroj", "password": "RanjayS@2026", "full_name": "Ranjay Saroj", "role": RoleName.WAREHOUSE},
 ]
 
 
@@ -54,6 +55,7 @@ async def seed():
         admin = User(
             id=uuid.uuid4(),
             email=DEFAULT_ADMIN["email"],
+            username=DEFAULT_ADMIN["username"],
             password_hash=hash_password(DEFAULT_ADMIN["password"]),
             full_name=DEFAULT_ADMIN["full_name"],
             role_id=admin_role.id,
@@ -66,6 +68,7 @@ async def seed():
             user = User(
                 id=uuid.uuid4(),
                 email=test_user["email"],
+                username=test_user["username"],
                 password_hash=hash_password(test_user["password"]),
                 full_name=test_user["full_name"],
                 role_id=role.id,
@@ -76,12 +79,12 @@ async def seed():
         await session.commit()
         print("Seed complete!")
         print()
-        print("  LOGIN CREDENTIALS:")
-        print(f"  {'Email':<32} {'Password':<15} {'Role'}")
-        print(f"  {'-'*32} {'-'*15} {'-'*25}")
-        print(f"  {DEFAULT_ADMIN['email']:<32} {DEFAULT_ADMIN['password']:<15} admin")
+        print("  LOGIN CREDENTIALS (username or email + password):")
+        print(f"  {'Username':<24} {'Password':<22} {'Role'}")
+        print(f"  {'-'*24} {'-'*22} {'-'*25}")
+        print(f"  {DEFAULT_ADMIN['username']:<24} {DEFAULT_ADMIN['password']:<22} admin")
         for u in TEST_USERS:
-            print(f"  {u['email']:<32} {u['password']:<15} {u['role'].value}")
+            print(f"  {u['username']:<24} {u['password']:<22} {u['role'].value}")
 
 
 if __name__ == "__main__":
