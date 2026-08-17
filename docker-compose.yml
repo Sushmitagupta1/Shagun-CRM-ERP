@@ -21,7 +21,7 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://shagun:${DB_PASSWORD}@postgres:5432/shagun_erp
       JWT_SECRET_KEY: ${JWT_SECRET_KEY}
-      CORS_ORIGINS: '["http://localhost","http://localhost:80","http://122.179.157.252"]'
+      CORS_ORIGINS: '["http://localhost","http://localhost:80","http://136.66.216.141"]'
       ENVIRONMENT: production
     volumes:
       - ./uploads:/app/uploads
@@ -31,7 +31,10 @@ services:
     restart: unless-stopped
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        VITE_GEMINI_API_KEY: ${VITE_GEMINI_API_KEY}
     restart: unless-stopped
 
   nginx:
