@@ -1,9 +1,8 @@
 [build]
-builder = "DOCKERFILE"
-dockerfile = "Dockerfile"
+builder = "NIXPACKS"
 
 [deploy]
-startCommand = "nginx -g 'daemon off;'"
+startCommand = "npm install -g serve && serve -s dist -l 80"
 healthcheckPath = "/"
 healthcheckTimeout = 100
 restartPolicyType = "ON_FAILURE"
