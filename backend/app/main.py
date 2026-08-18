@@ -49,9 +49,9 @@ async def serve_template(category: str, file: str):
 
 @app.get("/api/health")
 async def health_check():
-    return {"status": "ok", "service": "shagun-erp"}
+    return {"status": "ok", "service": "shagun-erp", "cors_origins": settings.cors_origins_list}
 
 
 @app.get("/health")
 async def health_check_bare():
-    return {"status": "ok", "service": "shagun-erp"}
+    return {"status": "ok", "service": "shagun-erp", "cors_origins": settings.cors_origins_list}
