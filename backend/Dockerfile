@@ -16,8 +16,6 @@ COPY . .
 
 RUN chmod +x entrypoint.sh
 
-COPY templates /app/templates
-
 EXPOSE 8000
 
 CMD ["./entrypoint.sh"]
