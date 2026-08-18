@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
-    CORS_ORIGINS: str = '["http://localhost:5173"]'
+    CORS_ORIGINS: str = '["http://localhost:5173","https://shagun-crm-app.up.railway.app"]'
     ENVIRONMENT: str = "development"
     UPLOAD_DIR: str = "/app/uploads"
     TEMPLATES_DIR: str = "/app/templates"
